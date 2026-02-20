@@ -106,23 +106,6 @@ export default function RunDetail() {
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-      {/* Breadcrumb */}
-      <Link
-        href={ROUTES.migrations}
-        className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-      >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path
-            d="M7 3L4 6l3 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        Migrations
-      </Link>
-
       {/* Workflow not found state */}
       {notFound ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -149,41 +132,45 @@ export default function RunDetail() {
         </div>
       ) : (
         <>
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-zinc-600 uppercase tracking-widest mb-1">Run instance</p>
-              <h1 className="text-xl font-semibold tracking-tight font-mono text-zinc-50 truncate">
-                {id}
-              </h1>
-              {Boolean(migration) && (
-                <p className="text-sm text-zinc-500 mt-1">{migration?.name}</p>
-              )}
+          {/* Header — single line: back link · migration name · targets · run id  [status] */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              href={ROUTES.migrations}
+              className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Migrations
+            </Link>
 
-              {/* Targets */}
-              {targets.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {targets.map((t) => (
-                    <span
-                      key={t.repo}
-                      className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 bg-zinc-800/60 border border-zinc-700/50 px-2.5 py-1 rounded-md"
-                    >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 16 16"
-                        fill="currentColor"
-                        className="text-zinc-500 shrink-0"
-                      >
-                        <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.25.25 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z" />
-                      </svg>
-                      {t.repo}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            {status ? <StatusBadge status={status.runtimeStatus} /> : null}
+            <span className="text-zinc-700 select-none">·</span>
+
+            <span className="text-sm font-medium text-foreground">
+              {migration?.name ?? registrationId}
+            </span>
+
+            {targets.length > 0 && <span className="text-zinc-700 select-none">·</span>}
+            {targets.map((t) => {
+              const team = t.repo.split("/")[0];
+              const appName = t.metadata?.appName ?? t.repo.split("/")[1] ?? t.repo;
+              return (
+                <span
+                  key={t.repo}
+                  className="inline-flex items-center gap-1.5 text-xs font-mono bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 px-2 py-0.5 rounded-md"
+                >
+                  <span className="text-zinc-500">{team} /</span>
+                  {appName}
+                </span>
+              );
+            })}
+
+            {status ? (
+              <>
+                <span className="flex-1" />
+                <StatusBadge status={status.runtimeStatus} />
+              </>
+            ) : null}
           </div>
 
           {error ? (
