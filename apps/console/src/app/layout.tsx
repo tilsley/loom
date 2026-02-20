@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <RoleProvider>
             <div className="flex min-h-screen">
               <Sidebar />
-              <main className="ml-60 flex-1 min-w-0 px-8 py-6">
+              <main className="ml-60 w-[calc(100vw-15rem)] min-w-0 px-8 py-6">
                 <ErrorBoundary>{children}</ErrorBoundary>
               </main>
             </div>

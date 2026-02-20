@@ -233,7 +233,7 @@ export default function RunDetail() {
 
           {/* Step timeline */}
           {status ? (
-            <section>
+            <section className="w-fit min-w-[700px] mx-auto">
               <div className="flex items-center gap-2 mb-4">
                 <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-widest">
                   Steps
@@ -244,17 +244,19 @@ export default function RunDetail() {
                   </span>
                 ) : null}
               </div>
-              <StepTimeline
-                results={status.result?.results ?? []}
-                stepDescriptions={stepDescriptions}
-                stepFiles={stepFiles}
-                onComplete={(stepName, target, success) => {
-                  void (async () => {
-                    await completeStep(id, stepName, target, success);
-                    void poll();
-                  })();
-                }}
-              />
+              <div className="border border-zinc-800/80 rounded-lg p-6 overflow-y-auto max-h-[44rem]">
+                <StepTimeline
+                  results={status.result?.results ?? []}
+                  stepDescriptions={stepDescriptions}
+                  stepFiles={stepFiles}
+                  onComplete={(stepName, target, success) => {
+                    void (async () => {
+                      await completeStep(id, stepName, target, success);
+                      void poll();
+                    })();
+                  }}
+                />
+              </div>
             </section>
           ) : null}
         </>
