@@ -1,0 +1,433 @@
+openapi: "3.0.3"
+info:
+  title: Loom Migration API
+  version: 0.2.0
+  description: Control plane API for orchestrating multi-repo migrations.
+
+paths:
+  /start:
+    post:
+      summary: Start a migration workflow
+      operationId: startMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRequest"
+      responses:
+        "202":
+          description: Migration accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartResponse"
+
+  /status/{id}:
+    get:
+      summary: Get migration status
+      operationId: getMigrationStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current migration state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+
+  /event/{id}:
+    post:
+      summary: Worker callback to resume a paused workflow step
+      operationId: raiseEvent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StepCompletedEvent"
+      responses:
+        "202":
+          description: Event raised
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResponse"
+
+  /migrations:
+    post:
+      summary: Register a new migration definition
+      operationId: registerMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterMigrationRequest"
+      responses:
+        "201":
+          description: Migration registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredMigration"
+    get:
+      summary: List all registered migrations
+      operationId: listMigrations
+      responses:
+        "200":
+          description: List of registered migrations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMigrationsResponse"
+
+  /migrations/{id}:
+    get:
+      summary: Get a specific registered migration
+      operationId: getRegisteredMigration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Registered migration details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredMigration"
+        "404":
+          description: Migration not found
+    delete:
+      summary: Remove a registered migration
+      operationId: deleteRegisteredMigration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Migration deleted
+        "404":
+          description: Migration not found
+
+  /migrations/{id}/run:
+    post:
+      summary: Start a workflow run from a registered migration
+      operationId: runMigration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunMigrationRequest"
+      responses:
+        "202":
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunMigrationResponse"
+        "404":
+          description: Migration not found
+        "409":
+          description: Target already running or completed
+
+components:
+  schemas:
+    # --- Target run tracking ---
+
+    TargetRun:
+      type: object
+      required: [runId, status]
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+
+    # --- Core domain types ---
+
+    Target:
+      type: object
+      required: [repo]
+      properties:
+        repo:
+          type: string
+          description: "owner/repo identifier (e.g. acme/billing-api)"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Optional key-value metadata (e.g. appName, gitopsPath)"
+
+    StepDefinition:
+      type: object
+      required: [name, workerApp]
+      properties:
+        name:
+          type: string
+          description: Unique name for this step within the migration.
+        description:
+          type: string
+        workerApp:
+          type: string
+          description: Dapr app-id of the worker that handles this step.
+        config:
+          type: object
+          additionalProperties:
+            type: string
+          description: Arbitrary key-value config forwarded to the worker.
+        files:
+          type: array
+          items:
+            type: string
+          description: >
+            URLs of files this step will modify. May contain {appName} (the
+            target app name) and {repo} (the full owner/repo target) as
+            template variables substituted by the console at display time.
+
+    MigrationManifest:
+      type: object
+      required: [migrationId, targets, steps]
+      properties:
+        migrationId:
+          type: string
+        registrationId:
+          type: string
+          description: ID of the registered migration (so workflow can update target run status on completion).
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Target"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
+
+    StepCompletedEvent:
+      type: object
+      required: [stepName, target, success]
+      properties:
+        stepName:
+          type: string
+        target:
+          $ref: "#/components/schemas/Target"
+        success:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Arbitrary metadata, e.g. prUrl, commitSha.
+
+    StepResult:
+      type: object
+      required: [stepName, target, success]
+      properties:
+        stepName:
+          type: string
+        target:
+          $ref: "#/components/schemas/Target"
+        success:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    MigrationResult:
+      type: object
+      required: [migrationId, status, results]
+      properties:
+        migrationId:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepResult"
+
+    # --- Registered migrations ---
+
+    RegisteredMigration:
+      type: object
+      required: [id, name, targets, steps, createdAt, runIds]
+      properties:
+        id:
+          type: string
+          description: UUID or deterministic slug owned by the worker.
+        name:
+          type: string
+        description:
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Target"
+          description: Repos, apps, services — flexible scope.
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO timestamp.
+        runIds:
+          type: array
+          items:
+            type: string
+          description: Run IDs created from this registration.
+        targetRuns:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/TargetRun"
+          description: Per-target run state keyed by target repo.
+
+    RegisterMigrationRequest:
+      type: object
+      required: [name, targets, steps]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Target"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
+
+    ListMigrationsResponse:
+      type: object
+      required: [migrations]
+      properties:
+        migrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RegisteredMigration"
+
+    RunMigrationRequest:
+      type: object
+      required: [target]
+      properties:
+        target:
+          $ref: "#/components/schemas/Target"
+
+    RunMigrationResponse:
+      type: object
+      required: [runId]
+      properties:
+        runId:
+          type: string
+          description: The workflow instance ID for this run.
+
+    MigrationAnnouncement:
+      type: object
+      required: [id, name, targets, steps]
+      description: >
+        Published by workers to the "migration-registry" Dapr topic on startup.
+        Loom subscribes and upserts the registration (idempotent by id).
+      properties:
+        id:
+          type: string
+          description: Deterministic slug owned by the worker (e.g. "migrate-chart").
+        name:
+          type: string
+        description:
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Target"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
+
+    # --- Worker contract (pub/sub message) ---
+
+    DispatchStepRequest:
+      type: object
+      required: [migrationId, stepName, target, callbackId, eventName]
+      description: Message published to workers via Dapr pub/sub.
+      properties:
+        migrationId:
+          type: string
+        stepName:
+          type: string
+        target:
+          $ref: "#/components/schemas/Target"
+        config:
+          type: object
+          additionalProperties:
+            type: string
+        callbackId:
+          type: string
+          description: Workflow instance ID — workers POST back to /event/{callbackId}.
+        eventName:
+          type: string
+          description: Exact event name the workflow is waiting on.
+
+    # --- API request/response wrappers ---
+
+    StartRequest:
+      type: object
+      required: [manifest]
+      properties:
+        manifest:
+          $ref: "#/components/schemas/MigrationManifest"
+
+    StartResponse:
+      type: object
+      required: [instanceId]
+      properties:
+        instanceId:
+          type: string
+
+    StatusResponse:
+      type: object
+      required: [instanceId, runtimeStatus]
+      properties:
+        instanceId:
+          type: string
+        runtimeStatus:
+          type: string
+        result:
+          $ref: "#/components/schemas/MigrationResult"
+
+    EventResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string

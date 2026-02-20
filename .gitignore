@@ -1,0 +1,8 @@
+# Build artifacts
+apps/server/bin/
+apps/console/.next/
+apps/console/node_modules/
+
+# Generated files (regenerate with: make generate)
+pkg/api/types.gen.go
+apps/console/src/lib/api.gen.ts

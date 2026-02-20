@@ -1,0 +1,227 @@
+# golangci-lint v2 configuration
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+  go: "1.25"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - golines
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/tilsley/loom
+    golines:
+      max-len: 120
+      tab-len: 4
+      shorten-comments: true
+      reformat-tags: true
+
+linters:
+  enable:
+    # Default (always good to enable explicitly)
+    - errcheck      # Unchecked errors
+    - govet         # Suspicious constructs
+    - ineffassign   # Ineffectual assignments
+    - staticcheck   # Static analysis (SA*)
+    - unused        # Unused code
+
+    # Error handling
+    - errorlint     # Error wrapping issues
+    - errname       # Sentinel error naming
+    - nilerr        # Returns nil with non-nil error
+    - nilnil        # Returns nil nil
+
+    # Code quality
+    - revive        # Golint replacement
+    - unconvert     # Unnecessary conversions
+    - unparam       # Unused function parameters
+    - gocritic      # Comprehensive linter
+    - goconst       # Repeated strings
+    - misspell      # Spelling errors
+
+    # Security
+    - gosec         # Security issues
+
+    # Performance
+    - bodyclose     # HTTP body close
+    - prealloc      # Slice preallocation
+    - perfsprint    # Sprintf performance
+
+    # Testing
+    - contextcheck  # Context usage
+    - testifylint   # Testify usage
+
+    # Best practices
+    - gochecknoinits  # No init functions
+    - goprintffuncname # Printf naming
+    - noctx          # Missing context
+    - predeclared    # Shadowing predeclared
+    - forcetypeassert # Forced type assertions
+
+    # Complexity
+    - gocognit       # Cognitive complexity
+    - maintidx       # Maintainability index
+    - nakedret       # Naked returns
+    - nestif         # Nested ifs
+    - cyclop         # Cyclomatic complexity
+
+    # Additional
+    - exhaustive     # Enum exhaustiveness
+    - nolintlint     # Nolint directives
+    - usestdlibvars  # Use stdlib variables
+    - whitespace     # Whitespace issues
+
+  exclusions:
+    paths:
+      - vendor
+      - testdata
+      - bin
+    rules:
+      # Generated files — do not lint
+      - path: ".*\\.gen\\.go$"
+        linters:
+          - errcheck
+          - govet
+          - staticcheck
+          - unused
+          - revive
+          - gocritic
+          - gosec
+          - goconst
+          - exhaustive
+          - unparam
+          - gocognit
+          - cyclop
+          - nestif
+          - maintidx
+
+      # Tests can be more lenient
+      - path: _test\.go
+        linters:
+          - gocognit
+          - cyclop
+          - errcheck
+          - gosec
+          - goconst
+          - forcetypeassert
+          - maintidx
+          - exhaustive
+          - nestif
+          - unparam
+          - gocritic
+          - revive
+
+      # Also exclude the test/ directory
+      - path: test/
+        linters:
+          - gocognit
+          - cyclop
+          - errcheck
+          - gosec
+          - goconst
+          - nestif
+          - unparam
+          - gocritic
+          - revive
+
+      # App entry-points (main packages) can have init functions
+      - path: "^apps/"
+        linters:
+          - gochecknoinits
+
+      # Allow fmt.Errorf without wrapping in some cases
+      - linters:
+          - errorlint
+        text: "non-wrapping format verb"
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+
+    revive:
+      severity: warning
+      confidence: 0.8
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+
+    gosec:
+      excludes:
+        - G404
+      severity: low
+      confidence: low
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - unnamedResult
+
+    gocognit:
+      min-complexity: 15
+
+    nestif:
+      min-complexity: 4
+
+    nakedret:
+      max-func-lines: 30
+
+    cyclop:
+      max-complexity: 15
+      package-average: 0.0
+
+    maintidx:
+      under: 20
+
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+  sort-order:
+    - linter
+    - file
+  show-stats: true

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/app/**/*.{ts,tsx}",
+    "src/components/**/*.{ts,tsx}",
+    "src/lib/**/*.ts",
+    "src/contexts/**/*.{ts,tsx}"
+  ],
+  "project": ["**/*.{ts,tsx}"],
+  "ignore": [".next/**", "out/**"],
+  "ignoreDependencies": ["@types/*", "tailwindcss", "@tailwindcss/postcss", "openapi-typescript"],
+  "ignoreExportsUsedInFile": true,
+  "exclude": ["enumMembers", "types", "duplicates"],
+  "next": true
+}
