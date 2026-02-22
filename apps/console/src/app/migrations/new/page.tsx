@@ -10,7 +10,6 @@ import {
   type StepDefinition,
   type Candidate,
 } from "@/lib/api";
-import { useRole } from "@/contexts/role-context";
 import { ROUTES } from "@/lib/routes";
 import { Button, Input, Textarea } from "@/components/ui";
 
@@ -24,7 +23,6 @@ const DEFAULT_STEPS: StepDefinition[] = [
 
 export default function NewMigration() {
   const router = useRouter();
-  const { isAdmin } = useRole();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [candidatesJson, setCandidatesJson] = useState(
@@ -35,11 +33,6 @@ export default function NewMigration() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (!isAdmin) {
-      toast.error("Admin role required to register migrations");
-      return;
-    }
 
     let steps: StepDefinition[];
     try {
@@ -173,7 +166,7 @@ export default function NewMigration() {
         </div>
 
         <div className="flex gap-3 pt-2">
-          <Button type="submit" disabled={submitting || !isAdmin}>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Registering..." : "Register"}
           </Button>
           <Link

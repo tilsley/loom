@@ -93,11 +93,11 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 			ownerRepo := result.Owner + "/" + result.Repo
 			for path, after := range result.Files {
 				before := rec.ContentBefore(result.Owner, result.Repo, path)
-				status := "modified"
+				status := api.Modified
 				if before == "" {
-					status = "new"
+					status = api.New
 				} else if after == "" {
-					status = "deleted"
+					status = api.Deleted
 				}
 				fileDiffs = append(fileDiffs, api.FileDiff{
 					Path:   path,

@@ -10,25 +10,23 @@ const PAGE_SIZE = 50;
 
 interface CandidateTableProps {
   migration: RegisteredMigration;
-  onQueue: (candidate: Candidate) => Promise<void>;
-  onDequeue: (runId: string) => Promise<void>;
+  onPreview: (candidate: Candidate) => void;
   runningCandidate: string | null;
 }
 
-export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate }: CandidateTableProps) {
+export function CandidateTable({ migration, onPreview, runningCandidate }: CandidateTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [groupBy, setGroupBy] = useState<string | null>(null);
 
   const counts = useMemo(() => {
-    const c = { running: 0, completed: 0, not_started: 0, queued: 0 };
+    const c = { running: 0, completed: 0, not_started: 0 };
     for (const t of migration.candidates) {
       const run = migration.candidateRuns?.[t.id];
       if (!run) c.not_started++;
       else if (run.status === "completed") c.completed++;
       else if (run.status === "running") c.running++;
-      else if (run.status === "queued") c.queued++;
       else c.not_started++;
     }
     return c;
@@ -187,8 +185,7 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
                       candidate={c}
                       candidateRun={migration.candidateRuns?.[c.id]}
                       runId={migration.candidateRuns?.[c.id] ? `${migration.id}__${c.id}` : undefined}
-                      onQueue={onQueue}
-                      onDequeue={onDequeue}
+                      onPreview={onPreview}
                       isRunning={runningCandidate === c.id || runningCandidate === `${migration.id}__${c.id}`}
                     />
                   ))}
@@ -209,8 +206,7 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
                 candidate={t}
                 candidateRun={migration.candidateRuns?.[t.id]}
                 runId={migration.candidateRuns?.[t.id] ? `${migration.id}__${t.id}` : undefined}
-                onQueue={onQueue}
-                onDequeue={onDequeue}
+                onPreview={onPreview}
                 isRunning={runningCandidate === t.id || runningCandidate === `${migration.id}__${t.id}`}
               />
             ))}

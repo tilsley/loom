@@ -236,7 +236,7 @@ func (s *Service) GetRunInfo(ctx context.Context, runID string) (*api.RunInfo, e
 }
 
 // Cancel stops a running workflow, records a CancelledAttempt audit entry, and resets
-// the candidate to not_started so it can be re-queued or previewed again.
+// the candidate to not_started so it can be previewed and executed again.
 func (s *Service) Cancel(ctx context.Context, runID string) error {
 	migrationID, candidateID, err := ParseRunID(runID)
 	if err != nil {

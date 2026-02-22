@@ -245,9 +245,6 @@ func (s *DaprMigrationStore) GetCandidates(ctx context.Context, migrationID stri
 			if cr, ok := (*m.CandidateRuns)[c.Id]; ok {
 				runId := migrations.RunID(migrationID, c.Id)
 				switch cr.Status {
-				case api.CandidateRunStatusQueued:
-					cs.Status = api.CandidateStatusQueued
-					cs.RunId = &runId
 				case api.CandidateRunStatusRunning:
 					cs.Status = api.CandidateStatusRunning
 					cs.RunId = &runId

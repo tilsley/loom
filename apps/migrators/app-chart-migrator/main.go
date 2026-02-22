@@ -245,7 +245,7 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 		Id:             "app-chart-migration",
 		Name:           "App Chart Migration",
 		Description:    &desc,
-		RequiredInputs: []string{"repoName"},
+		RequiredInputs: &[]string{"repoName"},
 		Candidates:     []api.Candidate{},
 		Steps:          stepDefs,
 	}

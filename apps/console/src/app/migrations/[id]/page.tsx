@@ -9,32 +9,24 @@ import {
   getMigration,
   getCandidates,
   deleteMigration,
-  queueRun,
-  dequeueRun,
-  ConflictError,
   type RegisteredMigration,
   type Candidate,
   type CandidateRun,
   type CandidateWithStatus,
 } from "@/lib/api";
-import { useRole } from "@/contexts/role-context";
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { RunInputsModal } from "@/components/run-inputs-modal";
 import { Button, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { isAdmin } = useRole();
   const [migration, setMigration] = useState<RegisteredMigration | null>(null);
   const [candidates, setCandidates] = useState<CandidateWithStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [runningCandidate, setRunningCandidate] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
-  const [inputsCandidate, setInputsCandidate] = useState<Candidate | null>(null);
 
   const fetchMigration = useCallback(async () => {
     try {
@@ -83,45 +75,8 @@ export default function MigrationDetail() {
     return runs;
   }, [candidates]);
 
-  async function handleQueue(candidate: Candidate) {
-    // Always show the inputs modal if the migration declares required inputs,
-    // pre-filled with any values the discoverer already found. This lets the
-    // operator confirm or correct the guessed value before queuing.
-    const required = migration?.requiredInputs ?? [];
-    if (required.length > 0) {
-      setInputsCandidate(candidate);
-      return;
-    }
-    await doQueue(candidate, {});
-  }
-
-  async function doQueue(candidate: Candidate, inputs: Record<string, string>) {
-    setRunningCandidate(candidate.id);
-    try {
-      const { runId } = await queueRun(id, candidate, Object.keys(inputs).length > 0 ? inputs : undefined);
-      router.push(ROUTES.runDetail(runId));
-    } catch (e) {
-      if (e instanceof ConflictError) {
-        await Promise.all([fetchMigration(), fetchCandidates()]);
-        toast.error("Candidate already queued, running, or completed");
-      } else {
-        toast.error(e instanceof Error ? e.message : "Failed to queue run");
-      }
-      setRunningCandidate(null);
-    }
-  }
-
-  async function handleDequeue(runId: string) {
-    setRunningCandidate(runId);
-    try {
-      await dequeueRun(runId);
-      await Promise.all([fetchMigration(), fetchCandidates()]);
-      toast.success("Removed from queue");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to dequeue");
-    } finally {
-      setRunningCandidate(null);
-    }
+  function handlePreview(candidate: Candidate) {
+    router.push(ROUTES.preview(id, candidate.id));
   }
 
   async function handleDelete() {
@@ -234,21 +189,6 @@ export default function MigrationDetail() {
   return (
     <div className="space-y-8 animate-fade-in-up">
       {stepsModal}
-      {inputsCandidate ? (
-        <RunInputsModal
-          candidateId={inputsCandidate.id}
-          requiredInputs={migration.requiredInputs ?? []}
-          prefilled={inputsCandidate.metadata ?? {}}
-          onConfirm={(inputs) => {
-            setInputsCandidate(null);
-            void doQueue(inputsCandidate, inputs);
-          }}
-          onCancel={() => {
-            setInputsCandidate(null);
-            setRunningCandidate(null);
-          }}
-        />
-      ) : null}
       {/* Breadcrumb */}
       <Link
         href={ROUTES.migrations}
@@ -285,16 +225,14 @@ export default function MigrationDetail() {
           )}
         </div>
         <div className="flex gap-2 shrink-0">
-          {isAdmin ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => void handleDelete()}
-              disabled={deleting}
-            >
-              {deleting ? "..." : "Delete"}
-            </Button>
-          ) : null}
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+          >
+            {deleting ? "..." : "Delete"}
+          </Button>
         </div>
       </div>
 
@@ -313,9 +251,8 @@ export default function MigrationDetail() {
         </div>
         <CandidateTable
           migration={{ ...migration, candidates: derivedCandidates, candidateRuns: derivedCandidateRuns }}
-          onQueue={handleQueue}
-          onDequeue={handleDequeue}
-          runningCandidate={runningCandidate}
+          onPreview={handlePreview}
+          runningCandidate={null}
         />
       </section>
     </div>

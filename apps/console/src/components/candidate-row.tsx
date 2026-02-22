@@ -8,12 +8,11 @@ interface CandidateRowProps {
   candidate: Candidate;
   candidateRun?: CandidateRun;
   runId?: string;
-  onQueue: (candidate: Candidate) => Promise<void>;
-  onDequeue: (runId: string) => Promise<void>;
+  onPreview: (candidate: Candidate) => void;
   isRunning: boolean;
 }
 
-export function CandidateRow({ candidate, candidateRun, runId, onQueue, onDequeue, isRunning }: CandidateRowProps) {
+export function CandidateRow({ candidate, candidateRun, runId, onPreview, isRunning }: CandidateRowProps) {
   const isBlocked = candidateRun?.status === "running" || candidateRun?.status === "completed";
   const hasRun = !!runId;
   const [filesExpanded, setFilesExpanded] = useState(false);
@@ -80,44 +79,24 @@ export function CandidateRow({ candidate, candidateRun, runId, onQueue, onDequeu
 
       {/* Actions — stop click from navigating */}
       <div className="flex justify-end" onClick={(e) => e.preventDefault()}>
-        {candidateRun?.status === "queued" ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={(e) => {
-              e.stopPropagation();
-              void onDequeue(runId ?? "");
-            }}
-            disabled={isRunning}
-            className="text-xs py-1 px-2.5 text-zinc-400 hover:text-red-400 hover:border-red-500/30"
-          >
-            {isRunning ? "..." : "Cancel"}
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant={isBlocked ? "outline" : "default"}
-            onClick={(e) => {
-              e.stopPropagation();
-              void onQueue(candidate);
-            }}
-            disabled={isRunning || isBlocked}
-            className={`text-xs py-1 px-2.5 ${isBlocked ? "cursor-not-allowed" : ""}`}
-          >
-            {!isBlocked && (
-              <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
-              </svg>
-            )}
-            {isRunning
-              ? "..."
-              : candidateRun?.status === "completed"
-                ? "Done"
-                : candidateRun?.status === "running"
-                  ? "Running"
-                  : "Queue"}
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant={isBlocked ? "outline" : "default"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview(candidate);
+          }}
+          disabled={isRunning || isBlocked}
+          className={`text-xs py-1 px-2.5 ${isBlocked ? "cursor-not-allowed" : ""}`}
+        >
+          {isRunning
+            ? "..."
+            : candidateRun?.status === "completed"
+              ? "Done"
+              : candidateRun?.status === "running"
+                ? "Running"
+                : "Preview"}
+        </Button>
       </div>
       {/* Files panel */}
       {filesExpanded && fileGroups.length > 0 ? <div
@@ -176,9 +155,7 @@ function CandidateStatusDot({ status }: { status?: string }) {
       ? "bg-amber-400"
       : status === "completed"
         ? "bg-emerald-400"
-        : status === "queued"
-          ? "bg-indigo-400"
-          : "bg-teal-500/50";
+        : "bg-teal-500/50";
 
   return (
     <span
@@ -195,9 +172,7 @@ function CandidateStatusBadge({ status }: { status: string }) {
       ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
       : status === "completed"
         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-        : status === "queued"
-          ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-          : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+        : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
 
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded border ${styles}`}>

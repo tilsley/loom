@@ -3,14 +3,12 @@ import {
   ConflictError,
   NotFoundError,
   deleteMigration,
-  dequeueRun,
   dryRun,
   executeRun,
   getMigration,
   getRunInfo,
   getStatus,
   listMigrations,
-  queueRun,
   registerMigration,
 } from "../api";
 
@@ -174,104 +172,52 @@ describe("getRunInfo", () => {
 });
 
 // ---------------------------------------------------------------------------
-// queueRun
+// executeRun
 // ---------------------------------------------------------------------------
 
-describe("queueRun", () => {
+describe("executeRun", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidate = { id: "cand-1", repo: "org/repo", ref: "main" } as any;
 
   it("returns the response on success", async () => {
     const data = { runId: "run-123" };
     mockFetch.mockResolvedValueOnce(mockResponse(200, data));
-    await expect(queueRun("migration-id", candidate)).resolves.toEqual(data);
+    await expect(executeRun("migration-id", candidate)).resolves.toEqual(data);
   });
 
   it("throws ConflictError on 409", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(409, "already queued"));
-    await expect(queueRun("migration-id", candidate)).rejects.toBeInstanceOf(
+    await expect(executeRun("migration-id", candidate)).rejects.toBeInstanceOf(
       ConflictError,
     );
   });
 
   it("throws with the response body text on other errors", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(500, "server error"));
-    await expect(queueRun("migration-id", candidate)).rejects.toThrow(
+    await expect(executeRun("migration-id", candidate)).rejects.toThrow(
       "server error",
     );
   });
 
   it("omits inputs key when inputs is undefined", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await queueRun("migration-id", candidate);
+    await executeRun("migration-id", candidate);
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body).not.toHaveProperty("inputs");
   });
 
   it("omits inputs key when inputs is an empty object", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await queueRun("migration-id", candidate, {});
+    await executeRun("migration-id", candidate, {});
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body).not.toHaveProperty("inputs");
   });
 
   it("includes inputs in the body when non-empty inputs are provided", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await queueRun("migration-id", candidate, { token: "abc", env: "prod" });
+    await executeRun("migration-id", candidate, { token: "abc", env: "prod" });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.inputs).toEqual({ token: "abc", env: "prod" });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// executeRun
-// ---------------------------------------------------------------------------
-
-describe("executeRun", () => {
-  it("returns the response on success", async () => {
-    const data = { runId: "run-123" };
-    mockFetch.mockResolvedValueOnce(mockResponse(200, data));
-    await expect(executeRun("run-123")).resolves.toEqual(data);
-  });
-
-  it("throws ConflictError on 409", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(409, "conflict"));
-    await expect(executeRun("run-123")).rejects.toBeInstanceOf(ConflictError);
-  });
-
-  it("throws with the response body text on other errors", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(500, "server error"));
-    await expect(executeRun("run-123")).rejects.toThrow("server error");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// dequeueRun
-// ---------------------------------------------------------------------------
-
-describe("dequeueRun", () => {
-  it("sends DELETE to /api/runs/{runId}/dequeue", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await dequeueRun("run-abc");
-    expect(mockFetch).toHaveBeenCalledWith(
-      "/api/runs/run-abc/dequeue",
-      expect.objectContaining({ method: "DELETE" }),
-    );
-  });
-
-  it("resolves to undefined on success", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await expect(dequeueRun("run-123")).resolves.toBeUndefined();
-  });
-
-  it("throws ConflictError on 409", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(409, "conflict"));
-    await expect(dequeueRun("run-123")).rejects.toBeInstanceOf(ConflictError);
-  });
-
-  it("throws with the response body text on other errors", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(500, "server error"));
-    await expect(dequeueRun("run-123")).rejects.toThrow("server error");
   });
 });
 

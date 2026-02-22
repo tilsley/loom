@@ -7,7 +7,6 @@ interface StatusFilterProps {
 const filters = [
   { key: "all", label: "All", color: "text-zinc-300 bg-zinc-800/60 border-zinc-700" },
   { key: "running", label: "Running", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-  { key: "queued", label: "Queued", color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20" },
   {
     key: "completed",
     label: "Completed",

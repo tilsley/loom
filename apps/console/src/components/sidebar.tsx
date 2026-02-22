@@ -6,7 +6,6 @@ import { useMigrations } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/routes";
 import { useTheme } from "@/contexts/theme-context";
-import { RoleIndicator } from "./role-indicator";
 
 const MAX_VISIBLE = 15;
 
@@ -151,9 +150,8 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-zinc-800/60 space-y-2">
+      <div className="px-3 py-3 border-t border-zinc-800/60">
         <ThemeToggle />
-        <RoleIndicator />
       </div>
     </aside>
   );

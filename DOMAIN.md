@@ -80,18 +80,17 @@ duplicate runs for the same candidate.
 
 Tracks where a candidate sits in the migration lifecycle. There is no `failed` status at the
 candidate level — if a step fails, the candidate is reset to `not_started` and can be
-re-queued.
+previewed and executed again.
 
-| Status        | Meaning                                                      |
-|---------------|--------------------------------------------------------------|
-| `not_started` | Discovered, not yet queued                                   |
-| `queued`      | Queued for execution (dry run visible, workflow not started) |
-| `running`     | The workflow is actively executing                           |
-| `completed`   | The workflow finished successfully                           |
+| Status        | Meaning                                                    |
+|---------------|------------------------------------------------------------|
+| `not_started` | Discovered, not yet executed                               |
+| `running`     | The workflow is actively executing                         |
+| `completed`   | The workflow finished successfully                         |
 
 ### Cancelled Attempts
 
-When a running or queued candidate is cancelled, a `CancelledAttempt` record is appended to
+When a running candidate is cancelled, a `CancelledAttempt` record is appended to
 the migration. The candidate resets to `not_started`. Cancelled attempts are not surfaced on
 the candidate row — they are accessible via the migration detail (admin view).
 
@@ -105,9 +104,8 @@ A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
 |---------------|---------|---------------------------------------------------------------------|
 | **Announce**  | Worker  | Register or update a migration definition via pub/sub             |
 | **Discover**  | Worker  | Scan a source of truth and submit a candidate list to the server  |
-| **Queue**     | Console | Reserve a run for a candidate; enables dry-run preview            |
-| **Dequeue**   | Console | Remove a queued run, returning the candidate to `not_started`     |
-| **Execute**   | Console | Start the Temporal workflow for a queued run                      |
+| **Preview**   | Console | Navigate to the preview page; auto-calls dry-run (stateless)      |
+| **Execute**   | Console | Create a run and start the Temporal workflow atomically            |
 | **Cancel**    | Console | Stop a running workflow; resets candidate to `not_started` and records a `CancelledAttempt` |
 | **Complete**  | Worker  | Signal a step as done (success or failure) via the event endpoint |
 
@@ -122,14 +120,14 @@ A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
                       │                               │
               Discover candidates ──────────────► [not_started]
                                                       │
-                                         Queue ──► [queued] ──► Dequeue ──► [not_started]
-                                                       │
+                                                 Preview (dry-run, stateless)
+                                                      │
                                                   Execute
-                                                       │
+                                                      │
                                                   [running] ──► Cancel ──► [not_started]
-                                                       │                  (+ CancelledAttempt)
+                                                      │                   (+ CancelledAttempt)
                                                   Steps execute...
-                                                       │
+                                                      │
                                                   [completed]
 ```
 
@@ -159,8 +157,7 @@ Run ID           computed: {migrationId}__{candidateId}
 | GitHub owner/repo  | `metadata["repoName"]` | `metadata.repoName`  | —                    |
 | Run ID             | `RunID(mId, cId)`      | `runId`              | Run                  |
 | Candidate run      | `api.CandidateRun`     | `candidateRuns[id]`  | —                    |
-| Queue a run        | `service.Queue()`      | `POST .../queue`     | "Queue"              |
-| Dequeue a run      | `service.Dequeue()`    | `DELETE .../dequeue` | "Remove from queue"  |
+| Preview a run      | —                      | —                    | "Preview"            |
 | Execute a run      | `service.Execute()`    | `POST .../execute`   | "Execute"            |
 | Cancel a run       | `service.Cancel()`     | `POST .../cancel`    | "Cancel"             |
 | Step               | `api.StepDefinition`   | `step`               | Step                 |

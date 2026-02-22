@@ -10,7 +10,6 @@ export type StartRequest = components["schemas"]["StartRequest"];
 export type RegisteredMigration = components["schemas"]["RegisteredMigration"];
 export type RegisterMigrationRequest = components["schemas"]["RegisterMigrationRequest"];
 export type ListMigrationsResponse = components["schemas"]["ListMigrationsResponse"];
-export type QueueRunResponse = components["schemas"]["QueueRunResponse"];
 export type ExecuteRunResponse = components["schemas"]["ExecuteRunResponse"];
 export type RunInfo = components["schemas"]["RunInfo"];
 export type Candidate = components["schemas"]["Candidate"];
@@ -125,12 +124,12 @@ export async function getRunInfo(runId: string): Promise<RunInfo | null> {
   return res.json();
 }
 
-export async function queueRun(
-  id: string,
+export async function executeRun(
+  migrationId: string,
   candidate: Candidate,
   inputs?: Record<string, string>,
-): Promise<QueueRunResponse> {
-  const res = await fetch(`${BASE}/migrations/${id}/queue`, {
+): Promise<ExecuteRunResponse> {
+  const res = await fetch(`${BASE}/migrations/${migrationId}/execute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ candidate, ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}) }),
@@ -138,21 +137,6 @@ export async function queueRun(
   if (res.status === 409) throw new ConflictError(await res.text());
   if (!res.ok) throw new Error(await res.text());
   return res.json();
-}
-
-export async function executeRun(runId: string): Promise<ExecuteRunResponse> {
-  const res = await fetch(`${BASE}/runs/${runId}/execute`, {
-    method: "POST",
-  });
-  if (res.status === 409) throw new ConflictError(await res.text());
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export async function dequeueRun(runId: string): Promise<void> {
-  const res = await fetch(`${BASE}/runs/${runId}/dequeue`, { method: "DELETE" });
-  if (res.status === 409) throw new ConflictError(await res.text());
-  if (!res.ok) throw new Error(await res.text());
 }
 
 export async function dryRun(migrationId: string, candidate: Candidate): Promise<DryRunResult> {

@@ -7,14 +7,12 @@ interface DashboardStatsProps {
 export function DashboardStats({ migrations }: DashboardStatsProps) {
   let activeCandidates = 0;
   let completedCandidates = 0;
-  let queuedCandidates = 0;
 
   for (const m of migrations) {
     if (!m.candidateRuns) continue;
     for (const tr of Object.values(m.candidateRuns)) {
       if (tr.status === "running") activeCandidates++;
       else if (tr.status === "completed") completedCandidates++;
-      else if (tr.status === "queued") queuedCandidates++;
     }
   }
 
@@ -22,11 +20,10 @@ export function DashboardStats({ migrations }: DashboardStatsProps) {
     { label: "Migrations", value: migrations.length, accent: false },
     { label: "Active", value: activeCandidates, accent: activeCandidates > 0 },
     { label: "Completed", value: completedCandidates, accent: completedCandidates > 0 },
-    { label: "Queued", value: queuedCandidates, accent: queuedCandidates > 0 },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       {stats.map((s) => (
         <div
           key={s.label}

@@ -5,8 +5,7 @@ import { ProgressBar } from "../progress-bar";
 const c = (...ids: string[]) => ids.map((id) => ({ id }));
 const runs = (entries: Record<string, string>) => {
   type CandidateRun = {
-    status: "completed" | "running" | "queued";
-    inputs?: Record<string, string>;
+    status: "completed" | "running";
   };
   return Object.fromEntries(
     Object.entries(entries).map(([id, status]) => [
@@ -26,15 +25,14 @@ describe("ProgressBar", () => {
   it("buckets candidates into the correct status categories", () => {
     render(
       <ProgressBar
-        candidates={c("a", "b", "c", "d")}
-        candidateRuns={runs({ a: "completed", b: "running", c: "queued" })}
-        // d has no run → not started
+        candidates={c("a", "b", "c")}
+        candidateRuns={runs({ a: "completed", b: "running" })}
+        // c has no run → not started
       />,
     );
 
     expect(screen.getByText(/completed/)).toBeInTheDocument();
     expect(screen.getByText(/running/)).toBeInTheDocument();
-    expect(screen.getByText(/queued/)).toBeInTheDocument();
     expect(screen.getByText(/not started/)).toBeInTheDocument();
   });
 
@@ -62,7 +60,6 @@ describe("ProgressBar", () => {
 
     expect(screen.getByText(/completed/)).toBeInTheDocument();
     expect(screen.queryByText(/running/)).toBeNull();
-    expect(screen.queryByText(/queued/)).toBeNull();
     expect(screen.queryByText(/not started/)).toBeNull();
   });
 
@@ -82,7 +79,7 @@ describe("ProgressBar", () => {
     render(<ProgressBar candidates={[]} />);
 
     expect(
-      screen.queryByText(/completed|running|queued|not started/),
+      screen.queryByText(/completed|running|not started/),
     ).toBeNull();
   });
 });

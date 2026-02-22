@@ -7,7 +7,7 @@ import (
 	"github.com/tilsley/loom/pkg/api"
 )
 
-// CandidateAlreadyRunError is returned when a candidate repo already has a queued, running, or completed run.
+// CandidateAlreadyRunError is returned when a candidate already has a running or completed run.
 type CandidateAlreadyRunError struct {
 	ID     string
 	Status string
