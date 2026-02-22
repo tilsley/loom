@@ -12,7 +12,7 @@ import (
 // UpdateTargetRunStatusInput is the input for the UpdateTargetRunStatus activity.
 type UpdateTargetRunStatusInput struct {
 	RegistrationID string `json:"registrationId"`
-	TargetRepo     string `json:"targetRepo"`
+	CandidateID  string `json:"candidateId"`
 	RunID          string `json:"runId"`
 	Status         string `json:"status"`
 }
@@ -33,7 +33,7 @@ func NewActivities(notifier migrations.WorkerNotifier, store migrations.Migratio
 // DispatchStep publishes a step request to the external worker via WorkerNotifier.
 func (a *Activities) DispatchStep(ctx context.Context, req api.DispatchStepRequest) error {
 	if err := a.notifier.Dispatch(ctx, req); err != nil {
-		return fmt.Errorf("dispatch step %q for %q: %w", req.StepName, req.Target.Repo, err)
+		return fmt.Errorf("dispatch step %q for %q: %w", req.StepName, req.Candidate.Id, err)
 	}
 	return nil
 }
@@ -43,24 +43,42 @@ func (a *Activities) DispatchStep(ctx context.Context, req api.DispatchStepReque
 func (a *Activities) CompensateStep(ctx context.Context, step api.StepResult) error {
 	a.log.Info("compensating step",
 		"step", step.StepName,
-		"target", step.Target,
+		"candidate", step.Candidate,
 		"metadata", step.Metadata,
 	)
 	return nil
 }
 
-// UpdateTargetRunStatus updates the target run status in the migration store.
-func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTargetRunStatusInput) error {
-	run := api.TargetRun{
-		RunId:  input.RunID,
-		Status: api.TargetRunStatus(input.Status),
+// ResetCandidateRunInput is the input for the ResetCandidateRun activity.
+type ResetCandidateRunInput struct {
+	RegistrationID string `json:"registrationId"`
+	CandidateID    string `json:"candidateId"`
+}
+
+// ResetCandidateRun removes the candidate run entry, returning it to not_started state.
+func (a *Activities) ResetCandidateRun(ctx context.Context, input ResetCandidateRunInput) error {
+	if err := a.store.DeleteCandidateRun(ctx, input.RegistrationID, input.CandidateID); err != nil {
+		return fmt.Errorf("reset candidate run: %w", err)
 	}
-	if err := a.store.SetTargetRun(ctx, input.RegistrationID, input.TargetRepo, run); err != nil {
-		return fmt.Errorf("update target run status: %w", err)
-	}
-	a.log.Info("updated target run status",
+	a.log.Info("reset candidate run to not_started",
 		"registrationId", input.RegistrationID,
-		"target", input.TargetRepo,
+		"candidate", input.CandidateID,
+	)
+	return nil
+}
+
+// UpdateTargetRunStatus updates the candidate run status in the migration store.
+func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTargetRunStatusInput) error {
+	run := api.CandidateRun{
+		RunId:  input.RunID,
+		Status: api.CandidateRunStatus(input.Status),
+	}
+	if err := a.store.SetCandidateRun(ctx, input.RegistrationID, input.CandidateID, run); err != nil {
+		return fmt.Errorf("update candidate run status: %w", err)
+	}
+	a.log.Info("updated candidate run status",
+		"registrationId", input.RegistrationID,
+		"candidate", input.CandidateID,
 		"status", input.Status,
 	)
 	return nil

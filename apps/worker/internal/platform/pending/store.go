@@ -16,10 +16,10 @@ const keyPrefix = "pending-callback:"
 
 // Callback holds the Loom callback info for a PR awaiting merge.
 type Callback struct {
-	CallbackID string     `json:"callbackId"`
-	StepName   string     `json:"stepName"`
-	Target     api.Target `json:"target"`
-	PRURL      string     `json:"prUrl"`
+	CallbackID string        `json:"callbackId"`
+	StepName   string        `json:"stepName"`
+	Candidate  api.Candidate `json:"candidate"`
+	PRURL      string        `json:"prUrl"`
 }
 
 // Store persists pending PR-to-workflow callback mappings in Dapr state store

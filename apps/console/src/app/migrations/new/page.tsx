@@ -8,7 +8,7 @@ import {
   registerMigration,
   type RegisterMigrationRequest,
   type StepDefinition,
-  type Target,
+  type Candidate,
 } from "@/lib/api";
 import { useRole } from "@/contexts/role-context";
 import { ROUTES } from "@/lib/routes";
@@ -27,7 +27,7 @@ export default function NewMigration() {
   const { isAdmin } = useRole();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [targetsJson, setTargetsJson] = useState(
+  const [candidatesJson, setCandidatesJson] = useState(
     JSON.stringify([{ repo: "acme/billing-api" }, { repo: "acme/user-service" }], null, 2),
   );
   const [stepsJson, setStepsJson] = useState(JSON.stringify(DEFAULT_STEPS, null, 2));
@@ -49,16 +49,16 @@ export default function NewMigration() {
       return;
     }
 
-    let targetList: Target[];
+    let candidateList: Candidate[];
     try {
-      targetList = JSON.parse(targetsJson);
-      if (!Array.isArray(targetList) || !targetList.every((t) => typeof t.repo === "string")) {
-        throw new Error("Each target must have a repo field");
+      candidateList = JSON.parse(candidatesJson);
+      if (!Array.isArray(candidateList) || !candidateList.every((t) => typeof t.id === "string")) {
+        throw new Error("Each candidate must have an id field");
       }
     } catch (err) {
       toast.error(
         err instanceof Error
-          ? `Invalid targets JSON: ${err.message}`
+          ? `Invalid candidates JSON: ${err.message}`
           : "Invalid JSON in targets field",
       );
       return;
@@ -68,8 +68,8 @@ export default function NewMigration() {
       toast.error("Name is required");
       return;
     }
-    if (targetList.length === 0) {
-      toast.error("At least one target is required");
+    if (candidateList.length === 0) {
+      toast.error("At least one candidate is required");
       return;
     }
     if (!Array.isArray(steps) || steps.length === 0) {
@@ -80,7 +80,7 @@ export default function NewMigration() {
     const req: RegisterMigrationRequest = {
       name: name.trim(),
       description: description.trim() || undefined,
-      targets: targetList,
+      candidates: candidateList,
       steps,
     };
 
@@ -148,12 +148,12 @@ export default function NewMigration() {
 
         <div>
           <label className="block text-[11px] font-medium text-zinc-500 uppercase tracking-widest mb-2">
-            Targets
+            Candidates
             <span className="ml-2 text-zinc-600 normal-case tracking-normal">JSON array</span>
           </label>
           <Textarea
-            value={targetsJson}
-            onChange={(e) => setTargetsJson(e.target.value)}
+            value={candidatesJson}
+            onChange={(e) => setCandidatesJson(e.target.value)}
             rows={6}
             className="font-mono text-[12px]"
           />

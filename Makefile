@@ -1,10 +1,15 @@
-.PHONY: setup build run demo temporal mock-github worker reset test vet tidy generate generate-go generate-ts \
+.PHONY: dev setup build run demo temporal mock-github worker reset test vet tidy generate generate-go generate-ts \
         lint lint-go lint-fix \
         console-install console-dev console-build \
         console-lint console-lint-fix console-typecheck console-format console-format-check
 
 SERVER_DIR  = apps/server
 CONSOLE_DIR = apps/console
+
+# --- Dev ---
+
+dev:
+	@./dev.sh
 
 # --- Setup ---
 
@@ -64,7 +69,7 @@ demo:
 	./scripts/demo.sh
 
 temporal:
-	temporal server start-dev --ui-port 8088
+	temporal server start-dev --ui-port 8088 --db-filename .temporal.db
 
 mock-github:
 	go run ./apps/mock-github
@@ -76,7 +81,9 @@ reset:
 	@echo "Flushing Redis (state store + pub/sub)..."
 	@docker exec dapr_redis redis-cli FLUSHDB
 	@echo "✓ Redis cleared — migrations, pending callbacks, and pub/sub messages removed"
-	@echo "Note: Temporal workflow history is in Postgres. To fully reset, run: docker compose down -v"
+	@echo "Deleting Temporal SQLite database..."
+	@rm -f .temporal.db .temporal.db-shm .temporal.db-wal
+	@echo "✓ Temporal state cleared — restart 'make temporal' to get a fresh server"
 
 test:
 	go test ./...

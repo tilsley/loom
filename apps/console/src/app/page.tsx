@@ -20,19 +20,19 @@ export default function Dashboard() {
 
     const hits: {
       migration: RegisteredMigration;
-      repo: string;
+      id: string;
       status: string;
       runId: string | null;
     }[] = [];
 
     for (const m of migrations) {
-      for (const t of m.targets) {
-        if (t.repo.toLowerCase().includes(q)) {
-          const run = m.targetRuns?.[t.repo];
+      for (const t of m.candidates) {
+        if (t.id.toLowerCase().includes(q)) {
+          const run = m.candidateRuns?.[t.id];
           hits.push({
             migration: m,
-            repo: t.repo,
-            status: run?.status ?? "pending",
+            id: t.id,
+            status: run?.status ?? "not_started",
             runId: run?.runId ?? null,
           });
         }
@@ -66,7 +66,7 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* Target search */}
+      {/* Candidate search */}
       <div className="pt-4 border-t border-zinc-800/50 space-y-3">
         <div className="flex items-center gap-3">
           <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-widest shrink-0">
@@ -87,7 +87,7 @@ export default function Dashboard() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by repo, e.g. acme/billing-api"
+              placeholder="Search by id, e.g. billing-api"
               className="pl-9 py-1.5 font-mono"
             />
           </div>
@@ -97,12 +97,12 @@ export default function Dashboard() {
           <div className="rounded-lg border border-zinc-800/80 overflow-hidden">
             {results.map((r, i) => (
               <div
-                key={`${r.migration.id}-${r.repo}`}
+                key={`${r.migration.id}-${r.id}`}
                 className={`flex items-center gap-4 px-4 py-3 ${i < results.length - 1 ? "border-b border-zinc-800/60" : ""}`}
               >
-                {/* Repo */}
+                {/* Candidate */}
                 <span className="flex-1 text-sm font-mono text-zinc-200 truncate min-w-0">
-                  {r.repo}
+                  {r.id}
                 </span>
 
                 {/* Migration name */}
@@ -144,12 +144,12 @@ export default function Dashboard() {
 
 function StatusChip({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "text-zinc-400 bg-zinc-800/60 border-zinc-700/50",
+    not_started: "text-zinc-400 bg-zinc-800/60 border-zinc-700/50",
     running: "text-amber-400 bg-amber-500/10 border-amber-500/20",
     completed: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
     failed: "text-red-400 bg-red-500/10 border-red-500/20",
   };
-  const cls = styles[status] ?? styles.pending;
+  const cls = styles[status] ?? styles.not_started;
   return (
     <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${cls}`}>
       {status}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -49,6 +50,9 @@ func (e *Engine) StartWorkflow(ctx context.Context, name, instanceID string, inp
 func (e *Engine) GetStatus(ctx context.Context, instanceID string) (*migrations.WorkflowStatus, error) {
 	desc, err := e.c.DescribeWorkflowExecution(ctx, instanceID, "")
 	if err != nil {
+		if isNotFound(err) {
+			return nil, migrations.WorkflowNotFoundError{InstanceID: instanceID}
+		}
 		return nil, fmt.Errorf("describe workflow %q: %w", instanceID, err)
 	}
 
@@ -85,6 +89,21 @@ func (e *Engine) RaiseEvent(ctx context.Context, instanceID, eventName string, p
 		return fmt.Errorf("signal %q on %q: %w", eventName, instanceID, err)
 	}
 	return nil
+}
+
+// CancelWorkflow requests graceful cancellation of a running workflow.
+func (e *Engine) CancelWorkflow(ctx context.Context, instanceID string) error {
+	if err := e.c.CancelWorkflow(ctx, instanceID, ""); err != nil {
+		return fmt.Errorf("cancel workflow %q: %w", instanceID, err)
+	}
+	return nil
+}
+
+// isNotFound reports whether err indicates a workflow execution was not found.
+// Temporal wraps gRPC NOT_FOUND errors; checking the message is the portable approach.
+func isNotFound(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist")
 }
 
 func mapTemporalStatus(s enumspb.WorkflowExecutionStatus) string {

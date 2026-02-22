@@ -14,9 +14,12 @@ import (
 	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/discovery"
+	"github.com/tilsley/loom/apps/worker/internal/dryrun"
 	"github.com/tilsley/loom/apps/worker/internal/handler"
-	"github.com/tilsley/loom/apps/worker/internal/pending"
+	platformgithub "github.com/tilsley/loom/apps/worker/internal/platform/github"
+	"github.com/tilsley/loom/apps/worker/internal/platform/loom"
+	"github.com/tilsley/loom/apps/worker/internal/platform/pending"
 	"github.com/tilsley/loom/apps/worker/internal/steps"
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -53,10 +56,13 @@ func main() {
 	}
 	defer daprClient.Close()
 
-	gh := github.NewClient(githubURL)
+	gh := platformgithub.NewClient(githubURL)
 	store := pending.NewStore(daprClient, log)
-	dispatch := handler.NewDispatch(gh, store, loomURL, log, stepCfg)
-	webhook := handler.NewWebhook(store, loomURL, log)
+	loomClient := loom.NewClient(loomURL, log)
+	dispatch := handler.NewDispatch(gh, store, loomClient, log, stepCfg)
+	webhook := handler.NewWebhook(store, loomClient, log)
+	dryRunRunner := &dryrun.Runner{RealClient: gh, StepCfg: stepCfg}
+	dryRunHandler := handler.NewDryRun(dryRunRunner, log)
 
 	r := gin.Default()
 
@@ -77,13 +83,32 @@ func main() {
 	// GitHub webhook — called when a PR is merged
 	r.POST("/webhooks/github", webhook.Handle)
 
+	// Dry run — simulate all steps, return file diffs
+	r.POST("/dry-run", dryRunHandler.Handle)
+
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	ctx := context.Background()
+
 	// Announce migration on startup (after sidecar is ready)
 	go announceOnStartup(log, daprPort, gitopsOwner, gitopsRepoName, envs)
+
+	// Run candidate discovery once on startup (after announce completes)
+	discoverer := &discovery.AppChartDiscoverer{
+		GH:          gh,
+		GitopsOwner: gitopsOwner,
+		GitopsRepo:  gitopsRepoName,
+	}
+	discoveryRunner := &discovery.Runner{
+		MigrationID: "app-chart-migration",
+		Discoverer:  discoverer,
+		ServerURL:   loomURL,
+		Log:         log,
+	}
+	go discoveryRunner.Run(ctx)
 
 	log.Info("worker starting", "port", port, "gitopsRepo", gitopsRepo, "envs", envs)
 	if err := r.Run(":" + port); err != nil {
@@ -188,11 +213,8 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 		Id:          "app-chart-migration",
 		Name:        "App Chart Migration",
 		Description: &desc,
-		Targets: []api.Target{
-			{Repo: "acme/billing-api", Metadata: &map[string]string{"appName": "billing-api"}},
-			{Repo: "acme/user-service", Metadata: &map[string]string{"appName": "user-service"}},
-		},
-		Steps: stepDefs,
+		Candidates:  []api.Candidate{},
+		Steps:       stepDefs,
 	}
 }
 

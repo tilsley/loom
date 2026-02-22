@@ -8,7 +8,7 @@ interface RecentFailuresProps {
 interface FailureEntry {
   migrationName: string;
   migrationId: string;
-  repo: string;
+  candidateId: string;
   runId: string;
 }
 
@@ -16,13 +16,13 @@ export function RecentFailures({ migrations }: RecentFailuresProps) {
   const failures: FailureEntry[] = [];
 
   for (const m of migrations) {
-    if (!m.targetRuns) continue;
-    for (const [repo, tr] of Object.entries(m.targetRuns)) {
+    if (!m.candidateRuns) continue;
+    for (const [candidateId, tr] of Object.entries(m.candidateRuns)) {
       if (tr.status === "failed") {
         failures.push({
           migrationName: m.name,
           migrationId: m.id,
-          repo,
+          candidateId,
           runId: tr.runId,
         });
       }
@@ -46,13 +46,13 @@ export function RecentFailures({ migrations }: RecentFailuresProps) {
           <div className="space-y-2">
             {limited.map((f) => (
               <div
-                key={`${f.migrationId}-${f.repo}`}
+                key={`${f.migrationId}-${f.candidateId}`}
                 className="flex items-center justify-between gap-2 py-1.5"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                    <span className="text-[12px] font-mono text-zinc-300 truncate">{f.repo}</span>
+                    <span className="text-[12px] font-mono text-zinc-300 truncate">{f.candidateId}</span>
                   </div>
                   <Link
                     href={`/migrations/${f.migrationId}`}

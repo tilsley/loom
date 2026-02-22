@@ -13,7 +13,7 @@ const filters = [
     color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
   },
   { key: "failed", label: "Failed", color: "text-red-400 bg-red-500/10 border-red-500/20" },
-  { key: "pending", label: "Pending", color: "text-zinc-400 bg-zinc-700/30 border-zinc-600/30" },
+  { key: "not_started", label: "Not started", color: "text-zinc-400 bg-zinc-700/30 border-zinc-600/30" },
 ];
 
 export function StatusFilter({ counts, active, onChange }: StatusFilterProps) {

@@ -1,3 +1,6 @@
+# Local dev state
+.temporal.db
+
 # Build artifacts
 apps/server/bin/
 apps/console/.next/

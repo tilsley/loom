@@ -1,21 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
   getMigration,
+  getCandidates,
   deleteMigration,
-  runMigration,
+  queueRun,
+  dequeueRun,
   ConflictError,
   type RegisteredMigration,
-  type Target,
+  type Candidate,
+  type CandidateRun,
+  type CandidateWithStatus,
 } from "@/lib/api";
 import { useRole } from "@/contexts/role-context";
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
-import { TargetTable } from "@/components/target-table";
+import { CandidateTable } from "@/components/candidate-table";
 import { Button, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
@@ -23,8 +27,9 @@ export default function MigrationDetail() {
   const router = useRouter();
   const { isAdmin } = useRole();
   const [migration, setMigration] = useState<RegisteredMigration | null>(null);
+  const [candidates, setCandidates] = useState<CandidateWithStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [runningTarget, setRunningTarget] = useState<string | null>(null);
+  const [runningCandidate, setRunningCandidate] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const fetchMigration = useCallback(async () => {
@@ -36,49 +41,72 @@ export default function MigrationDetail() {
     }
   }, [id]);
 
-  // Initial load + 5s polling
+  const fetchCandidates = useCallback(async () => {
+    try {
+      const data = await getCandidates(id);
+      setCandidates(data);
+    } catch {
+      // Silently ignore — migration may not have candidates yet
+    }
+  }, [id]);
+
+  // Initial load + 5s polling for both migration metadata and candidates
   useEffect(() => {
     void fetchMigration();
+    void fetchCandidates();
     const interval = setInterval(() => {
       void fetchMigration();
+      void fetchCandidates();
     }, 5000);
     return () => clearInterval(interval);
-  }, [fetchMigration]);
+  }, [fetchMigration, fetchCandidates]);
 
-  async function handleRun(target: Target) {
-    setRunningTarget(target.repo);
+  // Derive Candidate[] and CandidateRun map from candidates for CandidateTable / ProgressBar
+  const derivedCandidates = useMemo<Candidate[]>(
+    () => candidates.map((c) => ({ id: c.id, kind: c.kind, metadata: c.metadata, state: c.state, files: c.files })),
+    [candidates],
+  );
+
+  const derivedCandidateRuns = useMemo<Record<string, CandidateRun>>(() => {
+    const runs: Record<string, CandidateRun> = {};
+    for (const c of candidates) {
+      if (c.status !== "not_started") {
+        runs[c.id] = {
+          runId: c.runId ?? "",
+          status: c.status as CandidateRun["status"],
+        };
+      }
+    }
+    return runs;
+  }, [candidates]);
+
+  async function handleQueue(candidate: Candidate) {
+    setRunningCandidate(candidate.id);
     try {
-      await runMigration(id, target);
-      await fetchMigration();
-      toast.success(`Run started for ${target.repo}`);
+      const { runId } = await queueRun(id, candidate);
+      router.push(ROUTES.runDetail(runId));
     } catch (e) {
       if (e instanceof ConflictError) {
-        await fetchMigration();
-        toast.error("Target already running or completed");
+        await Promise.all([fetchMigration(), fetchCandidates()]);
+        toast.error("Candidate already queued, running, or completed");
       } else {
-        toast.error(e instanceof Error ? e.message : "Failed to start run");
+        toast.error(e instanceof Error ? e.message : "Failed to queue run");
       }
-    } finally {
-      setRunningTarget(null);
+      setRunningCandidate(null);
     }
   }
 
-  async function handleRunAll() {
-    if (!migration) return;
-    const pending = migration.targets.filter((t) => !migration.targetRuns?.[t.repo]);
-    for (const target of pending) {
-      setRunningTarget(target.repo);
-      try {
-        await runMigration(id, target);
-      } catch (e) {
-        if (!(e instanceof ConflictError)) {
-          toast.error(e instanceof Error ? e.message : "Failed to start run");
-          break;
-        }
-      }
+  async function handleDequeue(runId: string) {
+    setRunningCandidate(runId);
+    try {
+      await dequeueRun(runId);
+      await Promise.all([fetchMigration(), fetchCandidates()]);
+      toast.success("Removed from queue");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to dequeue");
+    } finally {
+      setRunningCandidate(null);
     }
-    setRunningTarget(null);
-    await fetchMigration();
   }
 
   async function handleDelete() {
@@ -174,21 +202,23 @@ export default function MigrationDetail() {
       </div>
 
       {/* Progress bar */}
-      <ProgressBar targets={migration.targets} targetRuns={migration.targetRuns} />
+      <ProgressBar candidates={derivedCandidates} candidateRuns={derivedCandidateRuns} />
 
-      {/* Target table */}
+      {/* Candidates table */}
       <section>
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Targets</h3>
+          <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
+            Candidates
+          </h3>
           <span className="text-[10px] font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
-            {migration.targets.length}
+            {candidates.length}
           </span>
         </div>
-        <TargetTable
-          migration={migration}
-          onRun={handleRun}
-          onRunAll={handleRunAll}
-          runningTarget={runningTarget}
+        <CandidateTable
+          migration={{ ...migration, candidates: derivedCandidates, candidateRuns: derivedCandidateRuns }}
+          onQueue={handleQueue}
+          onDequeue={handleDequeue}
+          runningCandidate={runningCandidate}
         />
       </section>
 

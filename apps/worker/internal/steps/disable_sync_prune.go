@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/apps/worker/internal/yamlutil"
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -17,27 +17,27 @@ type DisableSyncPrune struct{}
 // Execute implements Handler.
 func (h *DisableSyncPrune) Execute(
 	ctx context.Context,
-	gh *github.Client,
+	gr gitrepo.Client,
 	cfg *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
-	app := appName(req.Target)
+	app := appName(req.Candidate)
 	env := (*req.Config)["env"]
 	path := fmt.Sprintf("apps/%s/overlays/%s/application.yaml", app, env)
 
-	fc, err := gh.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
+	fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
 	if err != nil {
 		return nil, fmt.Errorf("get %s: %w", path, err)
 	}
 
-	data, err := yamlutil.Parse(fc.Content)
+	root, err := yamlutil.ParseNode(fc.Content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	yamlutil.SetNested(data, false, "spec", "syncPolicy", "automated", "prune")
+	yamlutil.SetNestedValue(root, false, "spec", "syncPolicy", "automated", "prune")
 
-	out, err := yamlutil.Marshal(data)
+	out, err := yamlutil.MarshalNode(root)
 	if err != nil {
 		return nil, err
 	}

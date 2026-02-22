@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# ANSI colours — one per service
+C_TEMPORAL='\033[0;34m'  # blue
+C_SERVER='\033[0;32m'    # green
+C_WORKER='\033[0;35m'    # magenta
+C_MOCKGH='\033[0;33m'    # yellow
+C_CONSOLE='\033[0;36m'   # cyan
+C_RESET='\033[0m'
+C_BOLD='\033[1m'
+C_DIM='\033[2m'
+
+PIDS=()
+
+# Stream lines from stdin and prefix each one with a coloured label.
+prefix() {
+  local label="$1" color="$2"
+  while IFS= read -r line; do
+    printf "${color}${C_BOLD}%-9s${C_RESET} ${C_DIM}│${C_RESET} %s\n" "$label" "$line"
+  done
+}
+
+cleanup() {
+  printf "\n${C_BOLD}Shutting down…${C_RESET}\n"
+  # Ask dapr to stop its sidecars cleanly before we kill the process pipes.
+  dapr stop --app-id loom            2>/dev/null || true
+  dapr stop --app-id migration-worker 2>/dev/null || true
+  # Closing the prefix pipes sends SIGPIPE to the app processes behind them.
+  for pid in "${PIDS[@]}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+  wait 2>/dev/null || true
+  printf "${C_BOLD}Done.${C_RESET}\n"
+  exit 0
+}
+
+trap cleanup INT TERM
+
+cd "$(dirname "$0")"
+
+# Regenerate types so the console is never stale.
+printf "${C_BOLD}Generating types…${C_RESET}\n"
+make generate-ts --no-print-directory
+
+printf "\n${C_BOLD}Loom dev${C_RESET}\n"
+printf "  ${C_TEMPORAL}temporal${C_RESET}  → http://localhost:8088\n"
+printf "  ${C_SERVER}server${C_RESET}    → http://localhost:8080\n"
+printf "  ${C_WORKER}worker${C_RESET}    → dapr app-id: migration-worker\n"
+printf "  ${C_MOCKGH}mock-gh${C_RESET}   → http://localhost:8081\n"
+printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n\n"
+
+# 1. Temporal — start first and give it a moment to open its port.
+temporal server start-dev --ui-port 8088 --db-filename .temporal.db 2>&1 \
+  | prefix "temporal" "$C_TEMPORAL" &
+PIDS+=($!)
+sleep 1
+
+# 2. Server
+(cd apps/server && dapr run \
+  --app-id loom \
+  --app-port 8080 \
+  --dapr-http-port 3500 \
+  --resources-path ./dapr/components \
+  -- go run .) 2>&1 \
+  | prefix "server" "$C_SERVER" &
+PIDS+=($!)
+
+# 3. Worker
+(cd apps/worker && dapr run \
+  --app-id migration-worker \
+  --app-port 3001 \
+  --dapr-http-port 3501 \
+  --resources-path ./dapr/components \
+  -- go run .) 2>&1 \
+  | prefix "worker" "$C_WORKER" &
+PIDS+=($!)
+
+# 4. Mock GitHub
+go run ./apps/mock-github 2>&1 \
+  | prefix "mock-gh" "$C_MOCKGH" &
+PIDS+=($!)
+
+# 5. Console (Next.js dev server)
+(cd apps/console && bun run dev) 2>&1 \
+  | prefix "console" "$C_CONSOLE" &
+PIDS+=($!)
+
+# Block until Ctrl+C.
+wait

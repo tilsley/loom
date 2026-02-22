@@ -5,24 +5,24 @@ interface DashboardStatsProps {
 }
 
 export function DashboardStats({ migrations }: DashboardStatsProps) {
-  let activeTargets = 0;
-  let completedTargets = 0;
-  let failedTargets = 0;
+  let activeCandidates = 0;
+  let completedCandidates = 0;
+  let failedCandidates = 0;
 
   for (const m of migrations) {
-    if (!m.targetRuns) continue;
-    for (const tr of Object.values(m.targetRuns)) {
-      if (tr.status === "running") activeTargets++;
-      else if (tr.status === "completed") completedTargets++;
-      else if (tr.status === "failed") failedTargets++;
+    if (!m.candidateRuns) continue;
+    for (const tr of Object.values(m.candidateRuns)) {
+      if (tr.status === "running") activeCandidates++;
+      else if (tr.status === "completed") completedCandidates++;
+      else if (tr.status === "failed") failedCandidates++;
     }
   }
 
   const stats = [
     { label: "Migrations", value: migrations.length, accent: false },
-    { label: "Active Targets", value: activeTargets, accent: activeTargets > 0 },
-    { label: "Completed", value: completedTargets, accent: completedTargets > 0 },
-    { label: "Failed", value: failedTargets, accent: false, isError: failedTargets > 0 },
+    { label: "Active Candidates", value: activeCandidates, accent: activeCandidates > 0 },
+    { label: "Completed", value: completedCandidates, accent: completedCandidates > 0 },
+    { label: "Failed", value: failedCandidates, accent: false, isError: failedCandidates > 0 },
   ];
 
   return (

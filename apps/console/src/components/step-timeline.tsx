@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { StepResult, Target } from "@/lib/api";
+import type { StepResult, Candidate } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui";
 
@@ -20,9 +20,10 @@ function getPhase(r: StepResult): Phase {
   return "completed";
 }
 
-function resolveFileUrls(urls: string[], target: Target): string[] {
-  const appName = target.metadata?.appName ?? target.repo.split("/").pop() ?? "";
-  return urls.map((u) => u.replace(/\{appName\}/g, appName).replace(/\{repo\}/g, target.repo));
+function resolveFileUrls(urls: string[], candidate: Candidate): string[] {
+  const appName = candidate.id;
+  const repoName = candidate.metadata?.repoName ?? candidate.id;
+  return urls.map((u) => u.replace(/\{appName\}/g, appName).replace(/\{repo\}/g, repoName));
 }
 
 export function StepTimeline({
@@ -34,7 +35,7 @@ export function StepTimeline({
   results: StepResult[];
   stepDescriptions?: Map<string, string>;
   stepFiles?: Map<string, string[]>;
-  onComplete?: (stepName: string, target: Target, success: boolean) => void;
+  onComplete?: (stepName: string, candidate: Candidate, success: boolean) => void;
 }) {
   // Hooks must be declared before any early return
   const lastActiveIndex = results.reduce((acc, r, idx) => {
@@ -87,7 +88,7 @@ export function StepTimeline({
         const phase = getPhase(r);
         const description = stepDescriptions?.get(r.stepName);
         const files = stepFiles?.get(r.stepName)
-          ? resolveFileUrls(stepFiles?.get(r.stepName) ?? [], r.target)
+          ? resolveFileUrls(stepFiles?.get(r.stepName) ?? [], r.candidate)
           : [];
         const isLast = i === results.length - 1;
         const isActive = phase === "open" || phase === "in_progress" || phase === "awaiting_review";
@@ -201,7 +202,7 @@ export function StepTimeline({
                   ) : null}
                   {onComplete ? (
                     <ReviewActions
-                      onComplete={(success) => onComplete(r.stepName, r.target, success)}
+                      onComplete={(success) => onComplete(r.stepName, r.candidate, success)}
                     />
                   ) : null}
                 </div>

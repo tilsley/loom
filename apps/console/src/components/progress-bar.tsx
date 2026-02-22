@@ -1,18 +1,18 @@
-import type { Target, TargetRun } from "@/lib/api";
+import type { Candidate, CandidateRun } from "@/lib/api";
 
 interface ProgressBarProps {
-  targets: Target[];
-  targetRuns?: Record<string, TargetRun>;
+  candidates: Candidate[];
+  candidateRuns?: Record<string, CandidateRun>;
 }
 
-export function ProgressBar({ targets, targetRuns }: ProgressBarProps) {
-  const total = targets.length;
-  const counts = { completed: 0, running: 0, failed: 0, pending: 0 };
+export function ProgressBar({ candidates, candidateRuns }: ProgressBarProps) {
+  const total = candidates.length;
+  const counts = { completed: 0, running: 0, failed: 0, not_started: 0 };
 
-  for (const t of targets) {
-    const run = targetRuns?.[t.repo];
+  for (const c of candidates) {
+    const run = candidateRuns?.[c.id];
     if (!run) {
-      counts.pending++;
+      counts.not_started++;
     } else if (run.status === "completed") {
       counts.completed++;
     } else if (run.status === "running") {
@@ -20,7 +20,7 @@ export function ProgressBar({ targets, targetRuns }: ProgressBarProps) {
     } else if (run.status === "failed") {
       counts.failed++;
     } else {
-      counts.pending++;
+      counts.not_started++;
     }
   }
 
@@ -28,7 +28,7 @@ export function ProgressBar({ targets, targetRuns }: ProgressBarProps) {
     { key: "completed", count: counts.completed, color: "bg-emerald-500", label: "completed" },
     { key: "running", count: counts.running, color: "bg-amber-500", label: "running" },
     { key: "failed", count: counts.failed, color: "bg-red-500", label: "failed" },
-    { key: "pending", count: counts.pending, color: "bg-zinc-700", label: "pending" },
+    { key: "not_started", count: counts.not_started, color: "bg-zinc-700", label: "not started" },
   ] as const;
 
   return (

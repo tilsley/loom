@@ -10,9 +10,19 @@ export type StartRequest = components["schemas"]["StartRequest"];
 export type RegisteredMigration = components["schemas"]["RegisteredMigration"];
 export type RegisterMigrationRequest = components["schemas"]["RegisterMigrationRequest"];
 export type ListMigrationsResponse = components["schemas"]["ListMigrationsResponse"];
-export type RunMigrationResponse = components["schemas"]["RunMigrationResponse"];
-export type Target = components["schemas"]["Target"];
-export type TargetRun = components["schemas"]["TargetRun"];
+export type QueueRunResponse = components["schemas"]["QueueRunResponse"];
+export type ExecuteRunResponse = components["schemas"]["ExecuteRunResponse"];
+export type RunInfo = components["schemas"]["RunInfo"];
+export type Candidate = components["schemas"]["Candidate"];
+export type CandidateRun = components["schemas"]["CandidateRun"];
+export type CandidateStatus = components["schemas"]["CandidateStatus"];
+export type CandidateWithStatus = components["schemas"]["CandidateWithStatus"];
+export type SubmitCandidatesRequest = components["schemas"]["SubmitCandidatesRequest"];
+export type FileGroup = components["schemas"]["FileGroup"];
+export type FileRef = components["schemas"]["FileRef"];
+export type DryRunResult = components["schemas"]["DryRunResult"];
+export type StepDryRunResult = components["schemas"]["StepDryRunResult"];
+export type FileDiff = components["schemas"]["FileDiff"];
 
 const BASE = "/api";
 
@@ -91,24 +101,62 @@ export class NotFoundError extends Error {
 export async function completeStep(
   runId: string,
   stepName: string,
-  target: Target,
+  candidate: Candidate,
   success: boolean,
 ): Promise<void> {
   const res = await fetch(`${BASE}/event/${runId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stepName, target, success }),
+    body: JSON.stringify({ stepName, candidate, success }),
   });
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function runMigration(id: string, target: Target): Promise<RunMigrationResponse> {
-  const res = await fetch(`${BASE}/migrations/${id}/run`, {
+export async function getCandidates(id: string): Promise<CandidateWithStatus[]> {
+  const res = await fetch(`${BASE}/migrations/${id}/candidates`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getRunInfo(runId: string): Promise<RunInfo | null> {
+  const res = await fetch(`${BASE}/runs/${runId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function queueRun(id: string, candidate: Candidate): Promise<QueueRunResponse> {
+  const res = await fetch(`${BASE}/migrations/${id}/queue`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target }),
+    body: JSON.stringify({ candidate }),
   });
   if (res.status === 409) throw new ConflictError(await res.text());
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function executeRun(runId: string): Promise<ExecuteRunResponse> {
+  const res = await fetch(`${BASE}/runs/${runId}/execute`, {
+    method: "POST",
+  });
+  if (res.status === 409) throw new ConflictError(await res.text());
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function dequeueRun(runId: string): Promise<void> {
+  const res = await fetch(`${BASE}/runs/${runId}/dequeue`, { method: "DELETE" });
+  if (res.status === 409) throw new ConflictError(await res.text());
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function dryRun(migrationId: string, candidate: Candidate): Promise<DryRunResult> {
+  const res = await fetch(`${BASE}/migrations/${encodeURIComponent(migrationId)}/dry-run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ candidate }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<DryRunResult>;
 }

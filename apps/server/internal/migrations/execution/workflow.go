@@ -12,10 +12,10 @@ import (
 
 // MigrationOrchestrator is the Temporal workflow that sequences a full migration.
 //
-// For each step in the manifest it iterates target repos sequentially:
+// For each step in the manifest it iterates candidate repos sequentially:
 //  1. Dispatches the step to an external worker via the DispatchStep activity.
 //  2. Listens for both "pr-opened" and "step-completed" signals via a Selector.
-//  3. Records metadata (PR URLs, etc.) and advances to the next repo/step.
+//  3. Records metadata (PR URLs, etc.) and advances to the next candidate/step.
 //
 // A query handler ("progress") exposes accumulated results in real-time.
 // On failure, completed steps are compensated in reverse order (saga pattern).
@@ -25,7 +25,7 @@ func MigrationOrchestrator(
 	ctx workflow.Context,
 	manifest api.MigrationManifest,
 ) (api.MigrationResult, error) {
-	results := make([]api.StepResult, 0, len(manifest.Steps)*len(manifest.Targets))
+	results := make([]api.StepResult, 0, len(manifest.Steps)*len(manifest.Candidates))
 
 	// Register query handler so external callers can read live progress.
 	if err := workflow.SetQueryHandler(ctx, "progress", func() (api.MigrationResult, error) {
@@ -44,21 +44,37 @@ func MigrationOrchestrator(
 	}
 	actCtx := workflow.WithActivityOptions(ctx, actOpts)
 
-	// Helper: update the target run status in the registration store.
+	// Helper: update the candidate run status in the registration store.
 	// Skips if RegistrationId is nil (legacy /start path).
-	updateTargetStatus := func(status string) {
-		if manifest.RegistrationId == nil || len(manifest.Targets) == 0 {
+	updateCandidateStatus := func(status string) {
+		if manifest.RegistrationId == nil || len(manifest.Candidates) == 0 {
 			return
 		}
 		input := UpdateTargetRunStatusInput{
 			RegistrationID: *manifest.RegistrationId,
-			TargetRepo:     manifest.Targets[0].Repo,
+			CandidateID:  manifest.Candidates[0].Id,
 			RunID:          manifest.MigrationId,
 			Status:         status,
 		}
 		fut := workflow.ExecuteActivity(actCtx, "UpdateTargetRunStatus", input)
 		if err := fut.Get(ctx, nil); err != nil {
-			workflow.GetLogger(ctx).Warn("failed to update target run status", "error", err, "status", status)
+			workflow.GetLogger(ctx).Warn("failed to update candidate run status", "error", err, "status", status)
+		}
+	}
+
+	// resetCandidate clears the candidate run entry, returning it to not_started.
+	// Used on failure — there is no "failed" status at the candidate level.
+	resetCandidate := func() {
+		if manifest.RegistrationId == nil || len(manifest.Candidates) == 0 {
+			return
+		}
+		input := ResetCandidateRunInput{
+			RegistrationID: *manifest.RegistrationId,
+			CandidateID:    manifest.Candidates[0].Id,
+		}
+		fut := workflow.ExecuteActivity(actCtx, "ResetCandidateRun", input)
+		if err := fut.Get(ctx, nil); err != nil {
+			workflow.GetLogger(ctx).Warn("failed to reset candidate run", "error", err)
 		}
 	}
 
@@ -68,15 +84,15 @@ func MigrationOrchestrator(
 		if !failed {
 			return
 		}
-		updateTargetStatus("failed")
+		resetCandidate()
 		// Use a disconnected context so compensation runs even if the workflow is cancelled.
 		compensateAll(ctx, actOpts, results)
 	}()
 
 	for _, step := range manifest.Steps {
-		for _, target := range manifest.Targets {
-			stepCompletedSignal := migrations.StepEventName(step.Name, target)
-			prOpenedSignal := migrations.PROpenedEventName(step.Name, target)
+		for _, candidate := range manifest.Candidates {
+			stepCompletedSignal := migrations.StepEventName(step.Name, candidate)
+			prOpenedSignal := migrations.PROpenedEventName(step.Name, candidate)
 			callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
 			// 1. Manual-review steps skip worker dispatch; all others go to the worker.
@@ -86,23 +102,23 @@ func MigrationOrchestrator(
 					meta["instructions"] = instructions
 				}
 				upsertResult(&results, api.StepResult{
-					StepName: step.Name,
-					Target:   target,
-					Success:  true,
-					Metadata: &meta,
+					StepName:  step.Name,
+					Candidate: candidate,
+					Success:   true,
+					Metadata:  &meta,
 				})
 			} else {
 				req := api.DispatchStepRequest{
 					MigrationId: manifest.MigrationId,
 					StepName:    step.Name,
-					Target:      target,
+					Candidate:   candidate,
 					Config:      step.Config,
 					CallbackId:  callbackID,
 					EventName:   stepCompletedSignal,
 				}
 				if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
 					failed = true
-					return api.MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, target.Repo, err)
+					return api.MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
 				}
 			}
 
@@ -143,7 +159,7 @@ func MigrationOrchestrator(
 		}
 	}
 
-	updateTargetStatus("completed")
+	updateCandidateStatus("completed")
 
 	return api.MigrationResult{
 		MigrationId: manifest.MigrationId,
@@ -165,10 +181,10 @@ func compensateAll(ctx workflow.Context, actOpts workflow.ActivityOptions, resul
 	}
 }
 
-// upsertResult updates an existing entry for the same step+target, or appends a new one.
+// upsertResult updates an existing entry for the same step+candidate, or appends a new one.
 func upsertResult(results *[]api.StepResult, r api.StepResult) {
 	for i, existing := range *results {
-		if existing.StepName == r.StepName && existing.Target.Repo == r.Target.Repo {
+		if existing.StepName == r.StepName && existing.Candidate.Id == r.Candidate.Id {
 			(*results)[i] = r
 			return
 		}

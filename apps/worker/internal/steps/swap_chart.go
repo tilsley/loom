@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/apps/worker/internal/yamlutil"
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -17,41 +17,41 @@ type SwapChart struct{}
 // Execute implements Handler.
 func (h *SwapChart) Execute(
 	ctx context.Context,
-	gh *github.Client,
+	gr gitrepo.Client,
 	cfg *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
-	app := appName(req.Target)
+	app := appName(req.Candidate)
 	env := (*req.Config)["env"]
 	path := fmt.Sprintf("apps/%s/overlays/%s/application.yaml", app, env)
 
-	fc, err := gh.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
+	fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
 	if err != nil {
 		return nil, fmt.Errorf("get %s: %w", path, err)
 	}
 
-	data, err := yamlutil.Parse(fc.Content)
+	root, err := yamlutil.ParseNode(fc.Content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	source, err := yamlutil.GetMap(data, "spec", "source")
+	source, err := yamlutil.GetMappingNode(root, "spec", "source")
 	if err != nil {
 		return nil, fmt.Errorf("get spec.source: %w", err)
 	}
 
 	// Swap to OCI app chart
-	source["repoURL"] = fmt.Sprintf("oci://ghcr.io/acme/%s-chart", app)
-	source["targetRevision"] = "0.1.0"
-	delete(source, "chart")
+	yamlutil.SetScalar(source, "repoURL", fmt.Sprintf("oci://ghcr.io/acme/%s-chart", app))
+	yamlutil.SetScalar(source, "targetRevision", "0.1.0")
+	yamlutil.DeleteKey(source, "chart")
 
 	// Remove helm.parameters (migrated to app chart values files)
-	helm, err := yamlutil.GetMap(data, "spec", "source", "helm")
+	helm, err := yamlutil.GetMappingNode(root, "spec", "source", "helm")
 	if err == nil {
-		delete(helm, "parameters")
+		yamlutil.DeleteKey(helm, "parameters")
 	}
 
-	out, err := yamlutil.Marshal(data)
+	out, err := yamlutil.MarshalNode(root)
 	if err != nil {
 		return nil, err
 	}

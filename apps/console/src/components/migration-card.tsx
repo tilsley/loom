@@ -11,8 +11,8 @@ function timeAgo(date: string): string {
 
 export function MigrationCard({ migration }: { migration: RegisteredMigration }) {
   const hasRuns = migration.runIds.length > 0;
-  const doneCount = migration.targetRuns
-    ? Object.values(migration.targetRuns).filter((r) => r.status === "completed").length
+  const doneCount = migration.candidateRuns
+    ? Object.values(migration.candidateRuns).filter((r) => r.status === "completed").length
     : 0;
 
   return (
@@ -43,7 +43,7 @@ export function MigrationCard({ migration }: { migration: RegisteredMigration })
 
         {/* Bottom row: stats */}
         <div className="flex items-center gap-3 mt-3">
-          <Stat label="targets" value={migration.targets.length} />
+          <Stat label="targets" value={migration.candidates.length} />
           <StatDivider />
           <Stat label="steps" value={migration.steps.length} />
           <StatDivider />

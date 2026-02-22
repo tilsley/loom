@@ -127,10 +127,10 @@ paths:
         "404":
           description: Migration not found
 
-  /migrations/{id}/run:
+  /migrations/{id}/candidates:
     post:
-      summary: Start a workflow run from a registered migration
-      operationId: runMigration
+      summary: Submit discovered candidates for a migration
+      operationId: submitCandidates
       parameters:
         - name: id
           in: path
@@ -142,24 +142,180 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RunMigrationRequest"
+              $ref: "#/components/schemas/SubmitCandidatesRequest"
+      responses:
+        "204":
+          description: Candidates saved
+        "404":
+          description: Migration not found
+    get:
+      summary: List candidates for a migration with run status
+      operationId: listCandidates
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Candidates with status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CandidateWithStatus"
+
+  /migrations/{id}/queue:
+    post:
+      summary: Queue a run for a single candidate (no workflow started yet)
+      operationId: queueRun
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueueRunRequest"
+      responses:
+        "202":
+          description: Run queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueRunResponse"
+        "404":
+          description: Migration not found
+        "409":
+          description: Candidate already queued, running, or completed
+
+  /runs/{runId}:
+    get:
+      summary: Get info about a run (including queued runs with no workflow yet)
+      operationId: getRunInfo
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Run info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunInfo"
+        "404":
+          description: Run not found
+
+  /runs/{runId}/dequeue:
+    delete:
+      summary: Remove a queued run, returning the candidate to not_started
+      operationId: dequeueRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Run removed from queue
+        "404":
+          description: Run not found
+        "409":
+          description: Run is not in queued state
+
+  /migrations/{id}/dry-run:
+    post:
+      summary: Simulate a full migration run for a candidate, returning per-step file diffs
+      operationId: dryRunCandidate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DryRunCandidateRequest"
+      responses:
+        "200":
+          description: Dry run completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DryRunResult"
+        "404":
+          description: Migration not found
+
+  /runs/{runId}/cancel:
+    post:
+      summary: Cancel a running workflow, recording the attempt and returning the candidate to not_started
+      operationId: cancelRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Run cancelled
+        "404":
+          description: Run not found
+        "409":
+          description: Run is not in running state
+
+  /runs/{runId}/execute:
+    post:
+      summary: Start the Temporal workflow for a queued run
+      operationId: executeRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         "202":
           description: Run started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunMigrationResponse"
+                $ref: "#/components/schemas/ExecuteRunResponse"
         "404":
-          description: Migration not found
+          description: Run not found
         "409":
-          description: Target already running or completed
+          description: Run is not in queued state
 
 components:
   schemas:
-    # --- Target run tracking ---
+    # --- Candidate run tracking ---
 
-    TargetRun:
+    CancelledAttempt:
+      type: object
+      required: [runId, candidateId, cancelledAt]
+      properties:
+        runId:
+          type: string
+        candidateId:
+          type: string
+        cancelledAt:
+          type: string
+          format: date-time
+
+    CandidateRun:
       type: object
       required: [runId, status]
       properties:
@@ -167,22 +323,9 @@ components:
           type: string
         status:
           type: string
-          enum: [running, completed, failed]
+          enum: [queued, running, completed]
 
     # --- Core domain types ---
-
-    Target:
-      type: object
-      required: [repo]
-      properties:
-        repo:
-          type: string
-          description: "owner/repo identifier (e.g. acme/billing-api)"
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-          description: "Optional key-value metadata (e.g. appName, gitopsPath)"
 
     StepDefinition:
       type: object
@@ -207,22 +350,22 @@ components:
             type: string
           description: >
             URLs of files this step will modify. May contain {appName} (the
-            target app name) and {repo} (the full owner/repo target) as
+            candidate app name) and {repo} (the full owner/repo candidate) as
             template variables substituted by the console at display time.
 
     MigrationManifest:
       type: object
-      required: [migrationId, targets, steps]
+      required: [migrationId, candidates, steps]
       properties:
         migrationId:
           type: string
         registrationId:
           type: string
-          description: ID of the registered migration (so workflow can update target run status on completion).
-        targets:
+          description: ID of the registered migration (so workflow can update candidate run status on completion).
+        candidates:
           type: array
           items:
-            $ref: "#/components/schemas/Target"
+            $ref: "#/components/schemas/Candidate"
         steps:
           type: array
           items:
@@ -230,12 +373,12 @@ components:
 
     StepCompletedEvent:
       type: object
-      required: [stepName, target, success]
+      required: [stepName, candidate, success]
       properties:
         stepName:
           type: string
-        target:
-          $ref: "#/components/schemas/Target"
+        candidate:
+          $ref: "#/components/schemas/Candidate"
         success:
           type: boolean
         metadata:
@@ -246,12 +389,12 @@ components:
 
     StepResult:
       type: object
-      required: [stepName, target, success]
+      required: [stepName, candidate, success]
       properties:
         stepName:
           type: string
-        target:
-          $ref: "#/components/schemas/Target"
+        candidate:
+          $ref: "#/components/schemas/Candidate"
         success:
           type: boolean
         metadata:
@@ -277,7 +420,7 @@ components:
 
     RegisteredMigration:
       type: object
-      required: [id, name, targets, steps, createdAt, runIds]
+      required: [id, name, candidates, steps, createdAt, runIds]
       properties:
         id:
           type: string
@@ -286,10 +429,10 @@ components:
           type: string
         description:
           type: string
-        targets:
+        candidates:
           type: array
           items:
-            $ref: "#/components/schemas/Target"
+            $ref: "#/components/schemas/Candidate"
           description: Repos, apps, services — flexible scope.
         steps:
           type: array
@@ -304,24 +447,29 @@ components:
           items:
             type: string
           description: Run IDs created from this registration.
-        targetRuns:
+        cancelledAttempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CancelledAttempt"
+          description: Audit log of cancelled runs, in chronological order.
+        candidateRuns:
           type: object
           additionalProperties:
-            $ref: "#/components/schemas/TargetRun"
-          description: Per-target run state keyed by target repo.
+            $ref: "#/components/schemas/CandidateRun"
+          description: Per-candidate run state keyed by candidate repo.
 
     RegisterMigrationRequest:
       type: object
-      required: [name, targets, steps]
+      required: [name, candidates, steps]
       properties:
         name:
           type: string
         description:
           type: string
-        targets:
+        candidates:
           type: array
           items:
-            $ref: "#/components/schemas/Target"
+            $ref: "#/components/schemas/Candidate"
         steps:
           type: array
           items:
@@ -336,14 +484,36 @@ components:
           items:
             $ref: "#/components/schemas/RegisteredMigration"
 
-    RunMigrationRequest:
+    RunInfo:
       type: object
-      required: [target]
+      required: [runId, migrationId, candidate, status]
       properties:
-        target:
-          $ref: "#/components/schemas/Target"
+        runId:
+          type: string
+        migrationId:
+          type: string
+        candidate:
+          $ref: "#/components/schemas/Candidate"
+        status:
+          type: string
+          enum: [queued, running, completed]
 
-    RunMigrationResponse:
+    QueueRunRequest:
+      type: object
+      required: [candidate]
+      properties:
+        candidate:
+          $ref: "#/components/schemas/Candidate"
+
+    QueueRunResponse:
+      type: object
+      required: [runId]
+      properties:
+        runId:
+          type: string
+          description: The run ID reserved by this queue operation.
+
+    ExecuteRunResponse:
       type: object
       required: [runId]
       properties:
@@ -353,7 +523,7 @@ components:
 
     MigrationAnnouncement:
       type: object
-      required: [id, name, targets, steps]
+      required: [id, name, candidates, steps]
       description: >
         Published by workers to the "migration-registry" Dapr topic on startup.
         Loom subscribes and upserts the registration (idempotent by id).
@@ -365,28 +535,130 @@ components:
           type: string
         description:
           type: string
-        targets:
+        candidates:
           type: array
           items:
-            $ref: "#/components/schemas/Target"
+            $ref: "#/components/schemas/Candidate"
         steps:
           type: array
           items:
             $ref: "#/components/schemas/StepDefinition"
 
+    # --- Candidate discovery ---
+
+    CandidateStatus:
+      type: string
+      enum: [not_started, queued, running, completed]
+
+    FileRef:
+      type: object
+      required: [path, url]
+      properties:
+        path:
+          type: string
+          description: File path relative to the repository root.
+        url:
+          type: string
+          description: GitHub URL to view the file (e.g. https://github.com/owner/repo/blob/main/path/to/file).
+
+    FileGroup:
+      type: object
+      required: [name, repo, files]
+      description: >
+        A set of files that will be touched by the migration, grouped by context.
+        The name is self-describing: environment names (e.g. "prod", "staging", "dev"),
+        "base" for shared GitOps resources, or "app-repo" for the application's own repository.
+      properties:
+        name:
+          type: string
+          description: >
+            Group identifier — self-describing context (e.g. "prod", "staging", "dev"
+            for overlay environments; "base" for shared GitOps resources; "app-repo"
+            for the application's own repository).
+        repo:
+          type: string
+          description: Repository these files belong to, in "owner/repo" format.
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileRef"
+          description: Files that will be modified, each with a path and a direct GitHub URL.
+
+    Candidate:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: "Logical identifier for the candidate (e.g. billing-api). Primary key within a migration."
+        kind:
+          type: string
+          description: "Type of thing being migrated (e.g. application, kafka-topic). Free-form string set by the discoverer."
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Descriptive context set by the discoverer (e.g. repoName, team, system).
+        state:
+          type: object
+          additionalProperties:
+            type: string
+          description: Observed values from discovery (e.g. currentChartVersion).
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileGroup"
+          description: >
+            Files this candidate has that will be touched by the migration,
+            grouped by environment or repository context. Populated by the discoverer.
+
+    CandidateWithStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        state:
+          type: object
+          additionalProperties:
+            type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileGroup"
+        status:
+          $ref: "#/components/schemas/CandidateStatus"
+        runId:
+          type: string
+
+    SubmitCandidatesRequest:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+
     # --- Worker contract (pub/sub message) ---
 
     DispatchStepRequest:
       type: object
-      required: [migrationId, stepName, target, callbackId, eventName]
+      required: [migrationId, stepName, candidate, callbackId, eventName]
       description: Message published to workers via Dapr pub/sub.
       properties:
         migrationId:
           type: string
         stepName:
           type: string
-        target:
-          $ref: "#/components/schemas/Target"
+        candidate:
+          $ref: "#/components/schemas/Candidate"
         config:
           type: object
           additionalProperties:
@@ -397,6 +669,78 @@ components:
         eventName:
           type: string
           description: Exact event name the workflow is waiting on.
+
+    # --- Dry run ---
+
+    FileDiff:
+      type: object
+      required: [path, repo, after]
+      properties:
+        path:
+          type: string
+          description: File path relative to the repository root.
+        repo:
+          type: string
+          description: Repository in "owner/repo" format.
+        before:
+          type: string
+          description: Original file content; empty string means the file is new.
+        after:
+          type: string
+          description: New file content after the step would apply.
+
+    StepDryRunResult:
+      type: object
+      required: [stepName, skipped]
+      properties:
+        stepName:
+          type: string
+        skipped:
+          type: boolean
+          description: >
+            True if this step was not executed (e.g. manual-review step
+            or step type not registered on this worker).
+        error:
+          type: string
+          description: Error message if the step handler failed.
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileDiff"
+          description: File diffs produced by this step; absent if skipped or errored.
+
+    DryRunResult:
+      type: object
+      required: [steps]
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDryRunResult"
+
+    DryRunCandidateRequest:
+      type: object
+      required: [candidate]
+      properties:
+        candidate:
+          $ref: "#/components/schemas/Candidate"
+
+    DryRunRequest:
+      type: object
+      required: [migrationId, candidate, steps]
+      description: >
+        Payload the server sends to a worker via Dapr service invocation
+        to execute a dry run. Contains all steps; the worker skips steps
+        that don't belong to it.
+      properties:
+        migrationId:
+          type: string
+        candidate:
+          $ref: "#/components/schemas/Candidate"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
 
     # --- API request/response wrappers ---
 

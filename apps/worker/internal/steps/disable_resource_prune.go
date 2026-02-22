@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/apps/worker/internal/yamlutil"
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -16,36 +16,27 @@ type DisableResourcePrune struct{}
 // Execute implements Handler.
 func (h *DisableResourcePrune) Execute(
 	ctx context.Context,
-	gh *github.Client,
+	gr gitrepo.Client,
 	cfg *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
-	app := appName(req.Target)
+	app := appName(req.Candidate)
 	path := fmt.Sprintf("apps/%s/base/service-monitor.yaml", app)
 
-	fc, err := gh.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
+	fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
 	if err != nil {
 		return nil, fmt.Errorf("get %s: %w", path, err)
 	}
 
-	data, err := yamlutil.Parse(fc.Content)
+	root, err := yamlutil.ParseNode(fc.Content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	// Ensure metadata.annotations exists
-	metadata, err := yamlutil.GetMap(data, "metadata")
-	if err != nil {
-		return nil, fmt.Errorf("get metadata: %w", err)
-	}
-	annotations, ok := metadata["annotations"].(map[string]interface{})
-	if !ok {
-		annotations = make(map[string]interface{})
-		metadata["annotations"] = annotations
-	}
-	annotations["argocd.argoproj.io/sync-options"] = "Prune=false"
+	annotations := yamlutil.EnsureMappingNode(root, "metadata", "annotations")
+	yamlutil.SetScalar(annotations, "argocd.argoproj.io/sync-options", "Prune=false")
 
-	out, err := yamlutil.Marshal(data)
+	out, err := yamlutil.MarshalNode(root)
 	if err != nil {
 		return nil, err
 	}

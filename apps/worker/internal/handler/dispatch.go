@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,30 +9,31 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
-	"github.com/tilsley/loom/apps/worker/internal/pending"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
+	"github.com/tilsley/loom/apps/worker/internal/platform/loom"
+	"github.com/tilsley/loom/apps/worker/internal/platform/pending"
 	"github.com/tilsley/loom/apps/worker/internal/steps"
 	"github.com/tilsley/loom/pkg/api"
 )
 
 // Dispatch handles incoming DispatchStepRequest messages from Dapr pub/sub.
 type Dispatch struct {
-	gh      *github.Client
+	gr      gitrepo.Client
 	pending *pending.Store
-	loomURL string
+	loom    *loom.Client
 	log     *slog.Logger
 	stepCfg *steps.Config
 }
 
 // NewDispatch creates a Dispatch handler.
 func NewDispatch(
-	gh *github.Client,
+	gr gitrepo.Client,
 	store *pending.Store,
-	loomURL string,
+	loomClient *loom.Client,
 	log *slog.Logger,
 	stepCfg *steps.Config,
 ) *Dispatch {
-	return &Dispatch{gh: gh, pending: store, loomURL: loomURL, log: log, stepCfg: stepCfg}
+	return &Dispatch{gr: gr, pending: store, loom: loomClient, log: log, stepCfg: stepCfg}
 }
 
 // Handle processes a CloudEvent-wrapped DispatchStepRequest.
@@ -48,7 +47,7 @@ func (d *Dispatch) Handle(c *gin.Context) {
 	}
 	req := envelope.Data
 
-	d.log.Info("received dispatch", "step", req.StepName, "target", req.Target.Repo, "callbackId", req.CallbackId)
+	d.log.Info("received dispatch", "step", req.StepName, "target", req.Candidate.Id, "callbackId", req.CallbackId)
 
 	// Notify Loom that work has started (console shows spinner).
 	d.sendProgress(c.Request.Context(), req, map[string]string{"phase": "in_progress"})
@@ -73,20 +72,26 @@ func (d *Dispatch) Handle(c *gin.Context) {
 
 	// Fallback to generic behavior if no handler matched
 	if owner == "" {
-		parts := strings.SplitN(req.Target.Repo, "/", 2)
+		repoName := req.Candidate.Id
+		if req.Candidate.Metadata != nil {
+			if rn, ok := (*req.Candidate.Metadata)["repoName"]; ok && rn != "" {
+				repoName = rn
+			}
+		}
+		parts := strings.SplitN(repoName, "/", 2)
 		if len(parts) != 2 {
-			d.log.Error("invalid target format (expected owner/repo)", "target", req.Target.Repo)
+			d.log.Error("invalid target format (expected owner/repo in repoName metadata)", "candidate", req.Candidate.Id)
 			c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 			return
 		}
 		owner, repo = parts[0], parts[1]
-		title = fmt.Sprintf("[%s] %s — %s", req.MigrationId, req.StepName, req.Target.Repo)
-		body = fmt.Sprintf("Automated migration step `%s` for repo `%s`.", req.StepName, req.Target.Repo)
+		title = fmt.Sprintf("[%s] %s — %s", req.MigrationId, req.StepName, req.Candidate.Id)
+		body = fmt.Sprintf("Automated migration step `%s` for candidate `%s`.", req.StepName, req.Candidate.Id)
 		branch = fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName)
 	}
 
 	// Create PR on GitHub
-	pr, err := d.gh.CreatePR(c.Request.Context(), owner, repo, github.CreatePRRequest{
+	pr, err := d.gr.CreatePR(c.Request.Context(), owner, repo, gitrepo.CreatePRRequest{
 		Title: title,
 		Body:  body,
 		Head:  branch,
@@ -94,12 +99,12 @@ func (d *Dispatch) Handle(c *gin.Context) {
 		Files: files,
 	})
 	if err != nil {
-		d.log.Error("failed to create PR", "error", err, "target", req.Target.Repo)
+		d.log.Error("failed to create PR", "error", err, "target", req.Candidate.Id)
 		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 		return
 	}
 
-	d.log.Info("PR created", "target", req.Target.Repo, "repo", owner+"/"+repo, "pr", pr.HTMLURL)
+	d.log.Info("PR created", "target", req.Candidate.Id, "repo", owner+"/"+repo, "pr", pr.HTMLURL)
 
 	// Store pending callback — the webhook handler will complete the step
 	// when the PR is merged.
@@ -107,7 +112,7 @@ func (d *Dispatch) Handle(c *gin.Context) {
 	d.pending.Add(key, pending.Callback{
 		CallbackID: req.CallbackId,
 		StepName:   req.StepName,
-		Target:     req.Target,
+		Candidate:  req.Candidate,
 		PRURL:      pr.HTMLURL,
 	})
 
@@ -134,8 +139,8 @@ func (d *Dispatch) routeToHandler(ctx context.Context, req api.DispatchStepReque
 	if !found {
 		return nil, false, nil
 	}
-	d.log.Info("executing step handler", "type", stepType, "target", req.Target.Repo)
-	result, err := h.Execute(ctx, d.gh, d.stepCfg, req)
+	d.log.Info("executing step handler", "type", stepType, "target", req.Candidate.Id)
+	result, err := h.Execute(ctx, d.gr, d.stepCfg, req)
 	if err != nil {
 		d.log.Error("step handler failed", "error", err, "type", stepType)
 		return nil, false, err
@@ -146,34 +151,14 @@ func (d *Dispatch) routeToHandler(ctx context.Context, req api.DispatchStepReque
 // sendProgress sends an intermediate progress update to Loom's pr-opened endpoint.
 func (d *Dispatch) sendProgress(ctx context.Context, req api.DispatchStepRequest, meta map[string]string) {
 	event := api.StepCompletedEvent{
-		StepName: req.StepName,
-		Target:   req.Target,
-		Success:  true,
-		Metadata: &meta,
+		StepName:  req.StepName,
+		Candidate: req.Candidate,
+		Success:   true,
+		Metadata:  &meta,
 	}
-
-	body, err := json.Marshal(event)
-	if err != nil {
-		d.log.Error("failed to marshal progress", "error", err)
+	if err := d.loom.SendProgress(ctx, req.CallbackId, event); err != nil {
+		d.log.Error("failed to send progress", "error", err, "phase", meta["phase"])
 		return
 	}
-
-	url := fmt.Sprintf("%s/event/%s/pr-opened", d.loomURL, req.CallbackId)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		d.log.Error("failed to create progress request", "error", err)
-		return
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		d.log.Error("failed to send progress", "error", err, "url", url)
-		return
-	}
-	defer func() { //nolint:errcheck // response body close errors are non-actionable after reading
-		_ = resp.Body.Close()
-	}()
-
-	d.log.Info("progress sent", "phase", meta["phase"], "step", req.StepName, "target", req.Target.Repo)
+	d.log.Info("progress sent", "phase", meta["phase"], "step", req.StepName, "target", req.Candidate.Id)
 }

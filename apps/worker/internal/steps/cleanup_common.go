@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/apps/worker/internal/yamlutil"
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -16,29 +16,29 @@ type CleanupCommon struct{}
 // Execute implements Handler.
 func (h *CleanupCommon) Execute(
 	ctx context.Context,
-	gh *github.Client,
+	gr gitrepo.Client,
 	cfg *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
-	app := appName(req.Target)
+	app := appName(req.Candidate)
 	path := fmt.Sprintf("apps/%s/base/application.yaml", app)
 
-	fc, err := gh.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
+	fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
 	if err != nil {
 		return nil, fmt.Errorf("get %s: %w", path, err)
 	}
 
-	data, err := yamlutil.Parse(fc.Content)
+	root, err := yamlutil.ParseNode(fc.Content)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	helm, err := yamlutil.GetMap(data, "spec", "source", "helm")
+	helm, err := yamlutil.GetMappingNode(root, "spec", "source", "helm")
 	if err == nil {
-		delete(helm, "values")
+		yamlutil.DeleteKey(helm, "values")
 	}
 
-	out, err := yamlutil.Marshal(data)
+	out, err := yamlutil.MarshalNode(root)
 	if err != nil {
 		return nil, err
 	}

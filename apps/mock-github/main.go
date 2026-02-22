@@ -9,12 +9,20 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 )
+
+// DirEntry is a file or directory returned by the GitHub contents API directory listing.
+type DirEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Type string `json:"type"` // "file" or "dir"
+}
 
 const stateMerged = "merged"
 
@@ -149,6 +157,52 @@ func (s *store) listAll() []PullRequest {
 		all = append(all, prs...)
 	}
 	return all
+}
+
+// listDir returns the immediate children of dirPath in the repo, similar to
+// GitHub's GET /repos/:owner/:repo/contents/:path when :path is a directory.
+func (s *store) listDir(owner, repo, dirPath string) []DirEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	key := owner + "/" + repo
+	files := s.files[key]
+	if files == nil {
+		return nil
+	}
+
+	// Build prefix for matching: "apps" → "apps/"
+	prefix := dirPath
+	if prefix != "" {
+		prefix += "/"
+	}
+
+	seen := map[string]bool{}
+	var entries []DirEntry
+	for filePath := range files {
+		if !strings.HasPrefix(filePath, prefix) {
+			continue
+		}
+		rest := filePath[len(prefix):]
+		idx := strings.Index(rest, "/")
+		var name, entryType string
+		if idx == -1 {
+			name, entryType = rest, "file"
+		} else {
+			name, entryType = rest[:idx], "dir"
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		entries = append(entries, DirEntry{
+			Name: name,
+			Path: dirPath + "/" + name,
+			Type: entryType,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return entries
 }
 
 func (s *store) getFile(owner, repo, path string) (string, bool) {
@@ -297,22 +351,32 @@ func registerAPIRoutes(r *gin.Engine, s *store, log *slog.Logger) {
 		c.JSON(http.StatusOK, s.list(owner, repo))
 	})
 
-	// File content endpoint (GitHub-compatible shape)
+	// File content endpoint (GitHub-compatible shape).
+	// Returns a single file object for exact path matches, or a directory listing
+	// array when the path is a directory prefix (mirrors the real GitHub API).
 	r.GET("/repos/:owner/:repo/contents/*path", func(c *gin.Context) {
 		owner := c.Param("owner")
 		repo := c.Param("repo")
 		path := strings.TrimPrefix(c.Param("path"), "/")
-		content, ok := s.getFile(owner, repo, path)
-		if !ok {
-			c.JSON(http.StatusNotFound, gin.H{
-				"message": fmt.Sprintf("path %q not found in %s/%s", path, owner, repo),
+
+		// Exact file lookup.
+		if content, ok := s.getFile(owner, repo, path); ok {
+			c.JSON(http.StatusOK, gin.H{
+				"path":     path,
+				"content":  base64.StdEncoding.EncodeToString([]byte(content)),
+				"encoding": "base64",
 			})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"path":     path,
-			"content":  base64.StdEncoding.EncodeToString([]byte(content)),
-			"encoding": "base64",
+
+		// Directory listing fallback.
+		if entries := s.listDir(owner, repo, path); len(entries) > 0 {
+			c.JSON(http.StatusOK, entries)
+			return
+		}
+
+		c.JSON(http.StatusNotFound, gin.H{
+			"message": fmt.Sprintf("path %q not found in %s/%s", path, owner, repo),
 		})
 	})
 }

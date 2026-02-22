@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/apps/worker/internal/yamlutil"
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -16,12 +16,12 @@ type GenerateAppChart struct{}
 // Execute implements Handler.
 func (h *GenerateAppChart) Execute(
 	ctx context.Context,
-	gh *github.Client,
+	gr gitrepo.Client,
 	cfg *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
-	app := appName(req.Target)
-	owner, repo := targetOwnerRepo(req.Target)
+	app := appName(req.Candidate)
+	owner, repo := candidateOwnerRepo(req.Candidate)
 
 	files := make(map[string]string)
 
@@ -47,7 +47,7 @@ serviceMonitor:
 	// Per-env values extracted from gitops overlay helm.parameters
 	for _, env := range cfg.Envs {
 		path := fmt.Sprintf("apps/%s/overlays/%s/application.yaml", app, env)
-		fc, err := gh.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
+		fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
 		if err != nil {
 			return nil, fmt.Errorf("get %s: %w", path, err)
 		}

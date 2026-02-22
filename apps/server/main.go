@@ -50,6 +50,7 @@ func main() {
 
 	bus := adapters.NewDaprBus(daprClient, "pubsub", "migration-steps")
 	store := adapters.NewDaprMigrationStore(daprClient)
+	dryRunner := adapters.NewDaprDryRunAdapter(daprClient, "migration-worker")
 
 	// --- Temporal Worker ---
 
@@ -70,7 +71,7 @@ func main() {
 
 	// --- Service + HTTP ---
 
-	svc := migrations.NewService(engine, store)
+	svc := migrations.NewService(engine, store, dryRunner)
 
 	router := gin.Default()
 	adapters.RegisterRoutes(router, svc, slog)

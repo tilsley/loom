@@ -18,6 +18,13 @@ type WorkflowEngine interface {
 	StartWorkflow(ctx context.Context, workflowName, instanceID string, input any) (string, error)
 	GetStatus(ctx context.Context, instanceID string) (*WorkflowStatus, error)
 	RaiseEvent(ctx context.Context, instanceID, eventName string, payload any) error
+	CancelWorkflow(ctx context.Context, instanceID string) error
+}
+
+// DryRunner simulates a full migration run and returns per-step file diffs.
+// Implementations call a worker via service invocation (e.g. Dapr).
+type DryRunner interface {
+	DryRun(ctx context.Context, req api.DryRunRequest) (*api.DryRunResult, error)
 }
 
 // MigrationStore persists registered migration definitions.
@@ -27,5 +34,12 @@ type MigrationStore interface {
 	List(ctx context.Context) ([]api.RegisteredMigration, error)
 	Delete(ctx context.Context, id string) error
 	AppendRunID(ctx context.Context, id string, runID string) error
-	SetTargetRun(ctx context.Context, migrationID, targetRepo string, run api.TargetRun) error
+	AppendCancelledAttempt(ctx context.Context, migrationID string, attempt api.CancelledAttempt) error
+	SetCandidateRun(ctx context.Context, migrationID, candidateID string, run api.CandidateRun) error
+	DeleteCandidateRun(ctx context.Context, migrationID, candidateID string) error
+	SaveCandidates(ctx context.Context, migrationID string, candidates []api.Candidate) error
+	GetCandidates(ctx context.Context, migrationID string) ([]api.CandidateWithStatus, error)
+	StoreRunRecord(ctx context.Context, runId string, record RunRecord) error
+	GetRunRecord(ctx context.Context, runId string) (*RunRecord, error)
+	DeleteRunRecord(ctx context.Context, runId string) error
 }

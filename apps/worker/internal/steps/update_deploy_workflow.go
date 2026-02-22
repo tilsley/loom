@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/github"
+	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/pkg/api"
 )
 
@@ -15,12 +15,12 @@ type UpdateDeployWorkflow struct{}
 // Execute implements Handler.
 func (h *UpdateDeployWorkflow) Execute(
 	_ context.Context,
-	_ *github.Client,
+	_ gitrepo.Client,
 	_ *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
-	app := appName(req.Target)
-	owner, repo := targetOwnerRepo(req.Target)
+	app := appName(req.Candidate)
+	owner, repo := candidateOwnerRepo(req.Candidate)
 
 	updatedCI := fmt.Sprintf(`name: CI
 on:

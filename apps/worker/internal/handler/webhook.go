@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tilsley/loom/apps/worker/internal/pending"
+	"github.com/tilsley/loom/apps/worker/internal/platform/loom"
+	"github.com/tilsley/loom/apps/worker/internal/platform/pending"
 	"github.com/tilsley/loom/pkg/api"
 )
 
@@ -29,13 +28,13 @@ type WebhookPayload struct {
 // Webhook handles GitHub webhook events (real or mock).
 type Webhook struct {
 	pending *pending.Store
-	loomURL string
+	loom    *loom.Client
 	log     *slog.Logger
 }
 
 // NewWebhook creates a Webhook handler.
-func NewWebhook(store *pending.Store, loomURL string, log *slog.Logger) *Webhook {
-	return &Webhook{pending: store, loomURL: loomURL, log: log}
+func NewWebhook(store *pending.Store, loomClient *loom.Client, log *slog.Logger) *Webhook {
+	return &Webhook{pending: store, loom: loomClient, log: log}
 }
 
 // Handle processes a GitHub pull_request webhook event.
@@ -60,7 +59,7 @@ func (w *Webhook) Handle(c *gin.Context) {
 		return
 	}
 
-	w.log.Info("PR merged, sending callback", "target", cb.Target.Repo, "step", cb.StepName, "pr", cb.PRURL)
+	w.log.Info("PR merged, sending callback", "target", cb.Candidate.Id, "step", cb.StepName, "pr", cb.PRURL)
 
 	meta := map[string]string{
 		"phase":     "merged",
@@ -69,38 +68,18 @@ func (w *Webhook) Handle(c *gin.Context) {
 	}
 
 	event := api.StepCompletedEvent{
-		StepName: cb.StepName,
-		Target:   cb.Target,
-		Success:  true,
-		Metadata: &meta,
+		StepName:  cb.StepName,
+		Candidate: cb.Candidate,
+		Success:   true,
+		Metadata:  &meta,
 	}
 
-	body, err := json.Marshal(event)
-	if err != nil {
-		w.log.Error("failed to marshal callback", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "marshal failed"})
-		return
-	}
-
-	url := fmt.Sprintf("%s/event/%s", w.loomURL, cb.CallbackID)
-	httpReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		w.log.Error("failed to create callback request", "error", err)
+	if err := w.loom.SendCallback(c.Request.Context(), cb.CallbackID, event); err != nil {
+		w.log.Error("failed to send callback", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "callback failed"})
 		return
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		w.log.Error("failed to send callback", "error", err, "url", url)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "callback failed"})
-		return
-	}
-	defer func() { //nolint:errcheck // response body close errors are non-actionable after reading
-		_ = resp.Body.Close()
-	}()
-
-	w.log.Info("callback sent", "url", url, "status", resp.StatusCode)
+	w.log.Info("callback sent", "step", cb.StepName, "target", cb.Candidate.Id)
 	c.JSON(http.StatusOK, gin.H{"status": "callback sent"})
 }
