@@ -125,11 +125,15 @@ export async function getRunInfo(runId: string): Promise<RunInfo | null> {
   return res.json();
 }
 
-export async function queueRun(id: string, candidate: Candidate): Promise<QueueRunResponse> {
+export async function queueRun(
+  id: string,
+  candidate: Candidate,
+  inputs?: Record<string, string>,
+): Promise<QueueRunResponse> {
   const res = await fetch(`${BASE}/migrations/${id}/queue`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ candidate }),
+    body: JSON.stringify({ candidate, ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}) }),
   });
   if (res.status === 409) throw new ConflictError(await res.text());
   if (!res.ok) throw new Error(await res.text());

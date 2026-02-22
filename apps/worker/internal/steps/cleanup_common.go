@@ -27,7 +27,7 @@ func (h *CleanupCommon) Execute(
 	prFiles := make(map[string]string)
 	if req.Candidate.Files != nil {
 		for _, group := range *req.Candidate.Files {
-			if group.Name == "app-repo" || len(group.Files) == 0 {
+			if group.Name == "app-repo" || group.Name == "base" || len(group.Files) == 0 {
 				continue
 			}
 			path := group.Files[0].Path

@@ -31,13 +31,15 @@ type Runner struct {
 // It retries the submission if the migration isn't registered yet (the pub/sub
 // announcement may still be in flight when discovery finishes).
 func (r *Runner) Run(ctx context.Context) {
+	r.Log.Info("starting discovery", "migrationID", r.MigrationID)
+
 	candidates, err := r.Discoverer.Discover(ctx)
 	if err != nil {
 		r.Log.Error("discovery failed", "migrationID", r.MigrationID, "error", err)
 		return
 	}
 
-	r.Log.Info("discovered candidates", "migrationID", r.MigrationID, "count", len(candidates))
+	r.Log.Info("discovery complete", "migrationID", r.MigrationID, "candidates", len(candidates))
 
 	body, err := json.Marshal(api.SubmitCandidatesRequest{Candidates: candidates})
 	if err != nil {

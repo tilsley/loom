@@ -322,6 +322,11 @@ components:
         status:
           type: string
           enum: [queued, running, completed]
+        inputs:
+          type: object
+          additionalProperties:
+            type: string
+          description: Operator-supplied inputs collected at queue time (e.g. repoName). Merged into candidate metadata before each step dispatch.
 
     # --- Core domain types ---
 
@@ -427,6 +432,11 @@ components:
           type: string
         description:
           type: string
+        requiredInputs:
+          type: array
+          items:
+            type: string
+          description: Input field names the operator must supply at queue time (e.g. ["repoName"]).
         candidates:
           type: array
           items:
@@ -459,6 +469,11 @@ components:
           type: string
         description:
           type: string
+        requiredInputs:
+          type: array
+          items:
+            type: string
+          description: Input field names the operator must supply at queue time (e.g. ["repoName"]).
         candidates:
           type: array
           items:
@@ -497,6 +512,11 @@ components:
       properties:
         candidate:
           $ref: "#/components/schemas/Candidate"
+        inputs:
+          type: object
+          additionalProperties:
+            type: string
+          description: Operator-supplied inputs to store against this run.
 
     QueueRunResponse:
       type: object
@@ -528,6 +548,11 @@ components:
           type: string
         description:
           type: string
+        requiredInputs:
+          type: array
+          items:
+            type: string
+          description: Input field names the operator must supply at queue time (e.g. ["repoName"]).
         candidates:
           type: array
           items:
@@ -667,7 +692,7 @@ components:
 
     FileDiff:
       type: object
-      required: [path, repo, after]
+      required: [path, repo, after, status]
       properties:
         path:
           type: string
@@ -681,6 +706,10 @@ components:
         after:
           type: string
           description: New file content after the step would apply.
+        status:
+          type: string
+          enum: [new, modified, deleted]
+          description: Whether this file is being created, modified, or deleted by this step.
 
     StepDryRunResult:
       type: object

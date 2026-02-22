@@ -23,10 +23,11 @@ import (
 	"github.com/tilsley/loom/apps/worker/internal/platform/pending"
 	"github.com/tilsley/loom/apps/worker/internal/steps"
 	"github.com/tilsley/loom/pkg/api"
+	"github.com/tilsley/loom/pkg/logging"
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := logging.New()
 
 	githubURL := envOr("GITHUB_API_URL", "http://localhost:9090")
 	loomURL := envOr("LOOM_URL", "http://localhost:8080")
@@ -34,7 +35,7 @@ func main() {
 	port := envOr("PORT", "3001")
 
 	// Parse gitops repo from env
-	gitopsRepo := envOr("GITOPS_REPO", "acme/gitops")
+	gitopsRepo := envOr("GITOPS_REPO", "tilsley/gitops")
 	gitopsParts := strings.SplitN(gitopsRepo, "/", 2)
 	gitopsOwner, gitopsRepoName := gitopsParts[0], gitopsParts[1]
 
@@ -133,6 +134,7 @@ func main() {
 		Reader:      ghAdapter,
 		GitopsOwner: gitopsOwner,
 		GitopsRepo:  gitopsRepoName,
+		Log:         log,
 	}
 	discoveryRunner := &discovery.Runner{
 		MigrationID: "app-chart-migration",
@@ -153,9 +155,8 @@ func main() {
 func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
 	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
-	// GitHub URL bases. {appName} and {repo} are template variables substituted
-	// by the console when displaying a specific target's run.
-	gitopsBase := fmt.Sprintf("https://github.com/%s/%s/blob/main", gitopsOwner, gitopsRepoName)
+	// appRepoBase is a template base URL; {appName} and {repo} are substituted
+	// by the console when displaying a specific candidate's run.
 	appRepoBase := "https://github.com/{repo}/blob/main"
 
 	// generate-app-chart creates several files in the app repo
@@ -172,11 +173,11 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 	stepDefs := make([]api.StepDefinition, 0, 2+4*len(envs)+2)
 	stepDefs = append(stepDefs,
 		api.StepDefinition{
-			Name:        "disable-resource-prune",
-			Description: strPtr("Add Prune=false sync option to non-Argo resources"),
+			Name:        "disable-base-resource-prune",
+			Description: strPtr("Add Prune=false sync option to base/common non-Argo resources"),
 			WorkerApp:   "migration-worker",
-			Config:      &map[string]string{"type": "disable-resource-prune"},
-			Files:       &[]string{gitopsBase + "/apps/{appName}/base/service-monitor.yaml"},
+			Config:      &map[string]string{"type": "disable-base-resource-prune"},
+			// Files are derived from the "base" file group discovered in the gitops repo.
 		},
 		api.StepDefinition{
 			Name:        "generate-app-chart",
@@ -189,21 +190,20 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 
 	// Per-env steps: disable-sync-prune → swap-chart → review → enable-sync-prune
 	for _, env := range envs {
-		overlayFile := gitopsBase + fmt.Sprintf("/apps/{appName}/overlays/%s/application.yaml", env)
 		stepDefs = append(stepDefs,
 			api.StepDefinition{
 				Name:        "disable-sync-prune-" + env,
 				Description: strPtr("Disable sync pruning for " + env),
 				WorkerApp:   "migration-worker",
 				Config:      &map[string]string{"type": "disable-sync-prune", "env": env},
-				Files:       &[]string{overlayFile},
+				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 			api.StepDefinition{
 				Name:        "swap-chart-" + env,
 				Description: strPtr("Swap to OCI app chart for " + env),
 				WorkerApp:   "migration-worker",
 				Config:      &map[string]string{"type": "swap-chart", "env": env},
-				Files:       &[]string{overlayFile},
+				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 			api.StepDefinition{
 				Name:        "review-swap-chart-" + env,
@@ -219,7 +219,7 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 				Description: strPtr("Re-enable sync pruning for " + env),
 				WorkerApp:   "migration-worker",
 				Config:      &map[string]string{"type": "enable-sync-prune", "env": env},
-				Files:       &[]string{overlayFile},
+				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 		)
 	}
@@ -230,7 +230,7 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 			Description: strPtr("Remove old helm values from base application"),
 			WorkerApp:   "migration-worker",
 			Config:      &map[string]string{"type": "cleanup-common"},
-			Files:       &[]string{gitopsBase + "/apps/{appName}/base/application.yaml"},
+			// Files are derived at runtime from the candidate's discovered Application paths.
 		},
 		api.StepDefinition{
 			Name:        "update-deploy-workflow",
@@ -242,11 +242,12 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 	)
 
 	return api.MigrationAnnouncement{
-		Id:          "app-chart-migration",
-		Name:        "App Chart Migration",
-		Description: &desc,
-		Candidates:  []api.Candidate{},
-		Steps:       stepDefs,
+		Id:             "app-chart-migration",
+		Name:           "App Chart Migration",
+		Description:    &desc,
+		RequiredInputs: []string{"repoName"},
+		Candidates:     []api.Candidate{},
+		Steps:          stepDefs,
 	}
 }
 

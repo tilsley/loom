@@ -3,16 +3,18 @@ module github.com/tilsley/loom
 go 1.25.7
 
 require (
+	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
 	github.com/dapr/go-sdk v1.13.0
 	github.com/gin-gonic/gin v1.11.0
+	github.com/google/go-github/v75 v75.0.0
 	github.com/google/uuid v1.6.0
 	go.temporal.io/api v1.44.1
 	go.temporal.io/sdk v1.33.0
+	golang.org/x/oauth2 v0.35.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -34,8 +36,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
-	github.com/google/go-github/v68 v68.0.0 // indirect
-	github.com/google/go-github/v75 v75.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
@@ -65,7 +65,6 @@ require (
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
-	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.27.0 // indirect

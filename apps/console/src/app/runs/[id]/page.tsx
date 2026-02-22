@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -304,6 +304,39 @@ const FILE_ICON = (
   </svg>
 );
 
+function fileStatusProps(status: "new" | "modified" | "deleted" | null): {
+  icon: React.ReactNode;
+  color: string;
+  tooltip: string;
+} {
+  switch (status) {
+    case "new":
+      return {
+        icon: <span className="font-bold leading-none">+</span>,
+        color: "text-emerald-400",
+        tooltip: "New file",
+      };
+    case "deleted":
+      return {
+        icon: <span className="font-bold leading-none">−</span>,
+        color: "text-red-400",
+        tooltip: "Deleted",
+      };
+    case "modified":
+      return {
+        icon: <span className="font-bold leading-none">~</span>,
+        color: "text-amber-400",
+        tooltip: "Modified",
+      };
+    default:
+      return {
+        icon: FILE_ICON,
+        color: "text-zinc-500",
+        tooltip: "Will be changed",
+      };
+  }
+}
+
 function QueuedRunView({
   runInfo,
   migration,
@@ -453,21 +486,35 @@ function QueuedRunView({
                     <div className="ml-7 flex flex-wrap gap-x-4 gap-y-1">
                       {files.map((url, fi) => {
                         const label = url.split("/blob/main/").pop() ?? url;
-                        return url.startsWith("http") ? (
-                          <a
+                        const match = url.match(/github\.com\/(.+?)\/blob\/main\/(.+)/);
+                        let fileStatus: "new" | "modified" | "deleted" | null = null;
+                        if (match && stepDryRun?.files) {
+                          const found = stepDryRun.files.find(
+                            (d) => d.repo === match[1] && d.path === match[2],
+                          );
+                          if (found) fileStatus = (found.status as unknown) as typeof fileStatus;
+                        }
+                        const { icon, color, tooltip } = fileStatusProps(fileStatus);
+                        return (
+                          <span
                             key={fi}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs font-mono text-indigo-400 hover:text-indigo-300 transition-colors"
+                            className={`relative group inline-flex items-center gap-1.5 text-xs font-mono ${color} ${fileStatus ? "cursor-help" : ""}`}
                           >
-                            {FILE_ICON}
-                            {label}
-                          </a>
-                        ) : (
-                          <span key={fi} className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500">
-                            {FILE_ICON}
-                            {label}
+                            {icon}
+                            <span className={fileStatus ? "group-hover:underline decoration-dotted underline-offset-2" : ""}>
+                              {label}
+                            </span>
+                            {fileStatus ? (
+                              <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                <span className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 border border-zinc-700/50 text-zinc-100 text-xs whitespace-nowrap shadow-xl">
+                                  {icon}
+                                  {tooltip}
+                                  {/* Caret */}
+                                  <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-[5px] border-transparent border-t-zinc-700/50" />
+                                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-[4px] border-transparent border-t-zinc-900" />
+                                </span>
+                              </span>
+                            ) : null}
                           </span>
                         );
                       })}
@@ -615,7 +662,6 @@ function collapseContext(lines: DiffLine[]): Array<DiffLine | { type: "ellipsis"
 }
 
 function FileDiffView({ diff }: { diff: FileDiff }) {
-  const isNew = !diff.before;
   const lines = computeDiff(diff.before ?? "", diff.after);
   const collapsed = collapseContext(lines);
 
@@ -628,8 +674,10 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
         </svg>
         <span className="text-zinc-300 flex-1 truncate">{diff.path}</span>
         <span className="text-zinc-600 shrink-0">{diff.repo}</span>
-        {isNew ? <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        {diff.status === "new" ? <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             new
+          </span> : diff.status === "deleted" ? <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+            deleted
           </span> : null}
       </div>
       {/* Diff lines */}

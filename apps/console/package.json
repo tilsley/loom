@@ -13,7 +13,9 @@
     "lint:fix": "oxlint --fix . && eslint . --fix",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "knip": "knip"
+    "knip": "knip",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
@@ -30,20 +32,25 @@
     "@eslint/js": "^10.0.1",
     "@next/eslint-plugin-next": "^16.1.6",
     "@tailwindcss/postcss": "^4.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.56.0",
     "@typescript-eslint/parser": "^8.56.0",
+    "@vitejs/plugin-react": "^5.1.4",
     "eslint": "^9.39.3",
     "eslint-plugin-oxlint": "^1.49.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-unused-imports": "^4.4.1",
+    "jsdom": "^28.1.0",
     "knip": "^5.84.1",
     "openapi-typescript": "^7.0.0",
     "oxlint": "^1.49.0",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
   }
 }

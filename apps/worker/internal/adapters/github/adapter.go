@@ -161,7 +161,7 @@ func (a *Adapter) ReadAll(ctx context.Context, owner, repo string) (map[string]s
 	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // non-actionable after reading
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET tarball returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("GET %s returned %d", tarballURL, resp.StatusCode)
 	}
 
 	return extractTarball(resp.Body)

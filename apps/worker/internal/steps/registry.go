@@ -1,7 +1,7 @@
 package steps
 
 var registry = map[string]Handler{
-	"disable-resource-prune": &DisableResourcePrune{},
+	"disable-base-resource-prune": &DisableResourcePrune{},
 	"generate-app-chart":     &GenerateAppChart{},
 	"disable-sync-prune":     &DisableSyncPrune{},
 	"swap-chart":             &SwapChart{},

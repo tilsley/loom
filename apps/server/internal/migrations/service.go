@@ -84,10 +84,10 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 	}
 
 	if existing != nil {
-		// Upsert — update definition, preserve history.
+		// Upsert — update definition, preserve history and discovered candidates.
 		existing.Name = ann.Name
 		existing.Description = ann.Description
-		existing.Candidates = ann.Candidates
+		existing.RequiredInputs = ann.RequiredInputs
 		existing.Steps = ann.Steps
 		if err := s.store.Save(ctx, *existing); err != nil {
 			return nil, fmt.Errorf("save migration: %w", err)
@@ -96,12 +96,13 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 	}
 
 	m := api.RegisteredMigration{
-		Id:          ann.Id,
-		Name:        ann.Name,
-		Description: ann.Description,
-		Candidates:  ann.Candidates,
-		Steps:       ann.Steps,
-		CreatedAt:   time.Now().UTC(),
+		Id:             ann.Id,
+		Name:           ann.Name,
+		Description:    ann.Description,
+		RequiredInputs: ann.RequiredInputs,
+		Candidates:     ann.Candidates,
+		Steps:          ann.Steps,
+		CreatedAt:      time.Now().UTC(),
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -112,12 +113,13 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 // Register persists a new migration definition and returns it with a generated ID.
 func (s *Service) Register(ctx context.Context, req api.RegisterMigrationRequest) (*api.RegisteredMigration, error) {
 	m := api.RegisteredMigration{
-		Id:          uuid.New().String(),
-		Name:        req.Name,
-		Description: req.Description,
-		Candidates:  req.Candidates,
-		Steps:       req.Steps,
-		CreatedAt:   time.Now().UTC(),
+		Id:             uuid.New().String(),
+		Name:           req.Name,
+		Description:    req.Description,
+		RequiredInputs: req.RequiredInputs,
+		Candidates:     req.Candidates,
+		Steps:          req.Steps,
+		CreatedAt:      time.Now().UTC(),
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -286,7 +288,9 @@ func (s *Service) Dequeue(ctx context.Context, runID string) error {
 }
 
 // Queue reserves a run for a single candidate without starting the workflow.
-func (s *Service) Queue(ctx context.Context, migrationID string, candidate api.Candidate) (string, error) {
+// inputs are operator-supplied values (e.g. repoName) stored on the CandidateRun
+// and merged into candidate metadata at execute time.
+func (s *Service) Queue(ctx context.Context, migrationID string, candidate api.Candidate, inputs map[string]string) (string, error) {
 	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
 		return "", fmt.Errorf("get migration %q: %w", migrationID, err)
@@ -315,7 +319,11 @@ func (s *Service) Queue(ctx context.Context, migrationID string, candidate api.C
 
 	runID := RunID(migrationID, candidate.Id)
 
-	if err := s.store.SetCandidateRun(ctx, migrationID, candidate.Id, api.CandidateRun{Status: api.CandidateRunStatusQueued}); err != nil {
+	run := api.CandidateRun{Status: api.CandidateRunStatusQueued}
+	if len(inputs) > 0 {
+		run.Inputs = &inputs
+	}
+	if err := s.store.SetCandidateRun(ctx, migrationID, candidate.Id, run); err != nil {
 		return "", fmt.Errorf("set candidate run: %w", err)
 	}
 
@@ -368,6 +376,18 @@ func (s *Service) Execute(ctx context.Context, runID string) (string, error) {
 	candidate, err := s.findCandidate(ctx, migrationID, candidateID)
 	if err != nil {
 		return "", err
+	}
+
+	// Merge any operator-supplied queue-time inputs into candidate metadata.
+	if m.CandidateRuns != nil {
+		if cr, ok := (*m.CandidateRuns)[candidateID]; ok && cr.Inputs != nil {
+			if candidate.Metadata == nil {
+				candidate.Metadata = &map[string]string{}
+			}
+			for k, v := range *cr.Inputs {
+				(*candidate.Metadata)[k] = v
+			}
+		}
 	}
 
 	regID := m.Id

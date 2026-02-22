@@ -93,11 +93,18 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 			ownerRepo := result.Owner + "/" + result.Repo
 			for path, after := range result.Files {
 				before := rec.ContentBefore(result.Owner, result.Repo, path)
+				status := "modified"
+				if before == "" {
+					status = "new"
+				} else if after == "" {
+					status = "deleted"
+				}
 				fileDiffs = append(fileDiffs, api.FileDiff{
 					Path:   path,
 					Repo:   ownerRepo,
 					Before: &before,
 					After:  after,
+					Status: status,
 				})
 				// Accumulate this step's output so subsequent steps see the
 				// updated file content rather than the original GitHub state.

@@ -193,7 +193,11 @@ func (h *Handler) QueueRun(c *gin.Context) {
 		return
 	}
 
-	runID, err := h.svc.Queue(c.Request.Context(), id, req.Candidate)
+	var inputs map[string]string
+	if req.Inputs != nil {
+		inputs = *req.Inputs
+	}
+	runID, err := h.svc.Queue(c.Request.Context(), id, req.Candidate, inputs)
 	if err != nil {
 		var alreadyRun migrations.CandidateAlreadyRunError
 		if errors.As(err, &alreadyRun) {

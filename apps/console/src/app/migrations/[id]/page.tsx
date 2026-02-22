@@ -21,6 +21,7 @@ import { useRole } from "@/contexts/role-context";
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
+import { RunInputsModal } from "@/components/run-inputs-modal";
 import { Button, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
@@ -33,6 +34,7 @@ export default function MigrationDetail() {
   const [runningCandidate, setRunningCandidate] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
+  const [inputsCandidate, setInputsCandidate] = useState<Candidate | null>(null);
 
   const fetchMigration = useCallback(async () => {
     try {
@@ -82,9 +84,21 @@ export default function MigrationDetail() {
   }, [candidates]);
 
   async function handleQueue(candidate: Candidate) {
+    // Always show the inputs modal if the migration declares required inputs,
+    // pre-filled with any values the discoverer already found. This lets the
+    // operator confirm or correct the guessed value before queuing.
+    const required = migration?.requiredInputs ?? [];
+    if (required.length > 0) {
+      setInputsCandidate(candidate);
+      return;
+    }
+    await doQueue(candidate, {});
+  }
+
+  async function doQueue(candidate: Candidate, inputs: Record<string, string>) {
     setRunningCandidate(candidate.id);
     try {
-      const { runId } = await queueRun(id, candidate);
+      const { runId } = await queueRun(id, candidate, Object.keys(inputs).length > 0 ? inputs : undefined);
       router.push(ROUTES.runDetail(runId));
     } catch (e) {
       if (e instanceof ConflictError) {
@@ -220,6 +234,21 @@ export default function MigrationDetail() {
   return (
     <div className="space-y-8 animate-fade-in-up">
       {stepsModal}
+      {inputsCandidate ? (
+        <RunInputsModal
+          candidateId={inputsCandidate.id}
+          requiredInputs={migration.requiredInputs ?? []}
+          prefilled={inputsCandidate.metadata ?? {}}
+          onConfirm={(inputs) => {
+            setInputsCandidate(null);
+            void doQueue(inputsCandidate, inputs);
+          }}
+          onCancel={() => {
+            setInputsCandidate(null);
+            setRunningCandidate(null);
+          }}
+        />
+      ) : null}
       {/* Breadcrumb */}
       <Link
         href={ROUTES.migrations}
@@ -240,21 +269,20 @@ export default function MigrationDetail() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight text-zinc-50">{migration.name}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold tracking-tight text-zinc-50">{migration.name}</h2>
+            <button
+              onClick={() => setStepsOpen(true)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2 decoration-zinc-700 hover:decoration-zinc-500 shrink-0"
+            >
+              {migration.steps.length} steps
+            </button>
+          </div>
           {Boolean(migration.description) && (
             <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
               {migration.description}
             </p>
           )}
-          <div className="flex items-center gap-3 mt-3">
-            <p className="text-xs font-mono text-zinc-600">{migration.id}</p>
-            <button
-              onClick={() => setStepsOpen(true)}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2 decoration-zinc-700 hover:decoration-zinc-500"
-            >
-              {migration.steps.length} steps
-            </button>
-          </div>
         </div>
         <div className="flex gap-2 shrink-0">
           {isAdmin ? (
@@ -290,73 +318,6 @@ export default function MigrationDetail() {
           runningCandidate={runningCandidate}
         />
       </section>
-
-      {/* Run history — collapsible */}
-      <details className="group">
-        <summary className="flex items-center gap-2 cursor-pointer list-none">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-            className="text-zinc-600 group-open:rotate-90 transition-transform"
-          >
-            <path
-              d="M5 3l4 4-4 4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
-            Run History
-          </h3>
-          <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
-            {Object.keys(migration.candidateRuns ?? {}).length}
-          </span>
-        </summary>
-        {!migration.candidateRuns || Object.keys(migration.candidateRuns).length === 0 ? (
-          <p className="text-sm text-zinc-600 mt-3 italic">
-            No runs yet. Click &quot;Run&quot; to start one.
-          </p>
-        ) : (
-          <div className="mt-3 space-y-1.5">
-            {Object.entries(migration.candidateRuns).map(([candidateId]) => {
-              const runId = `${migration.id}__${candidateId}`;
-              return (
-                <Link
-                  key={runId}
-                  href={ROUTES.runDetail(runId)}
-                  className="group/run flex items-center justify-between bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700 rounded-lg px-3 py-2.5 transition-all"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-1.5 h-1.5 rounded-full bg-zinc-600 group-hover/run:bg-teal-400 transition-colors" />
-                    <span className="text-sm font-mono text-zinc-300 truncate">{candidateId}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 14 14"
-                      fill="none"
-                      className="text-zinc-700 group-hover/run:text-zinc-400 transition-colors"
-                    >
-                      <path
-                        d="M5 3l4 4-4 4"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </details>
     </div>
   );
 }

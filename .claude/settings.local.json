@@ -42,7 +42,9 @@
       "Bash(git stash:*)",
       "Bash(npm test:*)",
       "Bash(find:*)",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(head:*)",
+      "Bash(curl:*)"
     ]
   }
 }

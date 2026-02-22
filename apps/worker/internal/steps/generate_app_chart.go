@@ -3,6 +3,7 @@ package steps
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
 	"github.com/tilsley/loom/apps/worker/internal/yamlutil"
@@ -48,7 +49,7 @@ serviceMonitor:
 	// Each env FileGroup (e.g. "dev", "staging", "prod") holds the real file path.
 	if req.Candidate.Files != nil {
 		for _, group := range *req.Candidate.Files {
-			if group.Name == "app-repo" || len(group.Files) == 0 {
+			if group.Name == "app-repo" || group.Name == "base" || len(group.Files) == 0 {
 				continue
 			}
 			envPath := group.Files[0].Path
@@ -100,7 +101,8 @@ jobs:
 }
 
 // extractEnvValues parses an Argo Application YAML and converts helm.parameters
-// into a flat values YAML file.
+// into a nested values YAML file. Dotted parameter names (e.g. "image.tag") are
+// expanded into nested maps so the output is valid Helm values syntax.
 func extractEnvValues(content string) (string, error) {
 	data, err := yamlutil.Parse(content)
 	if err != nil {
@@ -126,9 +128,24 @@ func extractEnvValues(content string) (string, error) {
 		name, _ := param["name"].(string)   //nolint:errcheck // zero value is correct for absent/non-string keys
 		value, _ := param["value"].(string) //nolint:errcheck // zero value is correct for absent/non-string keys
 		if name != "" {
-			values[name] = value
+			setNestedValue(values, strings.Split(name, "."), value)
 		}
 	}
 
 	return yamlutil.Marshal(values)
+}
+
+// setNestedValue sets value at a dotted-path within a nested map[string]interface{}.
+// e.g. setNestedValue(m, ["image","tag"], "latest") produces m["image"]["tag"] = "latest".
+func setNestedValue(m map[string]interface{}, keys []string, value interface{}) {
+	if len(keys) == 1 {
+		m[keys[0]] = value
+		return
+	}
+	if _, ok := m[keys[0]]; !ok {
+		m[keys[0]] = make(map[string]interface{})
+	}
+	if sub, ok := m[keys[0]].(map[string]interface{}); ok {
+		setNestedValue(sub, keys[1:], value)
+	}
 }
