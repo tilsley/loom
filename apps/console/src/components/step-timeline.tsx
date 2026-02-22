@@ -20,29 +20,14 @@ function getPhase(r: StepResult): Phase {
   return "completed";
 }
 
-function resolveFileUrls(urls: string[], candidate: Candidate, org: string): string[] {
-  const appName = candidate.id;
-  const repoName = candidate.metadata?.repoName ?? candidate.id;
-  return urls.map((u) =>
-    u
-      .replace(/\{appName\}/g, appName)
-      .replace(/\{org\}/g, org)
-      .replace(/\{repo\}/g, repoName),
-  );
-}
-
 export function StepTimeline({
   results,
   stepDescriptions,
-  stepFiles,
   onComplete,
-  org = "",
 }: {
   results: StepResult[];
   stepDescriptions?: Map<string, string>;
-  stepFiles?: Map<string, string[]>;
   onComplete?: (stepName: string, candidate: Candidate, success: boolean) => void;
-  org?: string;
 }) {
   // Hooks must be declared before any early return
   const lastActiveIndex = results.reduce((acc, r, idx) => {
@@ -94,9 +79,6 @@ export function StepTimeline({
       {results.map((r, i) => {
         const phase = getPhase(r);
         const description = stepDescriptions?.get(r.stepName);
-        const files = stepFiles?.get(r.stepName)
-          ? resolveFileUrls(stepFiles?.get(r.stepName) ?? [], r.candidate, org)
-          : [];
         const isLast = i === results.length - 1;
         const isActive = phase === "open" || phase === "in_progress" || phase === "awaiting_review";
 
@@ -166,29 +148,6 @@ export function StepTimeline({
                   <PhaseLabel phase={phase} />
                 </div>
               </div>
-
-              {/* File links — full width below header row */}
-              {files.length > 0 && (
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                  {files.map((url) => {
-                    const label = url.split("/blob/main/").pop() ?? url;
-                    return (
-                      <a
-                        key={url}
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-mono text-zinc-600 hover:text-teal-400 transition-colors"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 opacity-50">
-                          <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z" />
-                        </svg>
-                        {label}
-                      </a>
-                    );
-                  })}
-                </div>
-              )}
 
               {/* Open PR: manual merge action for local dev / no-webhook environments */}
               {phase === "open" && onComplete ? (

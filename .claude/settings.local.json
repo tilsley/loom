@@ -49,7 +49,9 @@
       "Bash(git show:*)",
       "Bash(git:*)",
       "Bash(go fmt:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(echo === $v ===:*)",
+      "Bash(wc:*)"
     ]
   }
 }

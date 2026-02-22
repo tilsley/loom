@@ -65,9 +65,9 @@ export default function PreviewPage() {
         }
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load"));
-  }, [id, candidateId]);
+  }, [id, candidateId, searchParams]);
 
-  const requiredInputs = migration?.requiredInputs ?? [];
+  const requiredInputs = useMemo(() => migration?.requiredInputs ?? [], [migration]);
   const allInputsFilled = requiredInputs.every((k) => inputs[k]?.trim());
 
   // Build the candidate with inputs merged into metadata (for dry-run and execute)

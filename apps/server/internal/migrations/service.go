@@ -360,6 +360,7 @@ func (s *Service) Execute(ctx context.Context, migrationID string, candidate api
 
 	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
+		span.RecordError(err)
 		return "", fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
@@ -400,10 +401,12 @@ func (s *Service) Execute(ctx context.Context, migrationID string, candidate api
 	}
 
 	if _, err := s.engine.StartWorkflow(ctx, "MigrationOrchestrator", runID, manifest); err != nil {
+		span.RecordError(err)
 		return "", fmt.Errorf("start workflow: %w", err)
 	}
 
 	if err := s.store.SetCandidateRun(ctx, migrationID, candidate.Id, api.CandidateRun{Status: api.CandidateRunStatusRunning}); err != nil {
+		span.RecordError(err)
 		return "", fmt.Errorf("set candidate run: %w", err)
 	}
 

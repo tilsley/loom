@@ -302,14 +302,6 @@ components:
           additionalProperties:
             type: string
           description: Arbitrary key-value config forwarded to the worker.
-        files:
-          type: array
-          items:
-            type: string
-          description: >
-            URLs of files this step will modify. May contain {appName} (the
-            candidate app name) and {repo} (the full owner/repo candidate) as
-            template variables substituted by the console at display time.
 
     MigrationManifest:
       type: object
@@ -650,7 +642,7 @@ components:
           description: File path relative to the repository root.
         repo:
           type: string
-          description: Repository in "owner/repo" format.
+          description: Repository name (without org prefix, e.g. "billing-api").
         before:
           type: string
           description: Original file content; empty string means the file is new.

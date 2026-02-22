@@ -226,14 +226,6 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 		}
 
 		appRepo := instance
-		appRepoBase := fmt.Sprintf("https://github.com/%s/%s/blob/main", d.GitopsOwner, instance)
-		fileGroups = append(fileGroups, api.FileGroup{
-			Name: "app-repo",
-			Repo: appRepo,
-			Files: []api.FileRef{
-				{Path: ".github/workflows/ci.yaml", Url: appRepoBase + "/.github/workflows/ci.yaml"},
-			},
-		})
 
 		first := entries[0].app
 		kind := "application"

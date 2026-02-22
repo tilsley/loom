@@ -155,21 +155,6 @@ func main() {
 func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
 	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
-	// appRepoBase is a template base URL; {appName}, {org}, and {repo} are substituted
-	// by the console when displaying a specific candidate's run.
-	appRepoBase := "https://github.com/{org}/{repo}/blob/main"
-
-	// generate-app-chart creates several files in the app repo
-	generateFiles := make([]string, 0, 3+len(envs))
-	generateFiles = append(generateFiles,
-		appRepoBase+"/charts/{appName}/Chart.yaml",
-		appRepoBase+"/charts/{appName}/values.yaml",
-		appRepoBase+"/.github/workflows/publish-chart.yaml",
-	)
-	for _, env := range envs {
-		generateFiles = append(generateFiles, appRepoBase+fmt.Sprintf("/charts/{appName}/values-%s.yaml", env))
-	}
-
 	stepDefs := make([]api.StepDefinition, 0, 2+4*len(envs)+2)
 	stepDefs = append(stepDefs,
 		api.StepDefinition{
@@ -177,14 +162,12 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 			Description: strPtr("Add Prune=false sync option to base/common non-Argo resources"),
 			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "disable-base-resource-prune"},
-			// Files are derived from the "base" file group discovered in the gitops repo.
 		},
 		api.StepDefinition{
 			Name:        "generate-app-chart",
 			Description: strPtr("Generate app-specific Helm chart with per-env values"),
 			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "generate-app-chart"},
-			Files:       &generateFiles,
 		},
 	)
 
@@ -196,14 +179,12 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 				Description: strPtr("Disable sync pruning for " + env),
 				WorkerApp:   "app-chart-migrator",
 				Config:      &map[string]string{"type": "disable-sync-prune", "env": env},
-				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 			api.StepDefinition{
 				Name:        "swap-chart-" + env,
 				Description: strPtr("Swap to OCI app chart for " + env),
 				WorkerApp:   "app-chart-migrator",
 				Config:      &map[string]string{"type": "swap-chart", "env": env},
-				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 			api.StepDefinition{
 				Name:        "review-swap-chart-" + env,
@@ -219,7 +200,6 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 				Description: strPtr("Re-enable sync pruning for " + env),
 				WorkerApp:   "app-chart-migrator",
 				Config:      &map[string]string{"type": "enable-sync-prune", "env": env},
-				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 		)
 	}
@@ -230,14 +210,12 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 			Description: strPtr("Remove old helm values from base application"),
 			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "cleanup-common"},
-			// Files are derived at runtime from the candidate's discovered Application paths.
 		},
 		api.StepDefinition{
 			Name:        "update-deploy-workflow",
 			Description: strPtr("Update CI workflow for app chart deployment"),
 			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "update-deploy-workflow"},
-			Files:       &[]string{appRepoBase + "/.github/workflows/ci.yaml"},
 		},
 	)
 

@@ -77,12 +77,6 @@ export default function RunDetail() {
     );
   }, [migration]);
 
-  // Map stepName → file URL list from the registered migration
-  const stepFiles = useMemo(() => {
-    if (!migration) return new Map<string, string[]>();
-    return new Map(migration.steps.filter((s) => s.files?.length).map((s) => [s.name, s.files ?? []]));
-  }, [migration]);
-
   // Unique candidates involved in this run
   const candidates = useMemo(() => {
     if (!status?.result?.results.length) return [];
@@ -232,8 +226,6 @@ export default function RunDetail() {
                 <StepTimeline
                   results={status.result?.results ?? []}
                   stepDescriptions={stepDescriptions}
-                  stepFiles={stepFiles}
-                  org={migration?.org ?? ""}
                   onComplete={(stepName, candidate, success) => {
                     void (async () => {
                       await completeStep(id, stepName, candidate, success);
