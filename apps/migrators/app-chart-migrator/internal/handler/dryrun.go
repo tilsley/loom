@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tilsley/loom/apps/worker/internal/dryrun"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/dryrun"
 	"github.com/tilsley/loom/pkg/api"
 )
 

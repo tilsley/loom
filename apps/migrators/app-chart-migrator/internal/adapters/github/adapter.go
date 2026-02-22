@@ -14,7 +14,7 @@ import (
 
 	gogithub "github.com/google/go-github/v75/github"
 
-	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
 )
 
 // Adapter wraps a go-github client and implements gitrepo.Client and

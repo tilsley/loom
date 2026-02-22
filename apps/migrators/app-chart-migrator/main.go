@@ -14,14 +14,14 @@ import (
 	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
 
-	githubadapter "github.com/tilsley/loom/apps/worker/internal/adapters/github"
-	"github.com/tilsley/loom/apps/worker/internal/discovery"
-	"github.com/tilsley/loom/apps/worker/internal/dryrun"
-	"github.com/tilsley/loom/apps/worker/internal/handler"
-	platformgithub "github.com/tilsley/loom/apps/worker/internal/platform/github"
-	"github.com/tilsley/loom/apps/worker/internal/platform/loom"
-	"github.com/tilsley/loom/apps/worker/internal/platform/pending"
-	"github.com/tilsley/loom/apps/worker/internal/steps"
+	githubadapter "github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/adapters/github"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/discovery"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/dryrun"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/handler"
+	platformgithub "github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/platform/github"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/platform/loom"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/platform/pending"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/steps"
 	"github.com/tilsley/loom/pkg/api"
 	"github.com/tilsley/loom/pkg/logging"
 )
@@ -175,14 +175,14 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 		api.StepDefinition{
 			Name:        "disable-base-resource-prune",
 			Description: strPtr("Add Prune=false sync option to base/common non-Argo resources"),
-			WorkerApp:   "migration-worker",
+			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "disable-base-resource-prune"},
 			// Files are derived from the "base" file group discovered in the gitops repo.
 		},
 		api.StepDefinition{
 			Name:        "generate-app-chart",
 			Description: strPtr("Generate app-specific Helm chart with per-env values"),
-			WorkerApp:   "migration-worker",
+			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "generate-app-chart"},
 			Files:       &generateFiles,
 		},
@@ -194,14 +194,14 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 			api.StepDefinition{
 				Name:        "disable-sync-prune-" + env,
 				Description: strPtr("Disable sync pruning for " + env),
-				WorkerApp:   "migration-worker",
+				WorkerApp:   "app-chart-migrator",
 				Config:      &map[string]string{"type": "disable-sync-prune", "env": env},
 				// Files are derived at runtime from the candidate's discovered Application path.
 			},
 			api.StepDefinition{
 				Name:        "swap-chart-" + env,
 				Description: strPtr("Swap to OCI app chart for " + env),
-				WorkerApp:   "migration-worker",
+				WorkerApp:   "app-chart-migrator",
 				Config:      &map[string]string{"type": "swap-chart", "env": env},
 				// Files are derived at runtime from the candidate's discovered Application path.
 			},
@@ -217,7 +217,7 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 			api.StepDefinition{
 				Name:        "enable-sync-prune-" + env,
 				Description: strPtr("Re-enable sync pruning for " + env),
-				WorkerApp:   "migration-worker",
+				WorkerApp:   "app-chart-migrator",
 				Config:      &map[string]string{"type": "enable-sync-prune", "env": env},
 				// Files are derived at runtime from the candidate's discovered Application path.
 			},
@@ -228,14 +228,14 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 		api.StepDefinition{
 			Name:        "cleanup-common",
 			Description: strPtr("Remove old helm values from base application"),
-			WorkerApp:   "migration-worker",
+			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "cleanup-common"},
 			// Files are derived at runtime from the candidate's discovered Application paths.
 		},
 		api.StepDefinition{
 			Name:        "update-deploy-workflow",
 			Description: strPtr("Update CI workflow for app chart deployment"),
-			WorkerApp:   "migration-worker",
+			WorkerApp:   "app-chart-migrator",
 			Config:      &map[string]string{"type": "update-deploy-workflow"},
 			Files:       &[]string{appRepoBase + "/.github/workflows/ci.yaml"},
 		},

@@ -3,8 +3,8 @@ package dryrun
 import (
 	"context"
 
-	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
-	"github.com/tilsley/loom/apps/worker/internal/steps"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/steps"
 	"github.com/tilsley/loom/pkg/api"
 )
 

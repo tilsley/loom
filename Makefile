@@ -1,4 +1,4 @@
-.PHONY: dev setup build run demo temporal mock-github worker reset test vet tidy generate generate-go generate-ts \
+.PHONY: dev setup build run demo temporal mock-github migrator reset test vet tidy generate generate-go generate-ts \
         lint lint-go lint-fix \
         console-install console-dev console-build \
         console-lint console-lint-fix console-typecheck console-format console-format-check
@@ -74,8 +74,8 @@ temporal:
 mock-github:
 	go run ./apps/mock-github
 
-worker:
-	cd apps/worker && dapr run --app-id migration-worker --app-port 3001 --dapr-http-port 3501 --resources-path ./dapr/components -- go run .
+migrator:
+	cd apps/migrators/app-chart-migrator && dapr run --app-id app-chart-migrator --app-port 3001 --dapr-http-port 3501 --resources-path ./dapr/components -- go run .
 
 reset:
 	@echo "Flushing Redis (state store + pub/sub)..."

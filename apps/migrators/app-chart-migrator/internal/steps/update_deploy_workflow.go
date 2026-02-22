@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
 	"github.com/tilsley/loom/pkg/api"
 )
 

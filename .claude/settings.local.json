@@ -44,7 +44,12 @@
       "Bash(find:*)",
       "Bash(go get:*)",
       "Bash(head:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(go-deadcode:*)",
+      "Bash(git show:*)",
+      "Bash(git:*)",
+      "Bash(go fmt:*)",
+      "Bash(ls:*)"
     ]
   }
 }

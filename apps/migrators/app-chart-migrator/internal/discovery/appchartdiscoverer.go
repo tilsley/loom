@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
 	"github.com/tilsley/loom/pkg/api"
 )
 
@@ -125,8 +125,8 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 	// Build per-instance metadata needed for the second pass.
 	// prefix: "src/<team>/<system>" derived from each Application file path.
 	type instanceMeta struct {
-		prefix  string
-		envs    map[string]struct{} // parts[3] values that had Application CRDs
+		prefix   string
+		envs     map[string]struct{} // parts[3] values that had Application CRDs
 		appPaths map[string]struct{} // paths already captured as Application CRDs
 	}
 	meta := make(map[string]*instanceMeta)

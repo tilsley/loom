@@ -25,7 +25,7 @@ cleanup() {
   printf "\n${C_BOLD}Shutting down…${C_RESET}\n"
   # Ask dapr to stop its sidecars cleanly before we kill the process pipes.
   dapr stop --app-id loom            2>/dev/null || true
-  dapr stop --app-id migration-worker 2>/dev/null || true
+  dapr stop --app-id app-chart-migrator 2>/dev/null || true
   # Closing the prefix pipes sends SIGPIPE to the app processes behind them.
   for pid in "${PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
@@ -46,7 +46,7 @@ make generate-ts --no-print-directory
 printf "\n${C_BOLD}Loom dev${C_RESET}\n"
 printf "  ${C_TEMPORAL}temporal${C_RESET}  → http://localhost:8088\n"
 printf "  ${C_SERVER}server${C_RESET}    → http://localhost:8080\n"
-printf "  ${C_WORKER}worker${C_RESET}    → dapr app-id: migration-worker\n"
+printf "  ${C_WORKER}migrator${C_RESET}  → dapr app-id: migration-worker\n"
 printf "  ${C_MOCKGH}mock-gh${C_RESET}   → http://localhost:8081\n"
 printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n\n"
 
@@ -66,14 +66,14 @@ sleep 1
   | prefix "server" "$C_SERVER" &
 PIDS+=($!)
 
-# 3. Worker
-(cd apps/worker && dapr run \
-  --app-id migration-worker \
+# 3. App chart migrator
+(cd apps/migrators/app-chart-migrator && dapr run \
+  --app-id app-chart-migrator \
   --app-port 3001 \
   --dapr-http-port 3501 \
   --resources-path ./dapr/components \
   -- go run .) 2>&1 \
-  | prefix "worker" "$C_WORKER" &
+  | prefix "migrator" "$C_WORKER" &
 PIDS+=($!)
 
 # 4. Mock GitHub

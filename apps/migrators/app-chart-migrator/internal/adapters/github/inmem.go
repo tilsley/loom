@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
 )
 
 // InMem is an in-memory gitrepo.Client for unit tests.

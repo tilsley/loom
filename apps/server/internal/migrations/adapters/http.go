@@ -31,22 +31,20 @@ func RegisterRoutes(r *gin.Engine, svc *migrations.Service, log *slog.Logger) {
 	r.GET("/dapr/subscribe", h.DaprSubscribe)
 	r.POST("/registry/announce", h.Announce)
 
-	// Registered migrations CRUD + queue/execute
+	// Registered migrations CRUD + execute
 	r.POST("/migrations", h.Register)
 	r.GET("/migrations", h.List)
 	r.GET("/migrations/:id", h.GetMigration)
 	r.DELETE("/migrations/:id", h.DeleteMigration)
-	r.POST("/migrations/:id/queue", h.QueueRun)
+	r.POST("/migrations/:id/execute", h.ExecuteRun)
 	r.POST("/migrations/:id/candidates", h.SubmitCandidates)
 	r.GET("/migrations/:id/candidates", h.GetCandidates)
 
 	// Dry run
 	r.POST("/migrations/:id/dry-run", h.DryRun)
 
-	// Run info + queue lifecycle
+	// Run info + lifecycle
 	r.GET("/runs/:runId", h.GetRunInfo)
-	r.DELETE("/runs/:runId/dequeue", h.DequeueRun)
-	r.POST("/runs/:runId/execute", h.ExecuteRun)
 	r.POST("/runs/:runId/cancel", h.CancelRun)
 }
 
@@ -183,36 +181,7 @@ func (h *Handler) DeleteMigration(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// QueueRun handles POST /migrations/:id/queue — queues a run for a single target without starting a workflow.
-func (h *Handler) QueueRun(c *gin.Context) {
-	id := c.Param("id")
-
-	var req api.QueueRunRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	var inputs map[string]string
-	if req.Inputs != nil {
-		inputs = *req.Inputs
-	}
-	runID, err := h.svc.Queue(c.Request.Context(), id, req.Candidate, inputs)
-	if err != nil {
-		var alreadyRun migrations.CandidateAlreadyRunError
-		if errors.As(err, &alreadyRun) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		h.log.Error("failed to queue run", "id", id, "target", req.Candidate.Id, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusAccepted, api.QueueRunResponse{RunId: runID})
-}
-
-// GetRunInfo handles GET /runs/:runId — returns run metadata including queued runs with no workflow.
+// GetRunInfo handles GET /runs/:runId — returns run metadata.
 func (h *Handler) GetRunInfo(c *gin.Context) {
 	runID := c.Param("runId")
 
@@ -230,49 +199,38 @@ func (h *Handler) GetRunInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, info)
 }
 
-// DequeueRun handles DELETE /runs/:runId/dequeue — removes a run from the queue.
-func (h *Handler) DequeueRun(c *gin.Context) {
-	runID := c.Param("runId")
+// ExecuteRun handles POST /migrations/:id/execute — atomically creates and starts the workflow for a candidate.
+func (h *Handler) ExecuteRun(c *gin.Context) {
+	id := c.Param("id")
 
-	if err := h.svc.Dequeue(c.Request.Context(), runID); err != nil {
-		var alreadyRun migrations.CandidateAlreadyRunError
-		if errors.As(err, &alreadyRun) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		if err.Error() == "run \""+runID+"\" not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		h.log.Error("failed to dequeue run", "runId", runID, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	var req api.ExecuteRunRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.Status(http.StatusNoContent)
-}
+	var inputs map[string]string
+	if req.Inputs != nil {
+		inputs = *req.Inputs
+	}
 
-// ExecuteRun handles POST /runs/:runId/execute — starts the Temporal workflow for a queued run.
-func (h *Handler) ExecuteRun(c *gin.Context) {
-	runID := c.Param("runId")
-
-	id, err := h.svc.Execute(c.Request.Context(), runID)
+	runID, err := h.svc.Execute(c.Request.Context(), id, req.Candidate, inputs)
 	if err != nil {
 		var alreadyRun migrations.CandidateAlreadyRunError
 		if errors.As(err, &alreadyRun) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "run \""+runID+"\" not found" {
+		if err.Error() == "migration \""+id+"\" not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		h.log.Error("failed to execute run", "runId", runID, "error", err)
+		h.log.Error("failed to execute run", "id", id, "candidate", req.Candidate.Id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusAccepted, api.ExecuteRunResponse{RunId: id})
+	c.JSON(http.StatusAccepted, api.ExecuteRunResponse{RunId: runID})
 }
 
 // CancelRun handles POST /runs/:runId/cancel — cancels a running workflow, records the attempt,

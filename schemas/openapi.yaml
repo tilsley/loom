@@ -167,10 +167,10 @@ paths:
                 items:
                   $ref: "#/components/schemas/CandidateWithStatus"
 
-  /migrations/{id}/queue:
+  /migrations/{id}/execute:
     post:
-      summary: Queue a run for a single candidate (no workflow started yet)
-      operationId: queueRun
+      summary: Create a run and start the workflow atomically for a single candidate
+      operationId: executeRun
       parameters:
         - name: id
           in: path
@@ -182,22 +182,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/QueueRunRequest"
+              $ref: "#/components/schemas/ExecuteRunRequest"
       responses:
         "202":
-          description: Run queued
+          description: Run started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/QueueRunResponse"
+                $ref: "#/components/schemas/ExecuteRunResponse"
         "404":
           description: Migration not found
         "409":
-          description: Candidate already queued, running, or completed
+          description: Candidate already running or completed
 
   /runs/{runId}:
     get:
-      summary: Get info about a run (including queued runs with no workflow yet)
+      summary: Get info about a run
       operationId: getRunInfo
       parameters:
         - name: runId
@@ -214,24 +214,6 @@ paths:
                 $ref: "#/components/schemas/RunInfo"
         "404":
           description: Run not found
-
-  /runs/{runId}/dequeue:
-    delete:
-      summary: Remove a queued run, returning the candidate to not_started
-      operationId: dequeueRun
-      parameters:
-        - name: runId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Run removed from queue
-        "404":
-          description: Run not found
-        "409":
-          description: Run is not in queued state
 
   /migrations/{id}/dry-run:
     post:
@@ -277,28 +259,6 @@ paths:
         "409":
           description: Run is not in running state
 
-  /runs/{runId}/execute:
-    post:
-      summary: Start the Temporal workflow for a queued run
-      operationId: executeRun
-      parameters:
-        - name: runId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "202":
-          description: Run started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ExecuteRunResponse"
-        "404":
-          description: Run not found
-        "409":
-          description: Run is not in queued state
-
 components:
   schemas:
     # --- Candidate run tracking ---
@@ -321,12 +281,7 @@ components:
       properties:
         status:
           type: string
-          enum: [queued, running, completed]
-        inputs:
-          type: object
-          additionalProperties:
-            type: string
-          description: Operator-supplied inputs collected at queue time (e.g. repoName). Merged into candidate metadata before each step dispatch.
+          enum: [running, completed]
 
     # --- Core domain types ---
 
@@ -436,7 +391,7 @@ components:
           type: array
           items:
             type: string
-          description: Input field names the operator must supply at queue time (e.g. ["repoName"]).
+          description: Input field names the operator must supply at preview/execute time (e.g. ["repoName"]).
         candidates:
           type: array
           items:
@@ -473,7 +428,7 @@ components:
           type: array
           items:
             type: string
-          description: Input field names the operator must supply at queue time (e.g. ["repoName"]).
+          description: Input field names the operator must supply at preview/execute time (e.g. ["repoName"]).
         candidates:
           type: array
           items:
@@ -504,9 +459,9 @@ components:
           $ref: "#/components/schemas/Candidate"
         status:
           type: string
-          enum: [queued, running, completed]
+          enum: [running, completed]
 
-    QueueRunRequest:
+    ExecuteRunRequest:
       type: object
       required: [candidate]
       properties:
@@ -516,15 +471,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Operator-supplied inputs to store against this run.
-
-    QueueRunResponse:
-      type: object
-      required: [runId]
-      properties:
-        runId:
-          type: string
-          description: The run ID reserved by this queue operation.
+          description: Operator-supplied inputs collected at preview time. Merged into candidate metadata before starting the workflow.
 
     ExecuteRunResponse:
       type: object
@@ -552,7 +499,7 @@ components:
           type: array
           items:
             type: string
-          description: Input field names the operator must supply at queue time (e.g. ["repoName"]).
+          description: Input field names the operator must supply at preview/execute time (e.g. ["repoName"]).
         candidates:
           type: array
           items:
@@ -566,7 +513,7 @@ components:
 
     CandidateStatus:
       type: string
-      enum: [not_started, queued, running, completed]
+      enum: [not_started, running, completed]
 
     FileRef:
       type: object

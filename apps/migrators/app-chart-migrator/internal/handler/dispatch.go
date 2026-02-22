@@ -9,10 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tilsley/loom/apps/worker/internal/gitrepo"
-	"github.com/tilsley/loom/apps/worker/internal/platform/loom"
-	"github.com/tilsley/loom/apps/worker/internal/platform/pending"
-	"github.com/tilsley/loom/apps/worker/internal/steps"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/platform/loom"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/platform/pending"
+	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/steps"
 	"github.com/tilsley/loom/pkg/api"
 )
 
