@@ -17,7 +17,7 @@ import {
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { Button, Skeleton } from "@/components/ui";
+import { Button, Input, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +27,8 @@ export default function MigrationDetail() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
+  const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
+  const [previewInputs, setPreviewInputs] = useState<Record<string, string>>({});
 
   const fetchMigration = useCallback(async () => {
     try {
@@ -76,7 +78,17 @@ export default function MigrationDetail() {
   }, [candidates]);
 
   function handlePreview(candidate: Candidate) {
-    router.push(ROUTES.preview(id, candidate.id));
+    const required = migration?.requiredInputs ?? [];
+    if (required.length > 0) {
+      const prefilled: Record<string, string> = {};
+      for (const key of required) {
+        prefilled[key] = candidate.metadata?.[key] ?? "";
+      }
+      setPreviewInputs(prefilled);
+      setPreviewCandidate(candidate);
+    } else {
+      router.push(ROUTES.preview(id, candidate.id));
+    }
   }
 
   async function handleDelete() {
@@ -91,6 +103,82 @@ export default function MigrationDetail() {
       setDeleting(false);
     }
   }
+
+  const requiredInputs = migration?.requiredInputs ?? [];
+  const previewModal = previewCandidate && migration
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
+          onClick={() => setPreviewCandidate(null)}
+        >
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="relative w-full max-w-md bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-zinc-100">Preview inputs</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5 font-mono">{previewCandidate.id}</p>
+                </div>
+                <button
+                  onClick={() => setPreviewCandidate(null)}
+                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="px-5 py-4 space-y-4">
+                {requiredInputs.map((key) => (
+                  <div key={key}>
+                    <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
+                      {key}
+                    </label>
+                    <Input
+                      type="text"
+                      value={previewInputs[key] ?? ""}
+                      onChange={(e) => setPreviewInputs((v) => ({ ...v, [key]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && requiredInputs.every((k) => previewInputs[k]?.trim())) {
+                          const params = new URLSearchParams(previewInputs);
+                          router.push(ROUTES.preview(id, previewCandidate.id) + "?" + params.toString());
+                          setPreviewCandidate(null);
+                        }
+                      }}
+                      placeholder={key}
+                      className="font-mono"
+                      autoFocus={requiredInputs[0] === key}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-zinc-800">
+                <button
+                  onClick={() => setPreviewCandidate(null)}
+                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams(previewInputs);
+                    router.push(ROUTES.preview(id, previewCandidate.id) + "?" + params.toString());
+                    setPreviewCandidate(null);
+                  }}
+                  disabled={requiredInputs.some((k) => !previewInputs[k]?.trim())}
+                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
 
   const stepsModal = stepsOpen && migration
     ? createPortal(
@@ -188,6 +276,7 @@ export default function MigrationDetail() {
 
   return (
     <div className="space-y-8 animate-fade-in-up">
+      {previewModal}
       {stepsModal}
       {/* Breadcrumb */}
       <Link

@@ -2,7 +2,6 @@ package steps
 
 import (
 	"context"
-	"strings"
 
 	"github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/gitrepo"
 	"github.com/tilsley/loom/pkg/api"
@@ -46,21 +45,14 @@ func gitopsFileForEnv(candidate api.Candidate, env string) (string, bool) {
 	return "", false
 }
 
-// candidateOwnerRepo splits the repoName from candidate metadata into ("owner", "repo").
-// The discoverer is expected to set metadata["repoName"] = "owner/repo".
-func candidateOwnerRepo(candidate api.Candidate) (string, string) {
+// candidateOwnerRepo returns (org, repo) for a candidate.
+// org is passed in from config (GITHUB_ORG / GitopsOwner).
+// repo is read from metadata["repoName"] or falls back to candidate.Id.
+func candidateOwnerRepo(candidate api.Candidate, org string) (string, string) {
 	if candidate.Metadata != nil {
 		if repoName, ok := (*candidate.Metadata)["repoName"]; ok && repoName != "" {
-			parts := strings.SplitN(repoName, "/", 2)
-			if len(parts) == 2 {
-				return parts[0], parts[1]
-			}
+			return org, repoName
 		}
 	}
-	// Fallback: treat ID itself as owner/repo if it contains a slash.
-	parts := strings.SplitN(candidate.Id, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return candidate.Id, ""
+	return org, candidate.Id
 }

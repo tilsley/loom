@@ -20,10 +20,15 @@ function getPhase(r: StepResult): Phase {
   return "completed";
 }
 
-function resolveFileUrls(urls: string[], candidate: Candidate): string[] {
+function resolveFileUrls(urls: string[], candidate: Candidate, org: string): string[] {
   const appName = candidate.id;
   const repoName = candidate.metadata?.repoName ?? candidate.id;
-  return urls.map((u) => u.replace(/\{appName\}/g, appName).replace(/\{repo\}/g, repoName));
+  return urls.map((u) =>
+    u
+      .replace(/\{appName\}/g, appName)
+      .replace(/\{org\}/g, org)
+      .replace(/\{repo\}/g, repoName),
+  );
 }
 
 export function StepTimeline({
@@ -31,11 +36,13 @@ export function StepTimeline({
   stepDescriptions,
   stepFiles,
   onComplete,
+  org = "",
 }: {
   results: StepResult[];
   stepDescriptions?: Map<string, string>;
   stepFiles?: Map<string, string[]>;
   onComplete?: (stepName: string, candidate: Candidate, success: boolean) => void;
+  org?: string;
 }) {
   // Hooks must be declared before any early return
   const lastActiveIndex = results.reduce((acc, r, idx) => {
@@ -88,7 +95,7 @@ export function StepTimeline({
         const phase = getPhase(r);
         const description = stepDescriptions?.get(r.stepName);
         const files = stepFiles?.get(r.stepName)
-          ? resolveFileUrls(stepFiles?.get(r.stepName) ?? [], r.candidate)
+          ? resolveFileUrls(stepFiles?.get(r.stepName) ?? [], r.candidate, org)
           : [];
         const isLast = i === results.length - 1;
         const isActive = phase === "open" || phase === "in_progress" || phase === "awaiting_review";
@@ -182,6 +189,13 @@ export function StepTimeline({
                   })}
                 </div>
               )}
+
+              {/* Open PR: manual merge action for local dev / no-webhook environments */}
+              {phase === "open" && onComplete ? (
+                <div className="mt-3">
+                  <MergeAction onMerge={() => onComplete(r.stepName, r.candidate, true)} />
+                </div>
+              ) : null}
 
               {/* Awaiting review: instructions + actions — full width below header row */}
               {phase === "awaiting_review" ? (
@@ -309,6 +323,24 @@ function PhaseLabel({ phase }: { phase: Phase }) {
     default:
       return <span className={cn(base, "text-emerald-400 bg-emerald-500/10 border-emerald-500/20")}>Done</span>;
   }
+}
+
+function MergeAction({ onMerge }: { onMerge: () => void }) {
+  const [pending, setPending] = useState(false);
+
+  return (
+    <div className="flex items-center gap-3">
+      <Button
+        size="sm"
+        variant="success"
+        disabled={pending}
+        onClick={() => { setPending(true); onMerge(); }}
+      >
+        {pending ? "Sending..." : "Mark as merged"}
+      </Button>
+      <span className="text-xs text-zinc-600">PR merged but no webhook? Use this to advance the run.</span>
+    </div>
+  );
 }
 
 function ReviewActions({ onComplete }: { onComplete: (success: boolean) => void }) {

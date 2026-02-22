@@ -22,7 +22,7 @@ func (h *GenerateAppChart) Execute(
 	req api.DispatchStepRequest,
 ) (*Result, error) {
 	app := appName(req.Candidate)
-	owner, repo := candidateOwnerRepo(req.Candidate)
+	owner, repo := candidateOwnerRepo(req.Candidate, cfg.GitopsOwner)
 
 	files := make(map[string]string)
 

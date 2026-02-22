@@ -1,24 +1,52 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"time"
 
 	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	otelcontrib "go.temporal.io/sdk/contrib/opentelemetry"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/apps/server/internal/migrations/adapters"
 	"github.com/tilsley/loom/apps/server/internal/migrations/execution"
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
 	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
+	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
 )
 
 func main() {
 	slog := logger.New()
+
+	// --- Observability ---
+
+	// Default the service name before any OTel init.
+	if os.Getenv("OTEL_SERVICE_NAME") == "" {
+		os.Setenv("OTEL_SERVICE_NAME", "loom-server") //nolint:errcheck
+	}
+
+	otelEnabled := os.Getenv("OTEL_ENABLED") == "true"
+	ctx := context.Background()
+	tel, err := telemetry.New(ctx, otelEnabled)
+	if err != nil {
+		slog.Error("telemetry init failed", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			slog.Error("telemetry shutdown failed", "error", err)
+		}
+	}()
 
 	// --- Platform: Temporal ---
 
@@ -50,13 +78,23 @@ func main() {
 
 	bus := adapters.NewDaprBus(daprClient, "pubsub", "migration-steps")
 	store := adapters.NewDaprMigrationStore(daprClient)
-	dryRunner := adapters.NewDaprDryRunAdapter(daprClient, "migration-worker")
+	dryRunner := adapters.NewDaprDryRunAdapter(daprClient, "app-chart-migrator")
 
 	// --- Temporal Worker ---
 
 	activities := execution.NewActivities(bus, store, slog)
 
-	w := worker.New(tc, temporalplatform.TaskQueue(), worker.Options{})
+	workerOpts := worker.Options{}
+	if otelEnabled {
+		tracingInterceptor, err := otelcontrib.NewTracingInterceptor(otelcontrib.TracerOptions{})
+		if err != nil {
+			slog.Error("temporal tracing interceptor init failed", "error", err)
+			os.Exit(1)
+		}
+		workerOpts.Interceptors = []interceptor.WorkerInterceptor{tracingInterceptor}
+	}
+
+	w := worker.New(tc, temporalplatform.TaskQueue(), workerOpts)
 	w.RegisterWorkflowWithOptions(execution.MigrationOrchestrator, workflow.RegisterOptions{
 		Name: "MigrationOrchestrator",
 	})
@@ -71,9 +109,11 @@ func main() {
 
 	// --- Service + HTTP ---
 
-	svc := migrations.NewService(engine, store, dryRunner)
+	githubOrg := os.Getenv("GITHUB_ORG")
+	svc := migrations.NewService(engine, store, dryRunner, githubOrg)
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery(), otelgin.Middleware("loom-server"))
 	adapters.RegisterRoutes(router, svc, slog)
 
 	port := os.Getenv("PORT")

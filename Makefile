@@ -1,4 +1,4 @@
-.PHONY: dev setup build run demo temporal mock-github migrator reset test vet tidy generate generate-go generate-ts \
+.PHONY: dev dev-otel setup build run demo temporal mock-github migrator reset test vet tidy generate generate-go generate-ts \
         lint lint-go lint-fix \
         console-install console-dev console-build \
         console-lint console-lint-fix console-typecheck console-format console-format-check
@@ -10,6 +10,9 @@ CONSOLE_DIR = apps/console
 
 dev:
 	@./dev.sh
+
+dev-otel:
+	@OTEL_ENABLED=true ./dev.sh
 
 # --- Setup ---
 

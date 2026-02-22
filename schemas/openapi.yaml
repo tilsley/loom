@@ -387,6 +387,10 @@ components:
           type: string
         description:
           type: string
+        org:
+          type: string
+          readOnly: true
+          description: GitHub organisation for this deployment, stamped by the server from GITHUB_ORG. Used by the console to construct GitHub URLs.
         requiredInputs:
           type: array
           items:
@@ -542,7 +546,7 @@ components:
             for the application's own repository).
         repo:
           type: string
-          description: Repository these files belong to, in "owner/repo" format.
+          description: Repository name (without org prefix, e.g. "gitops" or "billing-api").
         files:
           type: array
           items:
@@ -563,7 +567,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Descriptive context set by the discoverer (e.g. repoName, team, system).
+          description: Descriptive context set by the discoverer (e.g. repoName is the repo name without org prefix, team, system).
         state:
           type: object
           additionalProperties:

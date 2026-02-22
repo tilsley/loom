@@ -26,7 +26,7 @@ export default function NewMigration() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [candidatesJson, setCandidatesJson] = useState(
-    JSON.stringify([{ repo: "acme/billing-api" }, { repo: "acme/user-service" }], null, 2),
+    JSON.stringify([{ id: "billing-api" }, { id: "user-service" }], null, 2),
   );
   const [stepsJson, setStepsJson] = useState(JSON.stringify(DEFAULT_STEPS, null, 2));
   const [submitting, setSubmitting] = useState(false);

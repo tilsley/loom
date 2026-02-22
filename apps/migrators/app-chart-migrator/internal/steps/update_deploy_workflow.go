@@ -16,11 +16,11 @@ type UpdateDeployWorkflow struct{}
 func (h *UpdateDeployWorkflow) Execute(
 	_ context.Context,
 	_ gitrepo.Client,
-	_ *Config,
+	cfg *Config,
 	req api.DispatchStepRequest,
 ) (*Result, error) {
 	app := appName(req.Candidate)
-	owner, repo := candidateOwnerRepo(req.Candidate)
+	owner, repo := candidateOwnerRepo(req.Candidate, cfg.GitopsOwner)
 
 	updatedCI := fmt.Sprintf(`name: CI
 on:

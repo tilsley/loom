@@ -155,9 +155,9 @@ func main() {
 func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
 	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
-	// appRepoBase is a template base URL; {appName} and {repo} are substituted
+	// appRepoBase is a template base URL; {appName}, {org}, and {repo} are substituted
 	// by the console when displaying a specific candidate's run.
-	appRepoBase := "https://github.com/{repo}/blob/main"
+	appRepoBase := "https://github.com/{org}/{repo}/blob/main"
 
 	// generate-app-chart creates several files in the app repo
 	generateFiles := make([]string, 0, 3+len(envs))

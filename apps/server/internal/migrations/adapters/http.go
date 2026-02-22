@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/pkg/api"
@@ -203,11 +205,15 @@ func (h *Handler) GetRunInfo(c *gin.Context) {
 func (h *Handler) ExecuteRun(c *gin.Context) {
 	id := c.Param("id")
 
+	span := trace.SpanFromContext(c.Request.Context())
+	span.SetAttributes(attribute.String("migration.id", id))
+
 	var req api.ExecuteRunRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	span.SetAttributes(attribute.String("candidate.id", req.Candidate.Id))
 
 	var inputs map[string]string
 	if req.Inputs != nil {
@@ -237,6 +243,9 @@ func (h *Handler) ExecuteRun(c *gin.Context) {
 // and resets the candidate to not_started.
 func (h *Handler) CancelRun(c *gin.Context) {
 	runID := c.Param("runId")
+
+	span := trace.SpanFromContext(c.Request.Context())
+	span.SetAttributes(attribute.String("run.id", runID))
 
 	if err := h.svc.Cancel(c.Request.Context(), runID); err != nil {
 		if err.Error() == "run \""+runID+"\" not found" {

@@ -11,7 +11,10 @@ C_RESET='\033[0m'
 C_BOLD='\033[1m'
 C_DIM='\033[2m'
 
+C_OTEL='\033[0;31m'      # red
+
 PIDS=()
+OTEL_COMPOSE=0
 
 # Stream lines from stdin and prefix each one with a coloured label.
 prefix() {
@@ -31,6 +34,10 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
   done
   wait 2>/dev/null || true
+  if [ "$OTEL_COMPOSE" -eq 1 ]; then
+    printf "${C_BOLD}Stopping LGTM stack…${C_RESET}\n"
+    docker compose -f docker-compose.otel.yml down 2>/dev/null || true
+  fi
   printf "${C_BOLD}Done.${C_RESET}\n"
   exit 0
 }
@@ -48,7 +55,20 @@ printf "  ${C_TEMPORAL}temporal${C_RESET}  → http://localhost:8088\n"
 printf "  ${C_SERVER}server${C_RESET}    → http://localhost:8080\n"
 printf "  ${C_WORKER}migrator${C_RESET}  → dapr app-id: migration-worker\n"
 printf "  ${C_MOCKGH}mock-gh${C_RESET}   → http://localhost:8081\n"
-printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n\n"
+printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n"
+
+# Optional OTEL: start Grafana LGTM when OTEL_ENABLED=true
+if [ "${OTEL_ENABLED:-}" = "true" ]; then
+  printf "  ${C_OTEL}grafana${C_RESET}   → http://localhost:3002  (admin/admin)\n"
+  printf "\n${C_BOLD}Starting LGTM stack…${C_RESET}\n"
+  docker compose -f docker-compose.otel.yml up -d
+  OTEL_COMPOSE=1
+  export OTEL_ENABLED=true
+  export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+  export OTEL_EXPORTER_OTLP_INSECURE=true
+  export OTEL_SERVICE_NAME=loom-server
+fi
+printf "\n"
 
 # 1. Temporal — start first and give it a moment to open its port.
 temporal server start-dev --ui-port 8088 --db-filename .temporal.db 2>&1 \

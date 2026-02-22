@@ -233,6 +233,7 @@ export default function RunDetail() {
                   results={status.result?.results ?? []}
                   stepDescriptions={stepDescriptions}
                   stepFiles={stepFiles}
+                  org={migration?.org ?? ""}
                   onComplete={(stepName, candidate, success) => {
                     void (async () => {
                       await completeStep(id, stepName, candidate, success);

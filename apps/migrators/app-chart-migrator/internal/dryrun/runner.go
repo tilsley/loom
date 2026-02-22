@@ -31,7 +31,7 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 
 	for _, stepDef := range req.Steps {
 		// Skip steps handled by other worker apps (e.g. manual-review on "loom").
-		if stepDef.WorkerApp != "migration-worker" {
+		if stepDef.WorkerApp != "app-chart-migrator" {
 			stepResults = append(stepResults, api.StepDryRunResult{
 				StepName: stepDef.Name,
 				Skipped:  true,
@@ -90,7 +90,6 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 
 		var fileDiffs []api.FileDiff
 		if result != nil {
-			ownerRepo := result.Owner + "/" + result.Repo
 			for path, after := range result.Files {
 				before := rec.ContentBefore(result.Owner, result.Repo, path)
 				status := api.Modified
@@ -101,7 +100,7 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 				}
 				fileDiffs = append(fileDiffs, api.FileDiff{
 					Path:   path,
-					Repo:   ownerRepo,
+					Repo:   result.Repo,
 					Before: &before,
 					After:  after,
 					Status: status,

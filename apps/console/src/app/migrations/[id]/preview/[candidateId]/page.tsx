@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -16,11 +16,11 @@ import {
   type FileDiff,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
-import { Input } from "@/components/ui";
 
 export default function PreviewPage() {
   const { id, candidateId } = useParams<{ id: string; candidateId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [migration, setMigration] = useState<RegisteredMigration | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
@@ -53,12 +53,13 @@ export default function PreviewPage() {
         };
         setCandidate(c);
 
-        // Pre-fill inputs from candidate metadata
+        // Pre-fill inputs: URL params (from preview modal) take precedence over candidate metadata
         const required = mig.requiredInputs ?? [];
         if (required.length > 0) {
           const prefilled: Record<string, string> = {};
           for (const key of required) {
-            prefilled[key] = found.metadata?.[key] ?? "";
+            const urlVal = searchParams.get(key);
+            prefilled[key] = urlVal !== null ? urlVal : (found.metadata?.[key] ?? "");
           }
           setInputs(prefilled);
         }
@@ -99,6 +100,12 @@ export default function PreviewPage() {
     if (requiredInputs.length > 0 && !allInputsFilled) return;
     triggerDryRun(candidateWithInputs);
   }, [candidateWithInputs, migration, requiredInputs.length, allInputsFilled, triggerDryRun]);
+
+  function handleRetry() {
+    if (!candidateWithInputs) return;
+    lastDryRunInputs.current = "";
+    triggerDryRun(candidateWithInputs);
+  }
 
   async function handleExecute() {
     if (!candidate || !migration) return;
@@ -177,26 +184,20 @@ export default function PreviewPage() {
         </span>
       </div>
 
-      {/* Inputs form */}
+      {/* Inputs */}
       {requiredInputs.length > 0 ? (
         <section className="w-fit min-w-[700px] mx-auto">
-          <div className="border border-zinc-800/80 rounded-lg px-5 py-4 space-y-4">
+          <div className="border border-zinc-800/80 rounded-lg px-5 py-4 space-y-3">
             <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
               Required inputs
             </div>
             {requiredInputs.map((key) => (
-              <div key={key}>
-                <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
-                  {key}
-                </label>
-                <Input
-                  type="text"
-                  value={inputs[key] ?? ""}
-                  onChange={(e) => setInputs((v) => ({ ...v, [key]: e.target.value }))}
-                  placeholder={key}
-                  className="font-mono"
-                />
-              </div>
+              <EditableLabel
+                key={key}
+                label={key}
+                value={inputs[key] ?? ""}
+                onCommit={(val) => setInputs((v) => ({ ...v, [key]: val }))}
+              />
             ))}
           </div>
         </section>
@@ -225,11 +226,24 @@ export default function PreviewPage() {
                 Simulating…
               </span>
             ) : null}
-            {dryRunError ? <span className="text-xs text-red-400">Dry run failed</span> : null}
             {requiredInputs.length > 0 && !allInputsFilled ? (
               <span className="text-xs text-zinc-600 italic">Fill inputs to preview</span>
             ) : null}
           </div>
+          {dryRunError ? (
+            <div className="border border-red-500/20 bg-red-500/5 rounded-lg px-5 py-5 flex items-start justify-between gap-4">
+              <div className="space-y-1 min-w-0">
+                <p className="text-sm font-medium text-red-400">Dry run failed</p>
+                <p className="text-xs font-mono text-red-400/60 break-all">{dryRunError}</p>
+              </div>
+              <button
+                onClick={handleRetry}
+                className="shrink-0 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded px-3 py-1.5 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
           <div className="border border-zinc-800/80 rounded-lg divide-y divide-zinc-800/60">
             {steps.map((step, i) => {
               const config = step.config ? Object.entries(step.config) : [];
@@ -280,7 +294,7 @@ export default function PreviewPage() {
                     </div>
                   )}
 
-                  {(dryRunLoading && !stepDryRun) || stepDryRun ? (
+                  {(dryRunLoading && !stepDryRun) || (stepDryRun && !stepDryRun.skipped) ? (
                     <div className="ml-7 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-zinc-600 uppercase tracking-widest">
@@ -299,6 +313,7 @@ export default function PreviewPage() {
               );
             })}
           </div>
+          )}
         </section>
       ) : (
         <div className="text-sm text-zinc-600 italic">Loading step definitions…</div>
@@ -334,6 +349,85 @@ export default function PreviewPage() {
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+// --- Editable label ---
+
+function EditableLabel({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onCommit: (newValue: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  function commit() {
+    onCommit(draft.trim());
+    setEditing(false);
+  }
+
+  function cancel() {
+    setDraft(value);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-zinc-500 shrink-0">{label}:</span>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") cancel();
+          }}
+          className="font-mono text-sm text-zinc-200 bg-zinc-800/60 border border-zinc-700 rounded px-2 py-0.5 focus:outline-none focus:border-zinc-500 min-w-0 flex-1 max-w-xs"
+        />
+        <button
+          onClick={commit}
+          title="Confirm (Enter)"
+          className="text-emerald-400 hover:text-emerald-300 transition-colors shrink-0"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M2 8l5 5 7-7" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <button
+          onClick={cancel}
+          title="Cancel (Escape)"
+          className="text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 group">
+      <span className="text-xs text-zinc-500 shrink-0">{label}:</span>
+      <span className="font-mono text-sm text-zinc-200">
+        {value || <span className="text-zinc-600 italic">not set</span>}
+      </span>
+      <button
+        onClick={() => { setDraft(value); setEditing(true); }}
+        title="Edit"
+        className="text-zinc-700 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287.955.955 6.287-6.288Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z" />
+        </svg>
+      </button>
     </div>
   );
 }

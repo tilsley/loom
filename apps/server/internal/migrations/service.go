@@ -8,21 +8,58 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/tilsley/loom/pkg/api"
 )
 
+const instrName = "github.com/tilsley/loom"
+
 // Service is the application-level use-case orchestrator for migrations.
 // It depends only on port interfaces — no framework imports.
 type Service struct {
-	engine    WorkflowEngine
-	store     MigrationStore
-	dryRunner DryRunner
+	engine     WorkflowEngine
+	store      MigrationStore
+	dryRunner  DryRunner
+	githubOrg  string
+
+	// metrics
+	runsStarted        metric.Int64Counter
+	runsCancelled      metric.Int64Counter
+	migrationsRegd     metric.Int64Counter
+	candidatesSubmit   metric.Int64Counter
+	dryRunsTotal       metric.Int64Counter
 }
 
 // NewService creates a new Service.
-func NewService(engine WorkflowEngine, store MigrationStore, dryRunner DryRunner) *Service {
-	return &Service{engine: engine, store: store, dryRunner: dryRunner}
+func NewService(engine WorkflowEngine, store MigrationStore, dryRunner DryRunner, githubOrg string) *Service {
+	m := otel.Meter(instrName)
+
+	runsStarted, _ := m.Int64Counter("loom.runs.started",
+		metric.WithDescription("Number of migration runs started"))
+	runsCancelled, _ := m.Int64Counter("loom.runs.cancelled",
+		metric.WithDescription("Number of migration runs cancelled"))
+	migrationsRegd, _ := m.Int64Counter("loom.migrations.registered",
+		metric.WithDescription("Number of migrations registered"))
+	candidatesSubmit, _ := m.Int64Counter("loom.candidates.submitted",
+		metric.WithDescription("Number of candidates submitted"))
+	dryRunsTotal, _ := m.Int64Counter("loom.dry_runs.total",
+		metric.WithDescription("Number of dry runs executed"))
+
+	return &Service{
+		engine:           engine,
+		store:            store,
+		dryRunner:        dryRunner,
+		githubOrg:        githubOrg,
+		runsStarted:      runsStarted,
+		runsCancelled:    runsCancelled,
+		migrationsRegd:   migrationsRegd,
+		candidatesSubmit: candidatesSubmit,
+		dryRunsTotal:     dryRunsTotal,
+	}
 }
 
 // Start schedules a new migration workflow from the given manifest.
@@ -89,6 +126,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		existing.Description = ann.Description
 		existing.RequiredInputs = ann.RequiredInputs
 		existing.Steps = ann.Steps
+		existing.Org = &s.githubOrg
 		if err := s.store.Save(ctx, *existing); err != nil {
 			return nil, fmt.Errorf("save migration: %w", err)
 		}
@@ -103,6 +141,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		Candidates:     ann.Candidates,
 		Steps:          ann.Steps,
 		CreatedAt:      time.Now().UTC(),
+		Org:            &s.githubOrg,
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -120,10 +159,12 @@ func (s *Service) Register(ctx context.Context, req api.RegisterMigrationRequest
 		Candidates:     req.Candidates,
 		Steps:          req.Steps,
 		CreatedAt:      time.Now().UTC(),
+		Org:            &s.githubOrg,
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
 	}
+	s.migrationsRegd.Add(ctx, 1)
 	return &m, nil
 }
 
@@ -162,7 +203,12 @@ func (s *Service) SubmitCandidates(ctx context.Context, migrationID string, req 
 	if m == nil {
 		return fmt.Errorf("migration %q not found", migrationID)
 	}
-	return s.store.SaveCandidates(ctx, migrationID, req.Candidates)
+	if err := s.store.SaveCandidates(ctx, migrationID, req.Candidates); err != nil {
+		return err
+	}
+	s.candidatesSubmit.Add(ctx, int64(len(req.Candidates)),
+		metric.WithAttributes(attribute.String("migration_id", migrationID)))
+	return nil
 }
 
 // GetCandidates returns the candidate list for a migration, enriched with run status.
@@ -261,14 +307,24 @@ func (s *Service) Cancel(ctx context.Context, runID string) error {
 	if err := s.store.DeleteCandidateRun(ctx, migrationID, candidateID); err != nil {
 		return fmt.Errorf("reset candidate run: %w", err)
 	}
+	s.runsCancelled.Add(ctx, 1)
 	return nil
 }
 
 // DryRun simulates a full migration run for a single candidate, returning
 // per-step file diffs from the worker without creating any real PRs.
 func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.Candidate) (*api.DryRunResult, error) {
+	ctx, span := otel.Tracer(instrName).Start(ctx, "Service.DryRun",
+		trace.WithAttributes(
+			attribute.String("migration.id", migrationID),
+			attribute.String("candidate.id", candidate.Id),
+		),
+	)
+	defer span.End()
+
 	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
@@ -280,13 +336,28 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 		Candidate:   candidate,
 		Steps:       m.Steps,
 	}
-	return s.dryRunner.DryRun(ctx, req)
+	result, err := s.dryRunner.DryRun(ctx, req)
+	status := "ok"
+	if err != nil {
+		status = "error"
+		span.RecordError(err)
+	}
+	s.dryRunsTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
+	return result, err
 }
 
 // Execute atomically creates a run for the given candidate and starts the Temporal workflow.
 // inputs are operator-supplied values (e.g. repoName) collected at preview time;
 // they are merged into candidate metadata before the workflow is started.
 func (s *Service) Execute(ctx context.Context, migrationID string, candidate api.Candidate, inputs map[string]string) (string, error) {
+	ctx, span := otel.Tracer(instrName).Start(ctx, "Service.Execute",
+		trace.WithAttributes(
+			attribute.String("migration.id", migrationID),
+			attribute.String("candidate.id", candidate.Id),
+		),
+	)
+	defer span.End()
+
 	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
 		return "", fmt.Errorf("get migration %q: %w", migrationID, err)
@@ -336,6 +407,8 @@ func (s *Service) Execute(ctx context.Context, migrationID string, candidate api
 		return "", fmt.Errorf("set candidate run: %w", err)
 	}
 
+	s.runsStarted.Add(ctx, 1,
+		metric.WithAttributes(attribute.String("migration_id", migrationID)))
 	return runID, nil
 }
 

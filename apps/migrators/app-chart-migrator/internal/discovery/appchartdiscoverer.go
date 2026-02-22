@@ -119,7 +119,7 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 		byInstance[instance] = append(byInstance[instance], fileEntry{path: path, app: app})
 	}
 
-	gitopsRepo := d.GitopsOwner + "/" + d.GitopsRepo
+	gitopsRepo := d.GitopsRepo
 	gitopsBase := fmt.Sprintf("https://github.com/%s/%s/blob/main", d.GitopsOwner, d.GitopsRepo)
 
 	// Build per-instance metadata needed for the second pass.
@@ -225,7 +225,7 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 			log.Debug("no base files found", "candidate", instance)
 		}
 
-		appRepo := d.GitopsOwner + "/" + instance
+		appRepo := instance
 		appRepoBase := fmt.Sprintf("https://github.com/%s/%s/blob/main", d.GitopsOwner, instance)
 		fileGroups = append(fileGroups, api.FileGroup{
 			Name: "app-repo",
