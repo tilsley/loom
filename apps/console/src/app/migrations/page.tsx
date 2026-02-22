@@ -20,7 +20,7 @@ export default function MigrationsPage() {
             Registered Migrations
           </h2>
           {!loading && migrations.length > 0 && (
-            <span className="text-[10px] font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+            <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
               {migrations.length}
             </span>
           )}
@@ -45,7 +45,7 @@ export default function MigrationsPage() {
 
       {/* Error */}
       {Boolean(error) && (
-        <div className="bg-red-500/8 border border-red-500/20 rounded-lg px-4 py-3 text-[13px] text-red-400">
+        <div className="bg-red-500/8 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
           {error}
         </div>
       )}

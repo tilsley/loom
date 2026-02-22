@@ -131,7 +131,7 @@ export function StepTimeline({
                 {/* Left: name + description */}
                 <div className="flex-1 min-w-0">
                   <span className="text-base font-medium font-mono text-foreground block">
-                    <span className="text-[11px] text-zinc-700 mr-1.5 tabular-nums select-none">
+                    <span className="text-xs text-zinc-700 mr-1.5 tabular-nums select-none">
                       {String(i + 1).padStart(2, "0")}.
                     </span>
                     {r.stepName}
@@ -171,7 +171,7 @@ export function StepTimeline({
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-600 hover:text-teal-400 transition-colors"
+                        className="inline-flex items-center gap-1 text-xs font-mono text-zinc-600 hover:text-teal-400 transition-colors"
                       >
                         <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 opacity-50">
                           <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z" />
@@ -188,7 +188,7 @@ export function StepTimeline({
                 <div className="mt-3 space-y-3">
                   {r.metadata?.instructions ? (
                     <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
-                      <div className="text-[10px] font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
+                      <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
                         Instructions
                       </div>
                       <ul className="space-y-1">

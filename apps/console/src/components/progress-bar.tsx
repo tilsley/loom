@@ -7,7 +7,7 @@ interface ProgressBarProps {
 
 export function ProgressBar({ candidates, candidateRuns }: ProgressBarProps) {
   const total = candidates.length;
-  const counts = { completed: 0, running: 0, failed: 0, not_started: 0 };
+  const counts = { completed: 0, running: 0, queued: 0, not_started: 0 };
 
   for (const c of candidates) {
     const run = candidateRuns?.[c.id];
@@ -17,8 +17,8 @@ export function ProgressBar({ candidates, candidateRuns }: ProgressBarProps) {
       counts.completed++;
     } else if (run.status === "running") {
       counts.running++;
-    } else if (run.status === "failed") {
-      counts.failed++;
+    } else if (run.status === "queued") {
+      counts.queued++;
     } else {
       counts.not_started++;
     }
@@ -27,13 +27,13 @@ export function ProgressBar({ candidates, candidateRuns }: ProgressBarProps) {
   const segments = [
     { key: "completed", count: counts.completed, color: "bg-emerald-500", label: "completed" },
     { key: "running", count: counts.running, color: "bg-amber-500", label: "running" },
-    { key: "failed", count: counts.failed, color: "bg-red-500", label: "failed" },
+    { key: "queued", count: counts.queued, color: "bg-indigo-500", label: "queued" },
     { key: "not_started", count: counts.not_started, color: "bg-zinc-700", label: "not started" },
   ] as const;
 
   return (
     <div>
-      <div className="flex items-center gap-3 text-[12px] text-zinc-400 mb-2">
+      <div className="flex items-center gap-3 text-xs text-zinc-400 mb-3">
         {segments
           .filter((s) => s.count > 0)
           .map((s, i, arr) => (
@@ -44,7 +44,7 @@ export function ProgressBar({ candidates, candidateRuns }: ProgressBarProps) {
             </span>
           ))}
       </div>
-      <div className="flex h-2 rounded-full overflow-hidden bg-zinc-800/50">
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-zinc-800/50">
         {segments.map(
           (s) =>
             s.count > 0 && (

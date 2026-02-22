@@ -33,7 +33,7 @@ export default function Dashboard() {
             migration: m,
             id: t.id,
             status: run?.status ?? "not_started",
-            runId: run?.runId ?? null,
+            runId: run ? `${m.id}__${t.id}` : null,
           });
         }
       }
@@ -46,7 +46,7 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in-up">
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-zinc-50">Dashboard</h1>
-        <p className="text-[13px] text-zinc-500 mt-1">Migration orchestration overview</p>
+        <p className="text-sm text-zinc-500 mt-1">Migration orchestration overview</p>
       </div>
 
       {loading ? (
@@ -151,7 +151,7 @@ function StatusChip({ status }: { status: string }) {
   };
   const cls = styles[status] ?? styles.not_started;
   return (
-    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${cls}`}>
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${cls}`}>
       {status}
     </span>
   );

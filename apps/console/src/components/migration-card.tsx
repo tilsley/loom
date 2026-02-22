@@ -10,7 +10,8 @@ function timeAgo(date: string): string {
 }
 
 export function MigrationCard({ migration }: { migration: RegisteredMigration }) {
-  const hasRuns = migration.runIds.length > 0;
+  const runCount = Object.keys(migration.candidateRuns ?? {}).length;
+  const hasRuns = runCount > 0;
   const doneCount = migration.candidateRuns
     ? Object.values(migration.candidateRuns).filter((r) => r.status === "completed").length
     : 0;
@@ -31,25 +32,25 @@ export function MigrationCard({ migration }: { migration: RegisteredMigration })
               {migration.name}
             </h3>
             {Boolean(migration.description) && (
-              <p className="text-[12px] text-zinc-500 mt-0.5 line-clamp-1">
+              <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
                 {migration.description}
               </p>
             )}
           </div>
-          <span className="shrink-0 text-[10px] font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+          <span className="shrink-0 text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
             {migration.id}
           </span>
         </div>
 
         {/* Bottom row: stats */}
         <div className="flex items-center gap-3 mt-3">
-          <Stat label="targets" value={migration.candidates.length} />
+          <Stat label="candidates" value={migration.candidates.length} />
           <StatDivider />
           <Stat label="steps" value={migration.steps.length} />
           <StatDivider />
           <Stat
-            label={migration.runIds.length === 1 ? "run" : "runs"}
-            value={migration.runIds.length}
+            label={runCount === 1 ? "run" : "runs"}
+            value={runCount}
             accent={hasRuns}
           />
           {doneCount > 0 && (
@@ -59,7 +60,7 @@ export function MigrationCard({ migration }: { migration: RegisteredMigration })
             </>
           )}
           <div className="flex-1" />
-          <span className="text-[10px] text-zinc-600 font-mono">
+          <span className="text-xs text-zinc-600 font-mono">
             {timeAgo(migration.createdAt)}
           </span>
           <svg
@@ -87,13 +88,13 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
   return (
     <div className="flex items-center gap-1.5">
       <span
-        className={`text-[13px] font-mono font-medium ${
+        className={`text-sm font-mono font-medium ${
           accent ? "text-teal-400" : "text-zinc-300"
         }`}
       >
         {value}
       </span>
-      <span className="text-[11px] text-zinc-500">{label}</span>
+      <span className="text-xs text-zinc-500">{label}</span>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import (
 	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
 
+	githubadapter "github.com/tilsley/loom/apps/worker/internal/adapters/github"
 	"github.com/tilsley/loom/apps/worker/internal/discovery"
 	"github.com/tilsley/loom/apps/worker/internal/dryrun"
 	"github.com/tilsley/loom/apps/worker/internal/handler"
@@ -56,12 +57,43 @@ func main() {
 	}
 	defer daprClient.Close()
 
-	gh := platformgithub.NewClient(githubURL)
+	// --- GitHub adapter ---
+	// Token auth (local dev / CI): set GITHUB_TOKEN.
+	// App auth (deployed):         set GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID,
+	//                              and GITHUB_APP_PRIVATE_KEY_PATH.
+	var ghAdapter *githubadapter.Adapter
+	appID := envOr("GITHUB_APP_ID", "")
+	appInstallID := envOr("GITHUB_APP_INSTALLATION_ID", "")
+	appKeyPath := envOr("GITHUB_APP_PRIVATE_KEY_PATH", "")
+
+	if appID != "" && appInstallID != "" && appKeyPath != "" {
+		var parsedAppID, parsedInstallID int64
+		if _, err := fmt.Sscanf(appID, "%d", &parsedAppID); err != nil {
+			log.Error("invalid GITHUB_APP_ID", "error", err)
+			os.Exit(1)
+		}
+		if _, err := fmt.Sscanf(appInstallID, "%d", &parsedInstallID); err != nil {
+			log.Error("invalid GITHUB_APP_INSTALLATION_ID", "error", err)
+			os.Exit(1)
+		}
+		ghClient, err := platformgithub.NewAppClient(parsedAppID, parsedInstallID, appKeyPath, githubURL)
+		if err != nil {
+			log.Error("github app auth failed", "error", err)
+			os.Exit(1)
+		}
+		ghAdapter = githubadapter.New(ghClient)
+		log.Info("github: using app auth", "appID", parsedAppID, "installationID", parsedInstallID)
+	} else {
+		ghClient := platformgithub.NewTokenClient(os.Getenv("GITHUB_TOKEN"), githubURL)
+		ghAdapter = githubadapter.New(ghClient)
+		log.Info("github: using token auth", "url", githubURL)
+	}
+
 	store := pending.NewStore(daprClient, log)
 	loomClient := loom.NewClient(loomURL, log)
-	dispatch := handler.NewDispatch(gh, store, loomClient, log, stepCfg)
+	dispatch := handler.NewDispatch(ghAdapter, store, loomClient, log, stepCfg)
 	webhook := handler.NewWebhook(store, loomClient, log)
-	dryRunRunner := &dryrun.Runner{RealClient: gh, StepCfg: stepCfg}
+	dryRunRunner := &dryrun.Runner{RealClient: ghAdapter, StepCfg: stepCfg}
 	dryRunHandler := handler.NewDryRun(dryRunRunner, log)
 
 	r := gin.Default()
@@ -98,7 +130,7 @@ func main() {
 
 	// Run candidate discovery once on startup (after announce completes)
 	discoverer := &discovery.AppChartDiscoverer{
-		GH:          gh,
+		Reader:      ghAdapter,
 		GitopsOwner: gitopsOwner,
 		GitopsRepo:  gitopsRepoName,
 	}

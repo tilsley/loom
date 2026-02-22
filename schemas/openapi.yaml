@@ -317,10 +317,8 @@ components:
 
     CandidateRun:
       type: object
-      required: [runId, status]
+      required: [status]
       properties:
-        runId:
-          type: string
         status:
           type: string
           enum: [queued, running, completed]
@@ -420,7 +418,7 @@ components:
 
     RegisteredMigration:
       type: object
-      required: [id, name, candidates, steps, createdAt, runIds]
+      required: [id, name, candidates, steps, createdAt]
       properties:
         id:
           type: string
@@ -442,11 +440,6 @@ components:
           type: string
           format: date-time
           description: ISO timestamp.
-        runIds:
-          type: array
-          items:
-            type: string
-          description: Run IDs created from this registration.
         cancelledAttempts:
           type: array
           items:

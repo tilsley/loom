@@ -29,6 +29,23 @@ func appName(candidate api.Candidate) string {
 	return candidate.Id
 }
 
+// gitopsFileForEnv returns the actual path of the ArgoCD Application manifest
+// for the given environment, looked up from the candidate's discovered FileGroups.
+// The discoverer names each gitops FileGroup after the environment it found the
+// file in (e.g. "dev", "staging", "prod"), so we can match by group name.
+// Returns ("", false) if no file is found for that environment.
+func gitopsFileForEnv(candidate api.Candidate, env string) (string, bool) {
+	if candidate.Files == nil {
+		return "", false
+	}
+	for _, group := range *candidate.Files {
+		if group.Name == env && len(group.Files) > 0 {
+			return group.Files[0].Path, true
+		}
+	}
+	return "", false
+}
+
 // candidateOwnerRepo splits the repoName from candidate metadata into ("owner", "repo").
 // The discoverer is expected to set metadata["repoName"] = "owner/repo".
 func candidateOwnerRepo(candidate api.Candidate) (string, string) {

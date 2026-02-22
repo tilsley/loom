@@ -84,6 +84,21 @@ func (m *InMem) ListDir(_ context.Context, owner, repo, dirPath string) ([]gitre
 	return entries, nil
 }
 
+// ReadAll returns all files in the in-memory store for the given repo.
+// It satisfies gitrepo.RepoReader for use in discovery unit tests.
+func (m *InMem) ReadAll(_ context.Context, owner, repo string) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	prefix := owner + "/" + repo + "/"
+	result := make(map[string]string)
+	for key, content := range m.files {
+		if strings.HasPrefix(key, prefix) {
+			result[key[len(prefix):]] = content
+		}
+	}
+	return result, nil
+}
+
 // CreatePR records a PR and writes its files into the in-memory store.
 func (m *InMem) CreatePR(_ context.Context, owner, repo string, req gitrepo.CreatePRRequest) (*gitrepo.PullRequest, error) {
 	m.mu.Lock()

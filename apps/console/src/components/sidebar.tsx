@@ -18,7 +18,7 @@ function ThemeToggle() {
     <button
       onClick={toggle}
       className={cn(
-        "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-colors",
+        "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors",
         "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40",
       )}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
@@ -87,7 +87,7 @@ export function Sidebar() {
           <span className="text-[15px] font-semibold tracking-tight text-zinc-100 group-hover:text-white transition-colors">
             Loom
           </span>
-          <span className="text-[10px] font-mono font-medium text-teal-400/70 bg-teal-400/8 px-1.5 py-0.5 rounded tracking-wide uppercase">
+          <span className="text-xs font-mono font-medium text-teal-400/70 bg-teal-400/8 px-1.5 py-0.5 rounded tracking-wide uppercase">
             console
           </span>
         </Link>
@@ -107,7 +107,7 @@ export function Sidebar() {
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-medium transition-colors",
+                    "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors",
                     isActive
                       ? "bg-zinc-800/60 text-zinc-100"
                       : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40",
@@ -127,7 +127,7 @@ export function Sidebar() {
                           <Link
                             href={ROUTES.migrationDetail(m.id)}
                             className={cn(
-                              "block px-2.5 py-1.5 rounded-md text-[12px] truncate transition-colors",
+                              "block px-2.5 py-1.5 rounded-md text-xs truncate transition-colors",
                               mActive
                                 ? "text-teal-400 bg-teal-500/8"
                                 : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30",
@@ -140,7 +140,7 @@ export function Sidebar() {
                       );
                     })}
                     {hiddenCount > 0 && (
-                      <li className="px-2.5 py-1 text-[11px] text-zinc-600">+{hiddenCount} more</li>
+                      <li className="px-2.5 py-1 text-xs text-zinc-600">+{hiddenCount} more</li>
                     )}
                   </ul>
                 )}

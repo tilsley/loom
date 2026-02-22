@@ -45,11 +45,11 @@ export class ErrorBoundary extends Component<Props, State> {
             </svg>
           </div>
           <h3 className="text-sm font-medium text-zinc-200 mb-1">Something went wrong</h3>
-          <p className="text-[13px] text-zinc-500 mb-4 max-w-sm">
+          <p className="text-sm text-zinc-500 mb-4 max-w-sm">
             An unexpected error occurred in this section.
           </p>
           {process.env.NODE_ENV === "development" && this.state.error ? (
-            <pre className="text-[11px] font-mono text-red-400/70 bg-red-500/5 border border-red-500/10 rounded-lg px-4 py-3 mb-4 max-w-lg overflow-auto text-left">
+            <pre className="text-xs font-mono text-red-400/70 bg-red-500/5 border border-red-500/10 rounded-lg px-4 py-3 mb-4 max-w-lg overflow-auto text-left">
               {this.state.error.message}
             </pre>
           ) : null}

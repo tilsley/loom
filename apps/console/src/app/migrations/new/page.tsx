@@ -116,14 +116,14 @@ export default function NewMigration() {
 
       <div>
         <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Register Migration</h2>
-        <p className="text-[13px] text-zinc-500 mt-1">
+        <p className="text-sm text-zinc-500 mt-1">
           Define a reusable migration that can be run multiple times.
         </p>
       </div>
 
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
         <div>
-          <label className="block text-[11px] font-medium text-zinc-500 uppercase tracking-widest mb-2">
+          <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
             Name
           </label>
           <Input
@@ -135,7 +135,7 @@ export default function NewMigration() {
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium text-zinc-500 uppercase tracking-widest mb-2">
+          <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
             Description
           </label>
           <Input
@@ -147,7 +147,7 @@ export default function NewMigration() {
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium text-zinc-500 uppercase tracking-widest mb-2">
+          <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
             Candidates
             <span className="ml-2 text-zinc-600 normal-case tracking-normal">JSON array</span>
           </label>
@@ -155,12 +155,12 @@ export default function NewMigration() {
             value={candidatesJson}
             onChange={(e) => setCandidatesJson(e.target.value)}
             rows={6}
-            className="font-mono text-[12px]"
+            className="font-mono text-xs"
           />
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium text-zinc-500 uppercase tracking-widest mb-2">
+          <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
             Steps
             <span className="ml-2 text-zinc-600 normal-case tracking-normal">JSON array</span>
           </label>
@@ -168,7 +168,7 @@ export default function NewMigration() {
             value={stepsJson}
             onChange={(e) => setStepsJson(e.target.value)}
             rows={12}
-            className="font-mono text-[12px]"
+            className="font-mono text-xs"
           />
         </div>
 
@@ -178,7 +178,7 @@ export default function NewMigration() {
           </Button>
           <Link
             href={ROUTES.migrations}
-            className="px-4 py-2 text-[13px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
           >
             Cancel
           </Link>

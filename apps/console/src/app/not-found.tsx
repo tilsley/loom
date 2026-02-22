@@ -9,7 +9,7 @@ export default function NotFound() {
         <span className="text-2xl font-mono font-bold text-zinc-500">404</span>
       </div>
       <h2 className="text-lg font-semibold text-zinc-100 mb-1">Page Not Found</h2>
-      <p className="text-[13px] text-zinc-500 mb-6 max-w-sm">
+      <p className="text-sm text-zinc-500 mb-6 max-w-sm">
         The page you&apos;re looking for doesn&apos;t exist or has been moved.
       </p>
       <Link href={ROUTES.dashboard} className={buttonVariants({ variant: "outline" })}>

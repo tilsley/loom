@@ -76,7 +76,7 @@ func (s *Service) HandleEvent(ctx context.Context, instanceID string, event api.
 }
 
 // Announce upserts a migration from a worker announcement (pub/sub discovery).
-// The worker owns the ID (deterministic slug). Existing runIds and createdAt are preserved.
+// The worker owns the ID (deterministic slug). Existing state and createdAt are preserved.
 func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (*api.RegisteredMigration, error) {
 	existing, err := s.store.Get(ctx, ann.Id)
 	if err != nil {
@@ -102,7 +102,6 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		Candidates:  ann.Candidates,
 		Steps:       ann.Steps,
 		CreatedAt:   time.Now().UTC(),
-		RunIds:      []string{},
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -119,7 +118,6 @@ func (s *Service) Register(ctx context.Context, req api.RegisterMigrationRequest
 		Candidates:  req.Candidates,
 		Steps:       req.Steps,
 		CreatedAt:   time.Now().UTC(),
-		RunIds:      []string{},
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -167,9 +165,7 @@ func (s *Service) SubmitCandidates(ctx context.Context, migrationID string, req 
 
 // GetCandidates returns the candidate list for a migration, enriched with run status.
 // Any candidate whose stored status is "running" but whose workflow no longer exists in
-// the engine (e.g. after a Temporal restart) is automatically reset to "not_started" so the
-// candidate becomes re-runnable without manual intervention.
-// Candidates with status "queued" are skipped — no workflow exists yet for them.
+// the engine (e.g. after a Temporal restart) is automatically reset to "not_started".
 func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.CandidateWithStatus, error) {
 	candidates, err := s.store.GetCandidates(ctx, migrationID)
 	if err != nil {
@@ -194,26 +190,22 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 	return candidates, nil
 }
 
-// GetRunInfo returns metadata about a run — including queued runs that have no workflow yet.
+// GetRunInfo returns metadata about a run, derived from the migration's candidate state.
 func (s *Service) GetRunInfo(ctx context.Context, runID string) (*api.RunInfo, error) {
-	record, err := s.store.GetRunRecord(ctx, runID)
+	migrationID, candidateID, err := ParseRunID(runID)
 	if err != nil {
-		return nil, fmt.Errorf("get run record %q: %w", runID, err)
-	}
-	if record == nil {
-		return nil, nil //nolint:nilnil // caller checks nil to detect "not found"
+		return nil, nil //nolint:nilnil // invalid ID format treated as not found
 	}
 
-	m, err := s.store.Get(ctx, record.MigrationID)
+	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
-		return nil, fmt.Errorf("get migration %q: %w", record.MigrationID, err)
+		return nil, fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
-
-	// If the migration or candidateRun entry no longer exists the run was dequeued.
 	if m == nil || m.CandidateRuns == nil {
 		return nil, nil //nolint:nilnil
 	}
-	cr, ok := (*m.CandidateRuns)[record.Candidate.Id]
+
+	cr, ok := (*m.CandidateRuns)[candidateID]
 	if !ok {
 		return nil, nil //nolint:nilnil
 	}
@@ -228,10 +220,15 @@ func (s *Service) GetRunInfo(ctx context.Context, runID string) (*api.RunInfo, e
 		status = api.RunInfoStatusQueued
 	}
 
+	candidate, err := s.findCandidate(ctx, migrationID, candidateID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.RunInfo{
 		RunId:       runID,
-		MigrationId: record.MigrationID,
-		Candidate:   record.Candidate,
+		MigrationId: migrationID,
+		Candidate:   candidate,
 		Status:      status,
 	}, nil
 }
@@ -239,11 +236,8 @@ func (s *Service) GetRunInfo(ctx context.Context, runID string) (*api.RunInfo, e
 // Cancel stops a running workflow, records a CancelledAttempt audit entry, and resets
 // the candidate to not_started so it can be re-queued or previewed again.
 func (s *Service) Cancel(ctx context.Context, runID string) error {
-	record, err := s.store.GetRunRecord(ctx, runID)
+	migrationID, candidateID, err := ParseRunID(runID)
 	if err != nil {
-		return fmt.Errorf("get run record %q: %w", runID, err)
-	}
-	if record == nil {
 		return fmt.Errorf("run %q not found", runID)
 	}
 
@@ -256,52 +250,42 @@ func (s *Service) Cancel(ctx context.Context, runID string) error {
 
 	attempt := api.CancelledAttempt{
 		RunId:       runID,
-		CandidateId: record.Candidate.Id,
+		CandidateId: candidateID,
 		CancelledAt: time.Now().UTC(),
 	}
-	if err := s.store.AppendCancelledAttempt(ctx, record.MigrationID, attempt); err != nil {
+	if err := s.store.AppendCancelledAttempt(ctx, migrationID, attempt); err != nil {
 		return fmt.Errorf("record cancelled attempt: %w", err)
 	}
-	if err := s.store.DeleteCandidateRun(ctx, record.MigrationID, record.Candidate.Id); err != nil {
+	if err := s.store.DeleteCandidateRun(ctx, migrationID, candidateID); err != nil {
 		return fmt.Errorf("reset candidate run: %w", err)
-	}
-	if err := s.store.DeleteRunRecord(ctx, runID); err != nil {
-		return fmt.Errorf("delete run record: %w", err)
 	}
 	return nil
 }
 
 // Dequeue removes a run from the queue, returning the candidate to not_started state.
 func (s *Service) Dequeue(ctx context.Context, runID string) error {
-	record, err := s.store.GetRunRecord(ctx, runID)
+	migrationID, candidateID, err := ParseRunID(runID)
 	if err != nil {
-		return fmt.Errorf("get run record %q: %w", runID, err)
-	}
-	if record == nil {
 		return fmt.Errorf("run %q not found", runID)
 	}
 
-	m, err := s.store.Get(ctx, record.MigrationID)
+	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
-		return fmt.Errorf("get migration %q: %w", record.MigrationID, err)
+		return fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m != nil && m.CandidateRuns != nil {
-		if cr, ok := (*m.CandidateRuns)[record.Candidate.Id]; ok && cr.Status != api.CandidateRunStatusQueued {
-			return CandidateAlreadyRunError{ID: record.Candidate.Id, Status: string(cr.Status)}
+		if cr, ok := (*m.CandidateRuns)[candidateID]; ok && cr.Status != api.CandidateRunStatusQueued {
+			return CandidateAlreadyRunError{ID: candidateID, Status: string(cr.Status)}
 		}
 	}
 
-	if err := s.store.DeleteCandidateRun(ctx, record.MigrationID, record.Candidate.Id); err != nil {
+	if err := s.store.DeleteCandidateRun(ctx, migrationID, candidateID); err != nil {
 		return fmt.Errorf("delete candidate run: %w", err)
-	}
-	if err := s.store.DeleteRunRecord(ctx, runID); err != nil {
-		return fmt.Errorf("delete run record: %w", err)
 	}
 	return nil
 }
 
 // Queue reserves a run for a single candidate without starting the workflow.
-// The run ID is stored so Execute can retrieve it later.
 func (s *Service) Queue(ctx context.Context, migrationID string, candidate api.Candidate) (string, error) {
 	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
@@ -317,7 +301,8 @@ func (s *Service) Queue(ctx context.Context, migrationID string, candidate api.C
 			if cr.Status == api.CandidateRunStatusQueued || cr.Status == api.CandidateRunStatusRunning || cr.Status == api.CandidateRunStatusCompleted {
 				// For running/completed, check whether the workflow still exists.
 				if cr.Status == api.CandidateRunStatusRunning || cr.Status == api.CandidateRunStatusCompleted {
-					if _, err := s.engine.GetStatus(ctx, cr.RunId); err == nil {
+					runID := RunID(migrationID, candidate.Id)
+					if _, err := s.engine.GetStatus(ctx, runID); err == nil {
 						return "", CandidateAlreadyRunError{ID: candidate.Id, Status: string(cr.Status)}
 					}
 					// Workflow gone — fall through to allow re-queueing.
@@ -328,16 +313,10 @@ func (s *Service) Queue(ctx context.Context, migrationID string, candidate api.C
 		}
 	}
 
-	runID := GenerateRunID(m.Id)
+	runID := RunID(migrationID, candidate.Id)
 
-	if err := s.store.StoreRunRecord(ctx, runID, RunRecord{MigrationID: migrationID, Candidate: candidate}); err != nil {
-		return "", fmt.Errorf("store run record: %w", err)
-	}
-	if err := s.store.SetCandidateRun(ctx, migrationID, candidate.Id, api.CandidateRun{RunId: runID, Status: api.CandidateRunStatusQueued}); err != nil {
+	if err := s.store.SetCandidateRun(ctx, migrationID, candidate.Id, api.CandidateRun{Status: api.CandidateRunStatusQueued}); err != nil {
 		return "", fmt.Errorf("set candidate run: %w", err)
-	}
-	if err := s.store.AppendRunID(ctx, migrationID, runID); err != nil {
-		return "", fmt.Errorf("append run ID: %w", err)
 	}
 
 	return runID, nil
@@ -364,36 +343,38 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 
 // Execute starts the Temporal workflow for a previously queued run.
 func (s *Service) Execute(ctx context.Context, runID string) (string, error) {
-	record, err := s.store.GetRunRecord(ctx, runID)
+	migrationID, candidateID, err := ParseRunID(runID)
 	if err != nil {
-		return "", fmt.Errorf("get run record %q: %w", runID, err)
-	}
-	if record == nil {
 		return "", fmt.Errorf("run %q not found", runID)
 	}
 
-	m, err := s.store.Get(ctx, record.MigrationID)
+	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
-		return "", fmt.Errorf("get migration %q: %w", record.MigrationID, err)
+		return "", fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
-		return "", fmt.Errorf("migration %q not found", record.MigrationID)
+		return "", fmt.Errorf("migration %q not found", migrationID)
 	}
 
 	// Guard: run must be in queued state.
 	if m.CandidateRuns != nil {
-		if cr, ok := (*m.CandidateRuns)[record.Candidate.Id]; ok {
+		if cr, ok := (*m.CandidateRuns)[candidateID]; ok {
 			if cr.Status == api.CandidateRunStatusRunning || cr.Status == api.CandidateRunStatusCompleted {
-				return "", CandidateAlreadyRunError{ID: record.Candidate.Id, Status: string(cr.Status)}
+				return "", CandidateAlreadyRunError{ID: candidateID, Status: string(cr.Status)}
 			}
 		}
+	}
+
+	candidate, err := s.findCandidate(ctx, migrationID, candidateID)
+	if err != nil {
+		return "", err
 	}
 
 	regID := m.Id
 	manifest := api.MigrationManifest{
 		MigrationId:    runID,
 		RegistrationId: &regID,
-		Candidates:     []api.Candidate{record.Candidate},
+		Candidates:     []api.Candidate{candidate},
 		Steps:          m.Steps,
 	}
 
@@ -401,9 +382,29 @@ func (s *Service) Execute(ctx context.Context, runID string) (string, error) {
 		return "", fmt.Errorf("start workflow: %w", err)
 	}
 
-	if err := s.store.SetCandidateRun(ctx, record.MigrationID, record.Candidate.Id, api.CandidateRun{RunId: runID, Status: api.CandidateRunStatusRunning}); err != nil {
+	if err := s.store.SetCandidateRun(ctx, migrationID, candidateID, api.CandidateRun{Status: api.CandidateRunStatusRunning}); err != nil {
 		return "", fmt.Errorf("set candidate run: %w", err)
 	}
 
 	return runID, nil
+}
+
+// findCandidate loads the candidate by ID from the candidates store.
+func (s *Service) findCandidate(ctx context.Context, migrationID, candidateID string) (api.Candidate, error) {
+	all, err := s.store.GetCandidates(ctx, migrationID)
+	if err != nil {
+		return api.Candidate{}, fmt.Errorf("get candidates for migration %q: %w", migrationID, err)
+	}
+	for _, c := range all {
+		if c.Id == candidateID {
+			return api.Candidate{
+				Id:       c.Id,
+				Kind:     c.Kind,
+				Metadata: c.Metadata,
+				State:    c.State,
+				Files:    c.Files,
+			}, nil
+		}
+	}
+	return api.Candidate{}, fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
 }

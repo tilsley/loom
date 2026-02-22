@@ -22,7 +22,10 @@ func (h *EnableSyncPrune) Execute(
 ) (*Result, error) {
 	app := appName(req.Candidate)
 	env := (*req.Config)["env"]
-	path := fmt.Sprintf("apps/%s/overlays/%s/application.yaml", app, env)
+	path, ok := gitopsFileForEnv(req.Candidate, env)
+	if !ok {
+		return nil, fmt.Errorf("no gitops file found for env %q in candidate %q", env, app)
+	}
 
 	fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
 	if err != nil {

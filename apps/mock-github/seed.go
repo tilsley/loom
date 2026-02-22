@@ -29,18 +29,24 @@ func seedRepos(s *store) {
 	}
 }
 
+// seedGitopsApp seeds the gitops repo with the new path structure:
+//
+//	src/<team>/<system>/<env>/<cloud>/<namespace>/<app>.yaml
+//
+// Each Application manifest includes the app.kubernetes.io/instance label
+// so the discoverer can group files belonging to the same logical app.
+// A service-monitor is also seeded at a shared path for the disable-resource-prune step.
 func seedGitopsApp(s *store, app string) {
 	const repo = "acme/gitops"
 	if s.files[repo] == nil {
 		s.files[repo] = make(map[string]string)
 	}
 
-	s.files[repo][fmt.Sprintf("apps/%s/base/application.yaml", app)] = baseApplication(app)
-	s.files[repo][fmt.Sprintf("apps/%s/base/service-monitor.yaml", app)] = serviceMonitor(app)
-
 	for env, cfg := range appEnvs[app] {
-		s.files[repo][fmt.Sprintf("apps/%s/overlays/%s/application.yaml", app, env)] =
-			envApplication(app, env, cfg.replicas, cfg.tag)
+		// Path: src/<team>/<system>/<env>/<cloud>/<namespace>/<file>.yaml
+		dir := fmt.Sprintf("src/platform/%s/%s/aws/%s", app, env, app)
+		s.files[repo][dir+"/application.yaml"] = envApplication(app, env, cfg.replicas, cfg.tag)
+		s.files[repo][dir+"/service-monitor.yaml"] = serviceMonitor(app, env)
 	}
 }
 
@@ -51,40 +57,14 @@ func seedAppRepo(s *store, app string) {
 	}
 }
 
-func baseApplication(app string) string {
-	return fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: %s
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://charts.example.com/generic
-    chart: generic-app
-    targetRevision: 1.0.0
-    helm:
-      values: |
-        nameOverride: %s
-        image:
-          repository: acme/%s
-        serviceMonitor:
-          enabled: true
-  destination:
-    server: https://kubernetes.default.svc
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-`, app, app, app)
-}
-
 func envApplication(app, env, replicas, tag string) string {
 	return fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: %s-%s
   namespace: argocd
+  labels:
+    app.kubernetes.io/instance: %s
 spec:
   project: default
   source:
@@ -112,15 +92,15 @@ spec:
     automated:
       prune: true
       selfHeal: true
-`, app, env, replicas, tag, env, app, app, env)
+`, app, env, app, replicas, tag, env, app, app, env)
 }
 
-func serviceMonitor(app string) string {
+func serviceMonitor(app, env string) string {
 	return fmt.Sprintf(`apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: %s
-  namespace: monitoring
+  namespace: %s
 spec:
   selector:
     matchLabels:
@@ -128,7 +108,7 @@ spec:
   endpoints:
     - port: metrics
       interval: 30s
-`, app, app)
+`, app, env, app)
 }
 
 func ciWorkflow() string {

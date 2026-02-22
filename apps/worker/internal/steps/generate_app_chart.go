@@ -44,20 +44,24 @@ serviceMonitor:
   enabled: true
 `, app, app)
 
-	// Per-env values extracted from gitops overlay helm.parameters
-	for _, env := range cfg.Envs {
-		path := fmt.Sprintf("apps/%s/overlays/%s/application.yaml", app, env)
-		fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
-		if err != nil {
-			return nil, fmt.Errorf("get %s: %w", path, err)
+	// Per-env values extracted from the candidate's discovered gitops Application files.
+	// Each env FileGroup (e.g. "dev", "staging", "prod") holds the real file path.
+	if req.Candidate.Files != nil {
+		for _, group := range *req.Candidate.Files {
+			if group.Name == "app-repo" || len(group.Files) == 0 {
+				continue
+			}
+			envPath := group.Files[0].Path
+			fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, envPath)
+			if err != nil {
+				return nil, fmt.Errorf("get %s: %w", envPath, err)
+			}
+			envValues, err := extractEnvValues(fc.Content)
+			if err != nil {
+				return nil, fmt.Errorf("extract values from %s: %w", envPath, err)
+			}
+			files[fmt.Sprintf("charts/%s/values-%s.yaml", app, group.Name)] = envValues
 		}
-
-		envValues, err := extractEnvValues(fc.Content)
-		if err != nil {
-			return nil, fmt.Errorf("extract values from %s: %w", path, err)
-		}
-
-		files[fmt.Sprintf("charts/%s/values-%s.yaml", app, env)] = envValues
 	}
 
 	// OCI publish workflow

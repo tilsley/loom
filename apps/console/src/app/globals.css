@@ -47,6 +47,19 @@
   --color-zinc-100: #18181b;
   --color-zinc-50: #09090b;
 
+  /* Semantic tokens — light equivalents */
+  --color-background: #ffffff;
+  --color-foreground: #09090b;
+  --color-surface: #f4f4f5;
+  --color-surface-raised: #e4e4e7;
+  --color-border: #e4e4e7;
+  --color-border-hover: #d4d4d8;
+  --color-card: #f4f4f5;
+  --color-card-foreground: #18181b;
+  --color-muted: #e4e4e7;
+  --color-muted-foreground: #71717a;
+  --color-input: #e4e4e7;
+
   /* Scrollbar */
   --scrollbar-thumb: #d4d4d8;
   --scrollbar-thumb-hover: #a1a1aa;

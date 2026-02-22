@@ -30,11 +30,11 @@ export default function Error({
         </svg>
       </div>
       <h2 className="text-lg font-semibold text-zinc-100 mb-1">Something went wrong</h2>
-      <p className="text-[13px] text-zinc-500 mb-6 max-w-sm">
+      <p className="text-sm text-zinc-500 mb-6 max-w-sm">
         An unexpected error occurred. You can try again or return to the dashboard.
       </p>
       {process.env.NODE_ENV === "development" && (
-        <pre className="text-[11px] font-mono text-red-400/70 bg-red-500/5 border border-red-500/10 rounded-lg px-4 py-3 mb-6 max-w-lg overflow-auto text-left">
+        <pre className="text-xs font-mono text-red-400/70 bg-red-500/5 border border-red-500/10 rounded-lg px-4 py-3 mb-6 max-w-lg overflow-auto text-left">
           {error.message}
         </pre>
       )}

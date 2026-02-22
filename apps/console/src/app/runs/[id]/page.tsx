@@ -76,11 +76,9 @@ export default function RunDetail() {
     return stopPolling;
   }, [poll, startPolling, stopPolling]);
 
-  // Fetch migration definition for step descriptions.
-  // The run ID format is "{registrationId}-{unixTimestamp}", so we strip the trailing
-  // numeric suffix to recover the registration ID (e.g. "app-chart-migration-1771581227"
-  // → "app-chart-migration"). status.result.migrationId is the run ID, not the reg ID.
-  const registrationId = id.replace(/-\d+$/, "");
+  // Run ID format is "{migrationId}__{candidateId}" — split on "__" to recover the
+  // registration ID. status.result.migrationId is the run ID, not the reg ID.
+  const registrationId = id.split("__")[0] ?? id;
   useEffect(() => {
     getMigration(registrationId)
       .then(setMigration)
@@ -186,23 +184,17 @@ export default function RunDetail() {
         </div>
       ) : (
         <>
-          {/* Header — single line: back link · migration name · targets · run id  [status] */}
+          {/* Header — single line: back link · targets · run id  [status] */}
           <div className="flex items-center gap-2 flex-wrap">
             <Link
-              href={ROUTES.migrations}
+              href={ROUTES.migrationDetail(registrationId)}
               className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Migrations
-            </Link>
-
-            <span className="text-zinc-700 select-none">·</span>
-
-            <span className="text-sm font-medium text-foreground">
               {migration?.name ?? registrationId}
-            </span>
+            </Link>
 
             {candidates.length > 0 && <span className="text-zinc-700 select-none">·</span>}
             {candidates.map((t) => {
@@ -280,7 +272,7 @@ export default function RunDetail() {
                   Steps
                 </h2>
                 {status.result ? (
-                  <span className="text-[11px] font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                  <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
                     {status.result.results.length}
                   </span>
                 ) : null}
@@ -332,7 +324,7 @@ function QueuedRunView({
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const hasDryRun = useRef(false);
 
-  const registrationId = runId.replace(/-\d+$/, "");
+  const registrationId = runId.split("__")[0] ?? runId;
   const team = runInfo.candidate.metadata?.team;
   const appName = runInfo.candidate.id;
   const steps = migration?.steps ?? [];
@@ -383,19 +375,12 @@ function QueuedRunView({
       {/* Header */}
       <div className="flex items-center gap-2 flex-wrap">
         <Link
-          href={ROUTES.migrations}
+          href={ROUTES.migrationDetail(registrationId)}
           className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Migrations
-        </Link>
-        <span className="text-zinc-700 select-none">·</span>
-        <Link
-          href={ROUTES.migrationDetail(registrationId)}
-          className="text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-colors"
-        >
           {migration?.name ?? registrationId}
         </Link>
         <span className="text-zinc-700 select-none">·</span>
@@ -409,9 +394,6 @@ function QueuedRunView({
         </span>
       </div>
 
-      {/* Run ID */}
-      <p className="text-xs font-mono text-zinc-600">{runId}</p>
-
       {/* Steps preview */}
       {steps.length > 0 ? (
         <section className="w-fit min-w-[700px] mx-auto">
@@ -420,20 +402,20 @@ function QueuedRunView({
             <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
               {steps.length}
             </span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
               <svg width="8" height="8" viewBox="0 0 16 16" fill="none">
                 <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
               </svg>
               Dry run
             </span>
-            {dryRunLoading ? <span className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
+            {dryRunLoading ? <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
                 <svg className="animate-spin w-3 h-3" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
                 </svg>
                 Simulating…
               </span> : null}
-            {dryRunError ? <span className="text-[11px] text-red-400">Dry run failed</span> : null}
+            {dryRunError ? <span className="text-xs text-red-400">Dry run failed</span> : null}
           </div>
           <div className="border border-zinc-800/80 rounded-lg divide-y divide-zinc-800/60">
             {steps.map((step, i) => {
@@ -521,7 +503,7 @@ function QueuedRunView({
                   {(dryRunLoading && !stepDryRun) || stepDryRun ? (
                     <div className="ml-7 space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-medium text-zinc-600 uppercase tracking-widest">
+                        <span className="text-xs font-medium text-zinc-600 uppercase tracking-widest">
                           Expected changes
                         </span>
                         <div className="flex-1 h-px bg-zinc-800/80" />
@@ -638,7 +620,7 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
   const collapsed = collapseContext(lines);
 
   return (
-    <div className="border border-zinc-800/60 rounded-md overflow-hidden text-[11px] font-mono">
+    <div className="border border-zinc-800/60 rounded-md overflow-hidden text-xs font-mono">
       {/* File header */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 border-b border-zinc-800/60">
         <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="text-zinc-500 shrink-0">
@@ -646,7 +628,7 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
         </svg>
         <span className="text-zinc-300 flex-1 truncate">{diff.path}</span>
         <span className="text-zinc-600 shrink-0">{diff.repo}</span>
-        {isNew ? <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        {isNew ? <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             new
           </span> : null}
       </div>
@@ -678,18 +660,18 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
 function DryRunStepResult({ result }: { result: { stepName: string; skipped: boolean; error?: string; files?: FileDiff[] } }) {
   if (result.skipped) {
     return (
-      <div className="ml-7 text-[11px] text-zinc-600 italic">Skipped — handled by another worker</div>
+      <div className="ml-7 text-xs text-zinc-600 italic">Skipped — handled by another worker</div>
     );
   }
   if (result.error) {
     return (
-      <div className="ml-7 text-[11px] font-mono text-red-400 bg-red-500/8 border border-red-500/20 rounded-md px-3 py-2">
+      <div className="ml-7 text-xs font-mono text-red-400 bg-red-500/8 border border-red-500/20 rounded-md px-3 py-2">
         {result.error}
       </div>
     );
   }
   if (!result.files?.length) {
-    return <div className="ml-7 text-[11px] text-zinc-600 italic">No file changes</div>;
+    return <div className="ml-7 text-xs text-zinc-600 italic">No file changes</div>;
   }
   return (
     <div className="ml-7 space-y-2">
@@ -722,9 +704,9 @@ function StatCard({
 
   return (
     <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-lg px-4 py-3.5">
-      <div className="text-[11px] text-zinc-500 uppercase tracking-widest mb-1.5">{label}</div>
+      <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1.5">{label}</div>
       <div className={`text-2xl font-mono font-semibold ${valueColor}`}>{value}</div>
-      {Boolean(sub) && <div className="text-[11px] text-zinc-600 font-mono mt-0.5">{sub}</div>}
+      {Boolean(sub) && <div className="text-xs text-zinc-600 font-mono mt-0.5">{sub}</div>}
     </div>
   );
 }

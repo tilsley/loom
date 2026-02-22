@@ -20,10 +20,10 @@ export function RoleIndicator() {
       <span
         className={cn("w-1.5 h-1.5 rounded-full shrink-0", isAdmin ? "bg-teal-400" : "bg-zinc-500")}
       />
-      <span className={cn("text-[12px] font-medium", isAdmin ? "text-teal-400" : "text-zinc-400")}>
+      <span className={cn("text-xs font-medium", isAdmin ? "text-teal-400" : "text-zinc-400")}>
         {role}
       </span>
-      <span className="text-[10px] text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+      <span className="text-xs text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
         switch
       </span>
     </button>

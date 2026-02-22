@@ -33,13 +33,9 @@ type MigrationStore interface {
 	Get(ctx context.Context, id string) (*api.RegisteredMigration, error)
 	List(ctx context.Context) ([]api.RegisteredMigration, error)
 	Delete(ctx context.Context, id string) error
-	AppendRunID(ctx context.Context, id string, runID string) error
 	AppendCancelledAttempt(ctx context.Context, migrationID string, attempt api.CancelledAttempt) error
 	SetCandidateRun(ctx context.Context, migrationID, candidateID string, run api.CandidateRun) error
 	DeleteCandidateRun(ctx context.Context, migrationID, candidateID string) error
 	SaveCandidates(ctx context.Context, migrationID string, candidates []api.Candidate) error
 	GetCandidates(ctx context.Context, migrationID string) ([]api.CandidateWithStatus, error)
-	StoreRunRecord(ctx context.Context, runId string, record RunRecord) error
-	GetRunRecord(ctx context.Context, runId string) (*RunRecord, error)
-	DeleteRunRecord(ctx context.Context, runId string) error
 }

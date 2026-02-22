@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -226,6 +228,18 @@ func (s *store) getPRFiles(owner, repo string, number int) map[string]string {
 	return s.prFiles[prKey]
 }
 
+func (s *store) getAllFiles(owner, repo string) map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	key := owner + "/" + repo
+	result := make(map[string]string)
+	for path, content := range s.files[key] {
+		result[path] = content
+	}
+	return result
+}
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	s := newStore()
@@ -349,6 +363,34 @@ func registerAPIRoutes(r *gin.Engine, s *store, log *slog.Logger) {
 		owner := c.Param("owner")
 		repo := c.Param("repo")
 		c.JSON(http.StatusOK, s.list(owner, repo))
+	})
+
+	// Tarball endpoint — returns the full repo as a gzip-compressed tar archive.
+	// Mirrors GitHub's GET /repos/:owner/:repo/tarball/:ref endpoint.
+	// The archive wraps all files under a single top-level directory named
+	// "{owner}-{repo}-main/" so clients can strip the prefix uniformly.
+	r.GET("/repos/:owner/:repo/tarball/:ref", func(c *gin.Context) {
+		owner := c.Param("owner")
+		repo := c.Param("repo")
+		files := s.getAllFiles(owner, repo)
+
+		c.Header("Content-Type", "application/x-gzip")
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s-%s-main.tar.gz", owner, repo))
+
+		prefix := fmt.Sprintf("%s-%s-main/", owner, repo)
+		gw := gzip.NewWriter(c.Writer)
+		tw := tar.NewWriter(gw)
+		for path, content := range files {
+			hdr := &tar.Header{
+				Name: prefix + path,
+				Mode: 0644,
+				Size: int64(len(content)),
+			}
+			_ = tw.WriteHeader(hdr)
+			_, _ = tw.Write([]byte(content))
+		}
+		_ = tw.Close()
+		_ = gw.Close()
 	})
 
 	// File content endpoint (GitHub-compatible shape).

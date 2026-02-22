@@ -52,8 +52,7 @@ func MigrationOrchestrator(
 		}
 		input := UpdateTargetRunStatusInput{
 			RegistrationID: *manifest.RegistrationId,
-			CandidateID:  manifest.Candidates[0].Id,
-			RunID:          manifest.MigrationId,
+			CandidateID:    manifest.Candidates[0].Id,
 			Status:         status,
 		}
 		fut := workflow.ExecuteActivity(actCtx, "UpdateTargetRunStatus", input)

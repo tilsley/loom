@@ -21,26 +21,33 @@ func (h *CleanupCommon) Execute(
 	req api.DispatchStepRequest,
 ) (*Result, error) {
 	app := appName(req.Candidate)
-	path := fmt.Sprintf("apps/%s/base/application.yaml", app)
 
-	fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
-	if err != nil {
-		return nil, fmt.Errorf("get %s: %w", path, err)
-	}
-
-	root, err := yamlutil.ParseNode(fc.Content)
-	if err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-
-	helm, err := yamlutil.GetMappingNode(root, "spec", "source", "helm")
-	if err == nil {
-		yamlutil.DeleteKey(helm, "values")
-	}
-
-	out, err := yamlutil.MarshalNode(root)
-	if err != nil {
-		return nil, err
+	// Remove helm.values from every env Application file. Each env FileGroup
+	// (e.g. "dev", "staging", "prod") holds the real discovered file path.
+	prFiles := make(map[string]string)
+	if req.Candidate.Files != nil {
+		for _, group := range *req.Candidate.Files {
+			if group.Name == "app-repo" || len(group.Files) == 0 {
+				continue
+			}
+			path := group.Files[0].Path
+			fc, err := gr.GetContents(ctx, cfg.GitopsOwner, cfg.GitopsRepo, path)
+			if err != nil {
+				return nil, fmt.Errorf("get %s: %w", path, err)
+			}
+			root, err := yamlutil.ParseNode(fc.Content)
+			if err != nil {
+				return nil, fmt.Errorf("parse %s: %w", path, err)
+			}
+			if helm, err := yamlutil.GetMappingNode(root, "spec", "source", "helm"); err == nil {
+				yamlutil.DeleteKey(helm, "values")
+			}
+			out, err := yamlutil.MarshalNode(root)
+			if err != nil {
+				return nil, err
+			}
+			prFiles[path] = out
+		}
 	}
 
 	return &Result{
@@ -48,10 +55,10 @@ func (h *CleanupCommon) Execute(
 		Repo:  cfg.GitopsRepo,
 		Title: fmt.Sprintf("[%s] Clean up common helm values for %s", req.MigrationId, app),
 		Body: fmt.Sprintf(
-			"Remove old `helm.values` from the base application for `%s`. Values are now in the app chart.",
+			"Remove old `helm.values` from all env Application manifests for `%s`. Values are now in the app chart.",
 			app,
 		),
 		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
-		Files:  map[string]string{path: out},
+		Files:  prFiles,
 	}, nil
 }

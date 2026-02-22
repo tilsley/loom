@@ -2,7 +2,7 @@ package migrations
 
 import (
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/tilsley/loom/pkg/api"
 )
@@ -55,14 +55,19 @@ func PROpenedEventName(stepName string, candidate api.Candidate) string {
 	return fmt.Sprintf("pr-opened:%s:%s", stepName, candidate.Id)
 }
 
-// GenerateRunID creates a human-readable, sortable run ID from a migration ID.
-func GenerateRunID(migrationID string) string {
-	return fmt.Sprintf("%s-%d", migrationID, time.Now().Unix())
+const runIDSep = "__"
+
+// RunID returns the deterministic run ID for a migration+candidate pair.
+// Since each candidate runs at most once per migration, the ID is stable and recoverable.
+func RunID(migrationID, candidateID string) string {
+	return migrationID + runIDSep + candidateID
 }
 
-// RunRecord holds the information needed to execute a queued run.
-// It is stored in the state store and looked up when Execute is called.
-type RunRecord struct {
-	MigrationID string        `json:"migrationId"`
-	Candidate   api.Candidate `json:"candidate"`
+// ParseRunID splits a run ID back into its migrationID and candidateID components.
+func ParseRunID(runID string) (migrationID, candidateID string, err error) {
+	parts := strings.SplitN(runID, runIDSep, 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid run ID %q: expected format <migrationId>_<candidateId>", runID)
+	}
+	return parts[0], parts[1], nil
 }

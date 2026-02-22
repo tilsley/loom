@@ -12,8 +12,7 @@ import (
 // UpdateTargetRunStatusInput is the input for the UpdateTargetRunStatus activity.
 type UpdateTargetRunStatusInput struct {
 	RegistrationID string `json:"registrationId"`
-	CandidateID  string `json:"candidateId"`
-	RunID          string `json:"runId"`
+	CandidateID    string `json:"candidateId"`
 	Status         string `json:"status"`
 }
 
@@ -70,7 +69,6 @@ func (a *Activities) ResetCandidateRun(ctx context.Context, input ResetCandidate
 // UpdateTargetRunStatus updates the candidate run status in the migration store.
 func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTargetRunStatusInput) error {
 	run := api.CandidateRun{
-		RunId:  input.RunID,
 		Status: api.CandidateRunStatus(input.Status),
 	}
 	if err := a.store.SetCandidateRun(ctx, input.RegistrationID, input.CandidateID, run); err != nil {

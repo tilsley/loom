@@ -25,7 +25,7 @@ export function StatusBadge({ status }: { status: string }) {
   const c = config[status] ?? config.PENDING;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono font-medium border ${c.bg} ${c.text}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium border ${c.bg} ${c.text}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {status}

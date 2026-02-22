@@ -22,13 +22,12 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
   const [groupBy, setGroupBy] = useState<string | null>(null);
 
   const counts = useMemo(() => {
-    const c = { running: 0, completed: 0, failed: 0, not_started: 0, queued: 0 };
+    const c = { running: 0, completed: 0, not_started: 0, queued: 0 };
     for (const t of migration.candidates) {
       const run = migration.candidateRuns?.[t.id];
       if (!run) c.not_started++;
       else if (run.status === "completed") c.completed++;
       else if (run.status === "running") c.running++;
-      else if (run.status === "failed") c.failed++;
       else if (run.status === "queued") c.queued++;
       else c.not_started++;
     }
@@ -87,7 +86,7 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
   const hasMore = filtered.length > visibleCount;
 
   const columnHeader = (
-    <div className="grid grid-cols-[1fr_100px_1fr_80px] gap-2 px-3 text-[10px] text-zinc-600 uppercase tracking-widest font-medium">
+    <div className="grid grid-cols-[1fr_100px_1fr_80px] gap-2 px-4 text-xs text-zinc-600 uppercase tracking-widest font-medium">
       <span>Candidate</span>
       <span>Status</span>
       <span>Run</span>
@@ -143,7 +142,7 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
                 <button
                   key={key}
                   onClick={() => setGroupBy(isActive ? null : key)}
-                  className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded-full border transition-all ${
+                  className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-1 rounded-full border transition-all ${
                     isActive
                       ? "bg-teal-500/10 text-teal-400 border-teal-500/30"
                       : "text-zinc-500 bg-transparent border-zinc-800/60 hover:border-zinc-700 hover:text-zinc-300"
@@ -168,15 +167,15 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
       {groups !== null ? (
         <div className="space-y-5">
           {groups.length === 0 ? (
-            <div className="text-center py-8 text-[13px] text-zinc-600">
+            <div className="text-center py-8 text-sm text-zinc-600">
               No candidates match the current filter.
             </div>
           ) : (
             groups.map(([groupValue, candidates]) => (
               <div key={groupValue}>
                 <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-[12px] font-medium text-zinc-300">{groupValue}</span>
-                  <span className="text-[11px] text-zinc-600">
+                  <span className="text-xs font-medium text-zinc-300">{groupValue}</span>
+                  <span className="text-xs text-zinc-600">
                     {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -187,9 +186,10 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
                       key={c.id}
                       candidate={c}
                       candidateRun={migration.candidateRuns?.[c.id]}
+                      runId={migration.candidateRuns?.[c.id] ? `${migration.id}__${c.id}` : undefined}
                       onQueue={onQueue}
                       onDequeue={onDequeue}
-                      isRunning={runningCandidate === c.id || runningCandidate === migration.candidateRuns?.[c.id]?.runId}
+                      isRunning={runningCandidate === c.id || runningCandidate === `${migration.id}__${c.id}`}
                     />
                   ))}
                 </div>
@@ -208,15 +208,16 @@ export function CandidateTable({ migration, onQueue, onDequeue, runningCandidate
                 key={t.id}
                 candidate={t}
                 candidateRun={migration.candidateRuns?.[t.id]}
+                runId={migration.candidateRuns?.[t.id] ? `${migration.id}__${t.id}` : undefined}
                 onQueue={onQueue}
                 onDequeue={onDequeue}
-                isRunning={runningCandidate === t.id || runningCandidate === migration.candidateRuns?.[t.id]?.runId}
+                isRunning={runningCandidate === t.id || runningCandidate === `${migration.id}__${t.id}`}
               />
             ))}
           </div>
 
           {visible.length === 0 && (
-            <div className="text-center py-8 text-[13px] text-zinc-600">
+            <div className="text-center py-8 text-sm text-zinc-600">
               No candidates match the current filter.
             </div>
           )}

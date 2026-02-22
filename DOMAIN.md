@@ -10,7 +10,7 @@ defined here.
 
 ### Migration
 
-A **migration** is a registered definition describing *how* to move a set of targets from one
+A **migration** is a registered definition describing *how* to move a set of candidates from one
 state to another. It is authored by a worker and registered with the server — either via
 pub/sub announcement on startup, or directly via the API.
 
@@ -18,16 +18,16 @@ A migration has:
 - A unique **id** (deterministic slug, e.g. `app-chart-migration`)
 - A human **name** and optional **description**
 - An ordered list of **steps** defining the work to be done
-- A list of **run IDs** recording its execution history
 - A map of **candidate runs** tracking per-candidate run state
+- An optional list of **cancelled attempts** (audit log)
 
-A migration is not tied to a specific set of targets — it is a reusable definition. Targets
+A migration is not tied to a specific set of candidates — it is a reusable definition. Candidates
 are discovered separately (see Candidate).
 
 ### Step
 
 A **step** is a single unit of work within a migration. Steps are executed sequentially per
-target by a **worker app**.
+candidate by a **worker app**.
 
 A step has:
 - A **name** (unique within the migration)
@@ -42,7 +42,7 @@ A **candidate** is a target discovered by a worker as needing migration. Discove
 performed by a `Discoverer` implementation that scans a source of truth (e.g. a GitOps repo).
 
 A candidate has:
-- An **id** (the primary key — logical name of the thing being migrated, e.g. `billing-api`)
+- An **id** (the primary key — stable slug, e.g. `billing-api`)
 - An optional **kind** (what type of thing it is, e.g. `application`, `kafka-topic` — free-form string set by the discoverer)
 - Optional **metadata** (stable descriptive values set by the discoverer, e.g. `repoName`, `team`, `gitopsPath`)
 - Optional **state** (observed values at discovery time, e.g. `currentChart`, `currentVersion`)
@@ -61,15 +61,16 @@ and is not stored on the candidate itself.
 
 ### Run
 
-A **run** is a single execution of a migration against one candidate (target). A run begins
-in a `queued` state with no active workflow; once executed, it is tracked as a Temporal
-workflow instance.
+A **run** represents the execution of a migration against one candidate. Each candidate has at
+most one run per migration — a migration is intended to be run once.
 
 A run has:
-- A **run ID** (human-readable, sortable: `{migrationId}-{unixTimestamp}`)
-- A **candidate** (the candidate being migrated, captured at queue time)
-- A **status** (see Run Status below)
-- A **migration ID** (`migrationId` — back-reference to the parent migration)
+- A **run ID** (deterministic: `{migrationId}__{candidateId}`, e.g. `app-chart-migration__billing-api`)
+- A **status** (see Candidate Status below)
+
+The run ID is fully recoverable from the migration ID and candidate ID — no separate lookup
+record is needed. Temporal uses it as the workflow instance ID, which naturally prevents
+duplicate runs for the same candidate.
 
 ---
 
@@ -77,39 +78,38 @@ A run has:
 
 ### Candidate Status
 
-Tracks where a candidate sits in the migration lifecycle.
+Tracks where a candidate sits in the migration lifecycle. There is no `failed` status at the
+candidate level — if a step fails, the candidate is reset to `not_started` and can be
+re-queued.
 
-| Status      | Meaning                                                      |
-|-------------|--------------------------------------------------------------|
-| `not_started`   | Discovered, no run has been created yet                      |
-| `queued`    | A run has been created and is waiting to be executed         |
-| `running`   | The run's workflow is actively executing                     |
-| `completed` | The run finished successfully                                |
-| `failed`    | The run finished with an error                               |
+| Status        | Meaning                                                      |
+|---------------|--------------------------------------------------------------|
+| `not_started` | Discovered, not yet queued                                   |
+| `queued`      | Queued for execution (dry run visible, workflow not started) |
+| `running`     | The workflow is actively executing                           |
+| `completed`   | The workflow finished successfully                           |
 
-### Run Status
+### Cancelled Attempts
 
-Mirrors candidate status for the run itself (as stored in Temporal / the state store).
+When a running or queued candidate is cancelled, a `CancelledAttempt` record is appended to
+the migration. The candidate resets to `not_started`. Cancelled attempts are not surfaced on
+the candidate row — they are accessible via the migration detail (admin view).
 
-| Status      | Meaning                                          |
-|-------------|--------------------------------------------------|
-| `queued`    | Run record created, Temporal workflow not started |
-| `running`   | Temporal workflow is executing                   |
-| `completed` | Temporal workflow finished successfully          |
-| `failed`    | Temporal workflow finished with an error         |
+A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
 
 ---
 
 ## Actions
 
-| Action        | Actor   | Description                                                        |
-|---------------|---------|--------------------------------------------------------------------|
-| **Announce**  | Worker  | Register or update a migration definition via pub/sub            |
-| **Discover**  | Worker  | Scan a source of truth and submit a candidate list to the server |
-| **Queue**     | Console | Create a run instance for a candidate without starting execution |
-| **Dequeue**   | Console | Remove a queued run, returning the candidate to not_started          |
-| **Execute**   | Console | Start the Temporal workflow for a queued run                     |
-| **Complete**  | Worker  | Signal a step as done (success or failure) via the event endpoint|
+| Action        | Actor   | Description                                                         |
+|---------------|---------|---------------------------------------------------------------------|
+| **Announce**  | Worker  | Register or update a migration definition via pub/sub             |
+| **Discover**  | Worker  | Scan a source of truth and submit a candidate list to the server  |
+| **Queue**     | Console | Reserve a run for a candidate; enables dry-run preview            |
+| **Dequeue**   | Console | Remove a queued run, returning the candidate to `not_started`     |
+| **Execute**   | Console | Start the Temporal workflow for a queued run                      |
+| **Cancel**    | Console | Stop a running workflow; resets candidate to `not_started` and records a `CancelledAttempt` |
+| **Complete**  | Worker  | Signal a step as done (success or failure) via the event endpoint |
 
 ---
 
@@ -122,16 +122,15 @@ Mirrors candidate status for the run itself (as stored in Temporal / the state s
                       │                               │
               Discover candidates ──────────────► [not_started]
                                                       │
-                                               Queue run ──► [queued] ──► Dequeue ──► [not_started]
-                                                                │
-                                                          Execute run
-                                                                │
-                                                           [running]
-                                                                │
-                                                      Steps execute...
-                                                                │
-                                                           ┌────┴────┐
-                                                      [completed] [failed]
+                                         Queue ──► [queued] ──► Dequeue ──► [not_started]
+                                                       │
+                                                  Execute
+                                                       │
+                                                  [running] ──► Cancel ──► [not_started]
+                                                       │                  (+ CancelledAttempt)
+                                                  Steps execute...
+                                                       │
+                                                  [completed]
 ```
 
 ---
@@ -139,29 +138,30 @@ Mirrors candidate status for the run itself (as stored in Temporal / the state s
 ## Key Relationships
 
 ```
-Migration 1 ──── * Step
-Migration 1 ──── * Candidate (via discovery)
-Migration 1 ──── * Run (via execution history)
-Candidate  1 ──── 0..1 Run (at a point in time)
-Run        1 ──── 1 Candidate (id + kind + metadata at time of queuing)
-Run        1 ──── * StepResult (accumulated as steps complete)
+Migration  1 ──── * Step
+Migration  1 ──── * Candidate (via discovery)
+Migration  1 ──── * CancelledAttempt (audit log)
+Candidate  1 ──── 0..1 CandidateRun (current state only)
+CandidateRun     holds: status
+Run ID           computed: {migrationId}__{candidateId}
 ```
 
 ---
 
 ## Naming Conventions
 
-| Concept            | Code (Go)              | API (JSON)         | UI (Console)       |
-|--------------------|------------------------|--------------------|--------------------|
-| Migration id       | `migration.Id`         | `id`               | ID                 |
-| Candidate          | `api.Candidate`        | `candidate`        | Candidate          |
-| Candidate id       | `candidate.Id`         | `id`               | (displayed as-is)  |
-| Candidate kind     | `candidate.Kind`       | `kind`             | —                  |
-| GitHub owner/repo  | `metadata["repoName"]` | `metadata.repoName`| —                  |
-| Run                | `runId` / `CandidateRun` | `runId`          | Run                |
-| Run migration ID   | `record.MigrationID`   | `migrationId`      | —                  |
-| Queue a run        | `service.Queue()`      | `POST .../queue`   | "Queue"            |
-| Dequeue a run      | `service.Dequeue()`    | `DELETE .../dequeue` | "Remove from queue" |
-| Execute a run      | `service.Execute()`    | `POST .../execute` | "Execute"          |
-| Step               | `api.StepDefinition`   | `step`             | Step               |
-| Worker app         | `step.WorkerApp`       | `workerApp`        | Worker             |
+| Concept            | Code (Go)              | API (JSON)           | UI (Console)         |
+|--------------------|------------------------|----------------------|----------------------|
+| Migration id       | `migration.Id`         | `id`                 | ID                   |
+| Candidate          | `api.Candidate`        | `candidate`          | Candidate            |
+| Candidate id       | `candidate.Id`         | `id`                 | (displayed as-is)    |
+| Candidate kind     | `candidate.Kind`       | `kind`               | —                    |
+| GitHub owner/repo  | `metadata["repoName"]` | `metadata.repoName`  | —                    |
+| Run ID             | `RunID(mId, cId)`      | `runId`              | Run                  |
+| Candidate run      | `api.CandidateRun`     | `candidateRuns[id]`  | —                    |
+| Queue a run        | `service.Queue()`      | `POST .../queue`     | "Queue"              |
+| Dequeue a run      | `service.Dequeue()`    | `DELETE .../dequeue` | "Remove from queue"  |
+| Execute a run      | `service.Execute()`    | `POST .../execute`   | "Execute"            |
+| Cancel a run       | `service.Cancel()`     | `POST .../cancel`    | "Cancel"             |
+| Step               | `api.StepDefinition`   | `step`               | Step                 |
+| Worker app         | `step.WorkerApp`       | `workerApp`          | Worker               |
