@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -298,44 +298,6 @@ export default function RunDetail() {
   );
 }
 
-const FILE_ICON = (
-  <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 opacity-50">
-    <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z" />
-  </svg>
-);
-
-function fileStatusProps(status: "new" | "modified" | "deleted" | null): {
-  icon: React.ReactNode;
-  color: string;
-  tooltip: string;
-} {
-  switch (status) {
-    case "new":
-      return {
-        icon: <span className="font-bold leading-none">+</span>,
-        color: "text-emerald-400",
-        tooltip: "New file",
-      };
-    case "deleted":
-      return {
-        icon: <span className="font-bold leading-none">−</span>,
-        color: "text-red-400",
-        tooltip: "Deleted",
-      };
-    case "modified":
-      return {
-        icon: <span className="font-bold leading-none">~</span>,
-        color: "text-amber-400",
-        tooltip: "Modified",
-      };
-    default:
-      return {
-        icon: FILE_ICON,
-        color: "text-zinc-500",
-        tooltip: "Will be changed",
-      };
-  }
-}
 
 function QueuedRunView({
   runInfo,
@@ -452,10 +414,6 @@ function QueuedRunView({
           </div>
           <div className="border border-zinc-800/80 rounded-lg divide-y divide-zinc-800/60">
             {steps.map((step, i) => {
-              const repoName = runInfo.candidate.metadata?.repoName ?? runInfo.candidate.id;
-              const files = (step.files ?? []).map((url) =>
-                url.replace(/\{repo\}/g, repoName).replace(/\{appName\}/g, appName),
-              );
               const config = step.config ? Object.entries(step.config) : [];
               const instructions = step.config?.instructions;
               const otherConfig = config.filter(([k]) => k !== "instructions");
@@ -479,46 +437,6 @@ function QueuedRunView({
                   {/* Description */}
                   {Boolean(step.description) && (
                     <p className="text-sm text-zinc-400 ml-7">{step.description}</p>
-                  )}
-
-                  {/* Files */}
-                  {files.length > 0 && (
-                    <div className="ml-7 flex flex-wrap gap-x-4 gap-y-1">
-                      {files.map((url, fi) => {
-                        const label = url.split("/blob/main/").pop() ?? url;
-                        const match = url.match(/github\.com\/(.+?)\/blob\/main\/(.+)/);
-                        let fileStatus: "new" | "modified" | "deleted" | null = null;
-                        if (match && stepDryRun?.files) {
-                          const found = stepDryRun.files.find(
-                            (d) => d.repo === match[1] && d.path === match[2],
-                          );
-                          if (found) fileStatus = (found.status as unknown) as typeof fileStatus;
-                        }
-                        const { icon, color, tooltip } = fileStatusProps(fileStatus);
-                        return (
-                          <span
-                            key={fi}
-                            className={`relative group inline-flex items-center gap-1.5 text-xs font-mono ${color} ${fileStatus ? "cursor-help" : ""}`}
-                          >
-                            {icon}
-                            <span className={fileStatus ? "group-hover:underline decoration-dotted underline-offset-2" : ""}>
-                              {label}
-                            </span>
-                            {fileStatus ? (
-                              <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                <span className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 border border-zinc-700/50 text-zinc-100 text-xs whitespace-nowrap shadow-xl">
-                                  {icon}
-                                  {tooltip}
-                                  {/* Caret */}
-                                  <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-[5px] border-transparent border-t-zinc-700/50" />
-                                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-[4px] border-transparent border-t-zinc-900" />
-                                </span>
-                              </span>
-                            ) : null}
-                          </span>
-                        );
-                      })}
-                    </div>
                   )}
 
                   {/* Instructions (manual-review steps) */}
