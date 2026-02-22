@@ -19,11 +19,6 @@ type DirEntry struct {
 type PullRequest struct {
 	Number  int    `json:"number"`
 	HTMLURL string `json:"html_url"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	Head    string `json:"head"`
-	Base    string `json:"base"`
-	State   string `json:"state"`
 }
 
 // CreatePRRequest is the request body for creating a pull request.
@@ -38,6 +33,5 @@ type CreatePRRequest struct {
 // Client is the port that steps and discovery depend on to interact with a git repository host.
 type Client interface {
 	GetContents(ctx context.Context, owner, repo, path string) (*FileContent, error)
-	ListDir(ctx context.Context, owner, repo, path string) ([]DirEntry, error)
 	CreatePR(ctx context.Context, owner, repo string, req CreatePRRequest) (*PullRequest, error)
 }

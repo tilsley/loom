@@ -53,37 +53,6 @@ func (m *InMem) GetContents(_ context.Context, owner, repo, path string) (*gitre
 	return &gitrepo.FileContent{Path: path, Content: content}, nil
 }
 
-// ListDir returns the immediate children of dirPath.
-func (m *InMem) ListDir(_ context.Context, owner, repo, dirPath string) ([]gitrepo.DirEntry, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	prefix := owner + "/" + repo + "/" + dirPath + "/"
-	seen := make(map[string]bool)
-	var entries []gitrepo.DirEntry
-	for key := range m.files {
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-		rest := key[len(prefix):]
-		parts := strings.SplitN(rest, "/", 2)
-		name := parts[0]
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		entType := "file"
-		if len(parts) > 1 {
-			entType = "dir"
-		}
-		entries = append(entries, gitrepo.DirEntry{
-			Name: name,
-			Path: dirPath + "/" + name,
-			Type: entType,
-		})
-	}
-	return entries, nil
-}
-
 // ReadAll returns all files in the in-memory store for the given repo.
 // It satisfies gitrepo.RepoReader for use in discovery unit tests.
 func (m *InMem) ReadAll(_ context.Context, owner, repo string) (map[string]string, error) {
@@ -109,11 +78,6 @@ func (m *InMem) CreatePR(_ context.Context, owner, repo string, req gitrepo.Crea
 	pr := gitrepo.PullRequest{
 		Number:  m.nextN,
 		HTMLURL: fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, m.nextN),
-		Title:   req.Title,
-		Body:    req.Body,
-		Head:    req.Head,
-		Base:    req.Base,
-		State:   "open",
 	}
 	m.prs = append(m.prs, pr)
 	m.nextN++

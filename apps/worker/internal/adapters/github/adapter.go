@@ -45,23 +45,6 @@ func (a *Adapter) GetContents(ctx context.Context, owner, repo, path string) (*g
 	return &gitrepo.FileContent{Path: path, Content: content}, nil
 }
 
-// ListDir returns the immediate children of dirPath.
-func (a *Adapter) ListDir(ctx context.Context, owner, repo, dirPath string) ([]gitrepo.DirEntry, error) {
-	_, dir, _, err := a.gh.Repositories.GetContents(ctx, owner, repo, dirPath, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list dir %s/%s/%s: %w", owner, repo, dirPath, err)
-	}
-	entries := make([]gitrepo.DirEntry, 0, len(dir))
-	for _, e := range dir {
-		entries = append(entries, gitrepo.DirEntry{
-			Name: e.GetName(),
-			Path: e.GetPath(),
-			Type: e.GetType(), // "file" or "dir"
-		})
-	}
-	return entries, nil
-}
-
 // CreatePR creates a branch, commits the provided files onto it, and opens a
 // pull request. This is the full Git Data API flow required by real GitHub.
 func (a *Adapter) CreatePR(ctx context.Context, owner, repo string, req gitrepo.CreatePRRequest) (*gitrepo.PullRequest, error) {
@@ -129,11 +112,6 @@ func (a *Adapter) CreatePR(ctx context.Context, owner, repo string, req gitrepo.
 	return &gitrepo.PullRequest{
 		Number:  pr.GetNumber(),
 		HTMLURL: pr.GetHTMLURL(),
-		Title:   pr.GetTitle(),
-		Body:    pr.GetBody(),
-		Head:    pr.GetHead().GetRef(),
-		Base:    pr.GetBase().GetRef(),
-		State:   pr.GetState(),
 	}, nil
 }
 

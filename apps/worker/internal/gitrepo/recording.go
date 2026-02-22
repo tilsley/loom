@@ -42,23 +42,13 @@ func (r *RecordingClient) GetContents(ctx context.Context, owner, repo, path str
 	return fc, nil
 }
 
-// ListDir forwards to the real client unchanged.
-func (r *RecordingClient) ListDir(ctx context.Context, owner, repo, path string) ([]DirEntry, error) {
-	return r.real.ListDir(ctx, owner, repo, path)
-}
-
 // CreatePR returns a fake pull request without making any network call.
 // The files the step would have committed are available via the CreatePRRequest
 // passed by the step handler — the dryrun.Runner captures them from the Result.
-func (r *RecordingClient) CreatePR(_ context.Context, owner, repo string, req CreatePRRequest) (*PullRequest, error) {
+func (r *RecordingClient) CreatePR(_ context.Context, owner, repo string, _ CreatePRRequest) (*PullRequest, error) {
 	return &PullRequest{
 		Number:  1,
 		HTMLURL: "https://github.com/" + owner + "/" + repo + "/pull/1",
-		Title:   req.Title,
-		Body:    req.Body,
-		Head:    req.Head,
-		Base:    req.Base,
-		State:   "open",
 	}, nil
 }
 

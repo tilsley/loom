@@ -16,9 +16,8 @@ import (
 type WebhookPayload struct {
 	Action      string `json:"action"`
 	PullRequest struct {
-		Number  int    `json:"number"`
-		Merged  bool   `json:"merged"`
-		HTMLURL string `json:"html_url"`
+		Number int  `json:"number"`
+		Merged bool `json:"merged"`
 	} `json:"pull_request"`
 	Repository struct {
 		FullName string `json:"full_name"`
