@@ -35,13 +35,6 @@ type WorkflowStatus struct {
 	Output        []byte // Raw JSON of the workflow result (if finished)
 }
 
-// MigrationStatus is the service-level view of a running or finished migration.
-type MigrationStatus struct {
-	InstanceID    string
-	RuntimeStatus string
-	Result        *api.MigrationResult
-}
-
 // StepEventName returns the deterministic event name the workflow waits on
 // for a given step+candidate combination. Workers receive this in DispatchStepRequest.EventName
 // and the workflow listens for it via WaitForExternalEvent.

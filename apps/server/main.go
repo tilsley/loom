@@ -109,8 +109,7 @@ func main() {
 
 	// --- Service + HTTP ---
 
-	githubOrg := os.Getenv("GITHUB_ORG")
-	svc := migrations.NewService(engine, store, dryRunner, githubOrg)
+	svc := migrations.NewService(engine, store, dryRunner)
 
 	router := gin.New()
 	router.Use(gin.Recovery(), otelgin.Middleware("loom-server"))

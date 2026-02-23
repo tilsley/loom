@@ -8,9 +8,9 @@ import {
   getMigration,
   getCandidates,
   dryRun,
-  executeRun,
+  startRun,
   ConflictError,
-  type RegisteredMigration,
+  type Migration,
   type Candidate,
   type DryRunResult,
   type FileDiff,
@@ -22,7 +22,7 @@ export default function PreviewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [migration, setMigration] = useState<RegisteredMigration | null>(null);
+  const [migration, setMigration] = useState<Migration | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
@@ -48,7 +48,6 @@ export default function PreviewPage() {
           id: found.id,
           kind: found.kind,
           metadata: found.metadata,
-          state: found.state,
           files: found.files,
         };
         setCandidate(c);
@@ -57,9 +56,9 @@ export default function PreviewPage() {
         const required = mig.requiredInputs ?? [];
         if (required.length > 0) {
           const prefilled: Record<string, string> = {};
-          for (const key of required) {
-            const urlVal = searchParams.get(key);
-            prefilled[key] = urlVal !== null ? urlVal : (found.metadata?.[key] ?? "");
+          for (const inp of required) {
+            const urlVal = searchParams.get(inp.name);
+            prefilled[inp.name] = urlVal !== null ? urlVal : (found.metadata?.[inp.name] ?? "");
           }
           setInputs(prefilled);
         }
@@ -68,7 +67,7 @@ export default function PreviewPage() {
   }, [id, candidateId, searchParams]);
 
   const requiredInputs = useMemo(() => migration?.requiredInputs ?? [], [migration]);
-  const allInputsFilled = requiredInputs.every((k) => inputs[k]?.trim());
+  const allInputsFilled = requiredInputs.every((inp) => inputs[inp.name]?.trim());
 
   // Build the candidate with inputs merged into metadata (for dry-run and execute)
   const candidateWithInputs = useMemo<Candidate | null>(() => {
@@ -107,13 +106,13 @@ export default function PreviewPage() {
     triggerDryRun(candidateWithInputs);
   }
 
-  async function handleExecute() {
+  async function handleStart() {
     if (!candidate || !migration) return;
     setExecuting(true);
     try {
       const inputsToSend = Object.keys(inputs).length > 0 ? inputs : undefined;
-      const { runId } = await executeRun(id, candidate, inputsToSend);
-      router.push(ROUTES.runDetail(runId));
+      await startRun(id, candidateId, inputsToSend);
+      router.push(ROUTES.candidateSteps(id, candidateId));
     } catch (e) {
       if (e instanceof ConflictError) {
         toast.error("Candidate is already running or completed");
@@ -191,12 +190,12 @@ export default function PreviewPage() {
             <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
               Required inputs
             </div>
-            {requiredInputs.map((key) => (
+            {requiredInputs.map((inp) => (
               <EditableLabel
-                key={key}
-                label={key}
-                value={inputs[key] ?? ""}
-                onCommit={(val) => setInputs((v) => ({ ...v, [key]: val }))}
+                key={inp.name}
+                label={inp.label}
+                value={inputs[inp.name] ?? ""}
+                onCommit={(val) => setInputs((v) => ({ ...v, [inp.name]: val }))}
               />
             ))}
           </div>
@@ -319,7 +318,7 @@ export default function PreviewPage() {
         <div className="text-sm text-zinc-600 italic">Loading step definitions…</div>
       )}
 
-      {/* Execute / Back actions */}
+      {/* Start / Back actions */}
       <div className="w-fit min-w-[700px] mx-auto flex items-center justify-between pt-2 pb-6">
         <Link
           href={ROUTES.migrationDetail(id)}
@@ -328,7 +327,7 @@ export default function PreviewPage() {
           Back
         </Link>
         <button
-          onClick={() => void handleExecute()}
+          onClick={() => void handleStart()}
           disabled={executing || (requiredInputs.length > 0 && !allInputsFilled)}
           className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -344,7 +343,7 @@ export default function PreviewPage() {
               <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
                 <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
               </svg>
-              Execute
+              Start
             </>
           )}
         </button>

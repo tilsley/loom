@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { RegisteredMigration } from "@/lib/api";
+import type { Migration } from "@/lib/api";
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -9,12 +9,13 @@ function timeAgo(date: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-export function MigrationCard({ migration }: { migration: RegisteredMigration }) {
-  const runCount = Object.keys(migration.candidateRuns ?? {}).length;
+export function MigrationCard({ migration }: { migration: Migration }) {
+  const kindPlural = (migration.candidates[0]?.kind ?? "candidate") + "s";
+  const runCount = migration.candidates.filter(
+    (c) => c.status === "running" || c.status === "completed",
+  ).length;
   const hasRuns = runCount > 0;
-  const doneCount = migration.candidateRuns
-    ? Object.values(migration.candidateRuns).filter((r) => r.status === "completed").length
-    : 0;
+  const doneCount = migration.candidates.filter((c) => c.status === "completed").length;
 
   return (
     <Link
@@ -31,11 +32,9 @@ export function MigrationCard({ migration }: { migration: RegisteredMigration })
             <h3 className="text-[14px] font-semibold text-zinc-100 group-hover:text-white truncate transition-colors">
               {migration.name}
             </h3>
-            {Boolean(migration.description) && (
-              <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
-                {migration.description}
-              </p>
-            )}
+            <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
+              {migration.description}
+            </p>
           </div>
           <span className="shrink-0 text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
             {migration.id}
@@ -44,7 +43,7 @@ export function MigrationCard({ migration }: { migration: RegisteredMigration })
 
         {/* Bottom row: stats */}
         <div className="flex items-center gap-3 mt-3">
-          <Stat label="candidates" value={migration.candidates.length} />
+          <Stat label={kindPlural} value={migration.candidates.length} />
           <StatDivider />
           <Stat label="steps" value={migration.steps.length} />
           <StatDivider />

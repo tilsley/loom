@@ -1,93 +1,17 @@
 openapi: "3.0.3"
 info:
   title: Loom Migration API
-  version: 0.2.0
+  version: 0.3.0
   description: Control plane API for orchestrating multi-repo migrations.
 
 paths:
-  /start:
-    post:
-      summary: Start a migration workflow
-      operationId: startMigration
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StartRequest"
-      responses:
-        "202":
-          description: Migration accepted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StartResponse"
-
-  /status/{id}:
-    get:
-      summary: Get migration status
-      operationId: getMigrationStatus
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Current migration state
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusResponse"
-
-  /event/{id}:
-    post:
-      summary: Worker callback to resume a paused workflow step
-      operationId: raiseEvent
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StepCompletedEvent"
-      responses:
-        "202":
-          description: Event raised
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventResponse"
-
   /migrations:
-    post:
-      summary: Register a new migration definition
-      operationId: registerMigration
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterMigrationRequest"
-      responses:
-        "201":
-          description: Migration registered
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RegisteredMigration"
     get:
-      summary: List all registered migrations
+      summary: List all migrations
       operationId: listMigrations
       responses:
         "200":
-          description: List of registered migrations
+          description: List of migrations
           content:
             application/json:
               schema:
@@ -95,8 +19,8 @@ paths:
 
   /migrations/{id}:
     get:
-      summary: Get a specific registered migration
-      operationId: getRegisteredMigration
+      summary: Get a migration
+      operationId: getMigration
       parameters:
         - name: id
           in: path
@@ -105,25 +29,11 @@ paths:
             type: string
       responses:
         "200":
-          description: Registered migration details
+          description: Migration details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RegisteredMigration"
-        "404":
-          description: Migration not found
-    delete:
-      summary: Remove a registered migration
-      operationId: deleteRegisteredMigration
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Migration deleted
+                $ref: "#/components/schemas/Migration"
         "404":
           description: Migration not found
 
@@ -149,7 +59,7 @@ paths:
         "404":
           description: Migration not found
     get:
-      summary: List candidates for a migration with run status
+      summary: List candidates for a migration
       operationId: listCandidates
       parameters:
         - name: id
@@ -165,55 +75,84 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/CandidateWithStatus"
+                  $ref: "#/components/schemas/Candidate"
 
-  /migrations/{id}/execute:
+  /migrations/{id}/candidates/{candidateId}/start:
     post:
-      summary: Create a run and start the workflow atomically for a single candidate
-      operationId: executeRun
+      summary: Start the migration workflow for a single candidate
+      operationId: startRun
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExecuteRunRequest"
+              $ref: "#/components/schemas/StartRequest"
       responses:
         "202":
-          description: Run started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ExecuteRunResponse"
+          description: Migration started
         "404":
-          description: Migration not found
+          description: Migration or candidate not found
         "409":
           description: Candidate already running or completed
 
-  /runs/{runId}:
-    get:
-      summary: Get info about a run
-      operationId: getRunInfo
+  /migrations/{id}/candidates/{candidateId}/cancel:
+    post:
+      summary: Cancel a running migration for a candidate, resetting it to not_started and recording an attempt
+      operationId: cancelRun
       parameters:
-        - name: runId
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Cancelled
+        "404":
+          description: Migration or candidate not found
+        "409":
+          description: Candidate is not running
+
+  /migrations/{id}/candidates/{candidateId}/steps:
+    get:
+      summary: Get step execution progress for a running or completed candidate
+      operationId: getCandidateSteps
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: candidateId
           in: path
           required: true
           schema:
             type: string
       responses:
         "200":
-          description: Run info
+          description: Step execution detail
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunInfo"
+                $ref: "#/components/schemas/CandidateStepsResponse"
         "404":
-          description: Run not found
+          description: No active or completed workflow found for this candidate
 
   /migrations/{id}/dry-run:
     post:
@@ -241,49 +180,58 @@ paths:
         "404":
           description: Migration not found
 
-  /runs/{runId}/cancel:
+  /event/{id}:
     post:
-      summary: Cancel a running workflow, recording the attempt and returning the candidate to not_started
-      operationId: cancelRun
+      summary: Worker callback to resume a paused workflow step
+      operationId: raiseEvent
       parameters:
-        - name: runId
+        - name: id
           in: path
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StepCompletedEvent"
       responses:
-        "204":
-          description: Run cancelled
-        "404":
-          description: Run not found
-        "409":
-          description: Run is not in running state
+        "202":
+          description: Event raised
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResponse"
 
 components:
   schemas:
-    # --- Candidate run tracking ---
+    # --- Core domain types ---
+
+    CandidateStatus:
+      type: string
+      enum: [not_started, running, completed]
 
     CancelledAttempt:
       type: object
-      required: [runId, candidateId, cancelledAt]
+      required: [candidateId, cancelledAt]
       properties:
-        runId:
-          type: string
         candidateId:
           type: string
         cancelledAt:
           type: string
           format: date-time
 
-    CandidateRun:
+    InputDefinition:
       type: object
-      required: [status]
+      required: [name, label]
       properties:
-        status:
+        name:
           type: string
-          enum: [running, completed]
-
-    # --- Core domain types ---
+          description: Metadata key merged into candidate at start time (e.g. "repoName").
+        label:
+          type: string
+          description: Human-readable display label shown in the UI (e.g. "Repository").
 
     StepDefinition:
       type: object
@@ -303,214 +251,6 @@ components:
             type: string
           description: Arbitrary key-value config forwarded to the worker.
 
-    MigrationManifest:
-      type: object
-      required: [migrationId, candidates, steps]
-      properties:
-        migrationId:
-          type: string
-        registrationId:
-          type: string
-          description: ID of the registered migration (so workflow can update candidate run status on completion).
-        candidates:
-          type: array
-          items:
-            $ref: "#/components/schemas/Candidate"
-        steps:
-          type: array
-          items:
-            $ref: "#/components/schemas/StepDefinition"
-
-    StepCompletedEvent:
-      type: object
-      required: [stepName, candidate, success]
-      properties:
-        stepName:
-          type: string
-        candidate:
-          $ref: "#/components/schemas/Candidate"
-        success:
-          type: boolean
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-          description: Arbitrary metadata, e.g. prUrl, commitSha.
-
-    StepResult:
-      type: object
-      required: [stepName, candidate, success]
-      properties:
-        stepName:
-          type: string
-        candidate:
-          $ref: "#/components/schemas/Candidate"
-        success:
-          type: boolean
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-
-    MigrationResult:
-      type: object
-      required: [migrationId, status, results]
-      properties:
-        migrationId:
-          type: string
-        status:
-          type: string
-          enum: [running, completed, failed]
-        results:
-          type: array
-          items:
-            $ref: "#/components/schemas/StepResult"
-
-    # --- Registered migrations ---
-
-    RegisteredMigration:
-      type: object
-      required: [id, name, candidates, steps, createdAt]
-      properties:
-        id:
-          type: string
-          description: UUID or deterministic slug owned by the worker.
-        name:
-          type: string
-        description:
-          type: string
-        org:
-          type: string
-          readOnly: true
-          description: GitHub organisation for this deployment, stamped by the server from GITHUB_ORG. Used by the console to construct GitHub URLs.
-        requiredInputs:
-          type: array
-          items:
-            type: string
-          description: Input field names the operator must supply at preview/execute time (e.g. ["repoName"]).
-        candidates:
-          type: array
-          items:
-            $ref: "#/components/schemas/Candidate"
-          description: Repos, apps, services — flexible scope.
-        steps:
-          type: array
-          items:
-            $ref: "#/components/schemas/StepDefinition"
-        createdAt:
-          type: string
-          format: date-time
-          description: ISO timestamp.
-        cancelledAttempts:
-          type: array
-          items:
-            $ref: "#/components/schemas/CancelledAttempt"
-          description: Audit log of cancelled runs, in chronological order.
-        candidateRuns:
-          type: object
-          additionalProperties:
-            $ref: "#/components/schemas/CandidateRun"
-          description: Per-candidate run state keyed by candidate repo.
-
-    RegisterMigrationRequest:
-      type: object
-      required: [name, candidates, steps]
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-        requiredInputs:
-          type: array
-          items:
-            type: string
-          description: Input field names the operator must supply at preview/execute time (e.g. ["repoName"]).
-        candidates:
-          type: array
-          items:
-            $ref: "#/components/schemas/Candidate"
-        steps:
-          type: array
-          items:
-            $ref: "#/components/schemas/StepDefinition"
-
-    ListMigrationsResponse:
-      type: object
-      required: [migrations]
-      properties:
-        migrations:
-          type: array
-          items:
-            $ref: "#/components/schemas/RegisteredMigration"
-
-    RunInfo:
-      type: object
-      required: [runId, migrationId, candidate, status]
-      properties:
-        runId:
-          type: string
-        migrationId:
-          type: string
-        candidate:
-          $ref: "#/components/schemas/Candidate"
-        status:
-          type: string
-          enum: [running, completed]
-
-    ExecuteRunRequest:
-      type: object
-      required: [candidate]
-      properties:
-        candidate:
-          $ref: "#/components/schemas/Candidate"
-        inputs:
-          type: object
-          additionalProperties:
-            type: string
-          description: Operator-supplied inputs collected at preview time. Merged into candidate metadata before starting the workflow.
-
-    ExecuteRunResponse:
-      type: object
-      required: [runId]
-      properties:
-        runId:
-          type: string
-          description: The workflow instance ID for this run.
-
-    MigrationAnnouncement:
-      type: object
-      required: [id, name, candidates, steps]
-      description: >
-        Published by workers to the "migration-registry" Dapr topic on startup.
-        Loom subscribes and upserts the registration (idempotent by id).
-      properties:
-        id:
-          type: string
-          description: Deterministic slug owned by the worker (e.g. "migrate-chart").
-        name:
-          type: string
-        description:
-          type: string
-        requiredInputs:
-          type: array
-          items:
-            type: string
-          description: Input field names the operator must supply at preview/execute time (e.g. ["repoName"]).
-        candidates:
-          type: array
-          items:
-            $ref: "#/components/schemas/Candidate"
-        steps:
-          type: array
-          items:
-            $ref: "#/components/schemas/StepDefinition"
-
-    # --- Candidate discovery ---
-
-    CandidateStatus:
-      type: string
-      enum: [not_started, running, completed]
-
     FileRef:
       type: object
       required: [path, url]
@@ -527,8 +267,6 @@ components:
       required: [name, repo, files]
       description: >
         A set of files that will be touched by the migration, grouped by context.
-        The name is self-describing: environment names (e.g. "prod", "staging", "dev"),
-        "base" for shared GitOps resources, or "app-repo" for the application's own repository.
       properties:
         name:
           type: string
@@ -560,11 +298,6 @@ components:
           additionalProperties:
             type: string
           description: Descriptive context set by the discoverer (e.g. repoName is the repo name without org prefix, team, system).
-        state:
-          type: object
-          additionalProperties:
-            type: string
-          description: Observed values from discovery (e.g. currentChartVersion).
         files:
           type: array
           items:
@@ -572,31 +305,75 @@ components:
           description: >
             Files this candidate has that will be touched by the migration,
             grouped by environment or repository context. Populated by the discoverer.
+        status:
+          $ref: "#/components/schemas/CandidateStatus"
+          description: Migration status for this candidate. Set and managed by the server; absent means not_started.
 
-    CandidateWithStatus:
+    Migration:
       type: object
-      required: [id, status]
+      required: [id, name, description, candidates, steps, createdAt]
       properties:
         id:
           type: string
-        kind:
+          description: Deterministic slug owned by the worker (e.g. "app-chart-migration").
+        name:
           type: string
-        metadata:
-          type: object
-          additionalProperties:
-            type: string
-        state:
-          type: object
-          additionalProperties:
-            type: string
-        files:
+        description:
+          type: string
+        requiredInputs:
           type: array
           items:
-            $ref: "#/components/schemas/FileGroup"
-        status:
-          $ref: "#/components/schemas/CandidateStatus"
-        runId:
+            $ref: '#/components/schemas/InputDefinition'
+          description: Input definitions the operator must supply at start time.
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+          description: Targets discovered by the worker; each carries its own migration status.
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
+        createdAt:
           type: string
+          format: date-time
+        cancelledAttempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CancelledAttempt"
+          description: Audit log of cancelled attempts, in chronological order.
+
+    ListMigrationsResponse:
+      type: object
+      required: [migrations]
+      properties:
+        migrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Migration"
+
+    # --- Request / response types ---
+
+    StartRequest:
+      type: object
+      properties:
+        inputs:
+          type: object
+          additionalProperties:
+            type: string
+          description: Operator-supplied inputs collected at preview time. Merged into candidate metadata before starting the workflow.
+
+    CandidateStepsResponse:
+      type: object
+      required: [status, steps]
+      properties:
+        status:
+          type: string
+          enum: [running, completed]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepResult"
 
     SubmitCandidatesRequest:
       type: object
@@ -607,7 +384,50 @@ components:
           items:
             $ref: "#/components/schemas/Candidate"
 
-    # --- Worker contract (pub/sub message) ---
+    # --- Worker contract (pub/sub) ---
+
+    MigrationAnnouncement:
+      type: object
+      required: [id, name, description, candidates, steps]
+      description: >
+        Published by workers to the "migration-registry" Dapr topic on startup.
+        Loom subscribes and upserts the migration (idempotent by id).
+      properties:
+        id:
+          type: string
+          description: Deterministic slug owned by the worker (e.g. "app-chart-migration").
+        name:
+          type: string
+        description:
+          type: string
+        requiredInputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/InputDefinition'
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
+
+    MigrationManifest:
+      type: object
+      required: [migrationId, candidates, steps]
+      description: Internal payload for the Temporal workflow.
+      properties:
+        migrationId:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepDefinition"
 
     DispatchStepRequest:
       type: object
@@ -630,6 +450,37 @@ components:
         eventName:
           type: string
           description: Exact event name the workflow is waiting on.
+
+    StepCompletedEvent:
+      type: object
+      required: [stepName, candidate, success]
+      properties:
+        stepName:
+          type: string
+        candidate:
+          $ref: "#/components/schemas/Candidate"
+        success:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Arbitrary metadata, e.g. prUrl, commitSha.
+
+    StepResult:
+      type: object
+      required: [stepName, candidate, success]
+      properties:
+        stepName:
+          type: string
+        candidate:
+          $ref: "#/components/schemas/Candidate"
+        success:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
 
     # --- Dry run ---
 
@@ -707,32 +558,7 @@ components:
           items:
             $ref: "#/components/schemas/StepDefinition"
 
-    # --- API request/response wrappers ---
-
-    StartRequest:
-      type: object
-      required: [manifest]
-      properties:
-        manifest:
-          $ref: "#/components/schemas/MigrationManifest"
-
-    StartResponse:
-      type: object
-      required: [instanceId]
-      properties:
-        instanceId:
-          type: string
-
-    StatusResponse:
-      type: object
-      required: [instanceId, runtimeStatus]
-      properties:
-        instanceId:
-          type: string
-        runtimeStatus:
-          type: string
-        result:
-          $ref: "#/components/schemas/MigrationResult"
+    # --- Worker callback ---
 
     EventResponse:
       type: object

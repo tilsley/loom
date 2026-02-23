@@ -1,15 +1,15 @@
 import Link from "next/link";
-import type { RegisteredMigration } from "@/lib/api";
+import type { Migration } from "@/lib/api";
+import { ROUTES } from "@/lib/routes";
 
 interface RecentFailuresProps {
-  migrations: RegisteredMigration[];
+  migrations: Migration[];
 }
 
 interface CancellationEntry {
   migrationName: string;
   migrationId: string;
   candidateId: string;
-  runId: string;
   cancelledAt: string;
 }
 
@@ -23,7 +23,6 @@ export function RecentFailures({ migrations }: RecentFailuresProps) {
         migrationName: m.name,
         migrationId: m.id,
         candidateId: ca.candidateId,
-        runId: ca.runId,
         cancelledAt: ca.cancelledAt,
       });
     }
@@ -62,7 +61,7 @@ export function RecentFailures({ migrations }: RecentFailuresProps) {
                   </Link>
                 </div>
                 <Link
-                  href={`/runs/${f.runId}`}
+                  href={ROUTES.candidateSteps(f.migrationId, f.candidateId)}
                   className="text-xs font-mono text-zinc-600 hover:text-teal-400 transition-colors shrink-0"
                 >
                   View

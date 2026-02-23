@@ -10,6 +10,21 @@ import (
 	"github.com/tilsley/loom/pkg/api"
 )
 
+// MigrationResult is the return type of MigrationOrchestrator.
+// It is an internal Temporal type; the JSON structure is intentionally stable
+// so that service.GetCandidateSteps can parse workflow output.
+type MigrationResult struct {
+	MigrationId string           `json:"migrationId"`
+	Status      string           `json:"status"`
+	Results     []api.StepResult `json:"results"`
+}
+
+const (
+	statusRunning   = "running"
+	statusCompleted = "completed"
+	statusFailed    = "failed"
+)
+
 // MigrationOrchestrator is the Temporal workflow that sequences a full migration.
 //
 // For each step in the manifest it iterates candidate repos sequentially:
@@ -24,18 +39,18 @@ import (
 func MigrationOrchestrator(
 	ctx workflow.Context,
 	manifest api.MigrationManifest,
-) (api.MigrationResult, error) {
+) (MigrationResult, error) {
 	results := make([]api.StepResult, 0, len(manifest.Steps)*len(manifest.Candidates))
 
 	// Register query handler so external callers can read live progress.
-	if err := workflow.SetQueryHandler(ctx, "progress", func() (api.MigrationResult, error) {
-		return api.MigrationResult{
+	if err := workflow.SetQueryHandler(ctx, "progress", func() (MigrationResult, error) {
+		return MigrationResult{
 			MigrationId: manifest.MigrationId,
-			Status:      api.MigrationResultStatusRunning,
+			Status:      statusRunning,
 			Results:     results,
 		}, nil
 	}); err != nil {
-		return api.MigrationResult{}, fmt.Errorf("register query handler: %w", err)
+		return MigrationResult{}, fmt.Errorf("register query handler: %w", err)
 	}
 
 	actOpts := workflow.ActivityOptions{
@@ -44,14 +59,13 @@ func MigrationOrchestrator(
 	}
 	actCtx := workflow.WithActivityOptions(ctx, actOpts)
 
-	// Helper: update the candidate run status in the registration store.
-	// Skips if RegistrationId is nil (legacy /start path).
+	// updateCandidateStatus records the final status on the candidate in the store.
 	updateCandidateStatus := func(status string) {
-		if manifest.RegistrationId == nil || len(manifest.Candidates) == 0 {
+		if len(manifest.Candidates) == 0 {
 			return
 		}
 		input := UpdateTargetRunStatusInput{
-			RegistrationID: *manifest.RegistrationId,
+			RegistrationID: manifest.MigrationId,
 			CandidateID:    manifest.Candidates[0].Id,
 			Status:         status,
 		}
@@ -64,11 +78,11 @@ func MigrationOrchestrator(
 	// resetCandidate clears the candidate run entry, returning it to not_started.
 	// Used on failure — there is no "failed" status at the candidate level.
 	resetCandidate := func() {
-		if manifest.RegistrationId == nil || len(manifest.Candidates) == 0 {
+		if len(manifest.Candidates) == 0 {
 			return
 		}
 		input := ResetCandidateRunInput{
-			RegistrationID: *manifest.RegistrationId,
+			RegistrationID: manifest.MigrationId,
 			CandidateID:    manifest.Candidates[0].Id,
 		}
 		fut := workflow.ExecuteActivity(actCtx, "ResetCandidateRun", input)
@@ -117,7 +131,7 @@ func MigrationOrchestrator(
 				}
 				if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
 					failed = true
-					return api.MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
+					return MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
 				}
 			}
 
@@ -149,20 +163,20 @@ func MigrationOrchestrator(
 			last := results[len(results)-1]
 			if !last.Success {
 				failed = true
-				return api.MigrationResult{
+				return MigrationResult{
 					MigrationId: manifest.MigrationId,
-					Status:      api.MigrationResultStatusFailed,
+					Status:      statusFailed,
 					Results:     results,
 				}, nil
 			}
 		}
 	}
 
-	updateCandidateStatus("completed")
+	updateCandidateStatus(statusCompleted)
 
-	return api.MigrationResult{
+	return MigrationResult{
 		MigrationId: manifest.MigrationId,
-		Status:      api.MigrationResultStatusCompleted,
+		Status:      statusCompleted,
 		Results:     results,
 	}, nil
 }

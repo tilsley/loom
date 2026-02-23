@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listMigrations, type RegisteredMigration } from "./api";
+import { listMigrations, type Migration } from "./api";
 
 interface UseMigrationsResult {
-  migrations: RegisteredMigration[];
+  migrations: Migration[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
 
 export function useMigrations(): UseMigrationsResult {
-  const [migrations, setMigrations] = useState<RegisteredMigration[]>([]);
+  const [migrations, setMigrations] = useState<Migration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +35,7 @@ export function useMigrations(): UseMigrationsResult {
 }
 
 export function useMigrationPolling(intervalMs = 5000): UseMigrationsResult {
-  const [migrations, setMigrations] = useState<RegisteredMigration[]>([]);
+  const [migrations, setMigrations] = useState<Migration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);

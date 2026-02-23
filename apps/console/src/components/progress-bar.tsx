@@ -1,25 +1,17 @@
-import type { Candidate, CandidateRun } from "@/lib/api";
+import type { Candidate } from "@/lib/api";
 
 interface ProgressBarProps {
   candidates: Candidate[];
-  candidateRuns?: Record<string, CandidateRun>;
 }
 
-export function ProgressBar({ candidates, candidateRuns }: ProgressBarProps) {
+export function ProgressBar({ candidates }: ProgressBarProps) {
   const total = candidates.length;
   const counts = { completed: 0, running: 0, not_started: 0 };
 
   for (const c of candidates) {
-    const run = candidateRuns?.[c.id];
-    if (!run) {
-      counts.not_started++;
-    } else if (run.status === "completed") {
-      counts.completed++;
-    } else if (run.status === "running") {
-      counts.running++;
-    } else {
-      counts.not_started++;
-    }
+    if (c.status === "completed") counts.completed++;
+    else if (c.status === "running") counts.running++;
+    else counts.not_started++;
   }
 
   const segments = [

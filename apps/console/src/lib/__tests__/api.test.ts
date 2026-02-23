@@ -2,14 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ConflictError,
   NotFoundError,
-  deleteMigration,
   dryRun,
-  executeRun,
+  startRun,
   getMigration,
-  getRunInfo,
-  getStatus,
   listMigrations,
-  registerMigration,
+  getCandidateSteps,
 } from "../api";
 
 // ---------------------------------------------------------------------------
@@ -114,163 +111,79 @@ describe("getMigration", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getStatus  (custom error-handling logic)
+// getCandidateSteps
 // ---------------------------------------------------------------------------
 
-describe("getStatus", () => {
-  it("returns parsed response on success", async () => {
-    const data = { status: "running" };
+describe("getCandidateSteps", () => {
+  it("calls the correct URL", async () => {
+    const data = { status: "running", steps: [] };
     mockFetch.mockResolvedValueOnce(mockResponse(200, data));
-    await expect(getStatus("wf-id")).resolves.toEqual(data);
+    await getCandidateSteps("mig-1", "billing-api");
+    expect(mockFetch).toHaveBeenCalledWith("/api/migrations/mig-1/candidates/billing-api/steps");
   });
 
-  it("throws NotFoundError on 404", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(404, "not found"));
-    await expect(getStatus("bad-id")).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it('throws NotFoundError when body contains "not found" regardless of status code', async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(400, "workflow not found"));
-    await expect(getStatus("id")).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("extracts the error field from a JSON error body", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse(500, JSON.stringify({ error: "something failed" })),
-    );
-    await expect(getStatus("id")).rejects.toThrow("something failed");
-  });
-
-  it("throws a plain Error (not NotFoundError) for unrecognised failures", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(500, "internal error"));
-    const err = await getStatus("id").catch((e) => e);
-    expect(err).toBeInstanceOf(Error);
-    expect(err).not.toBeInstanceOf(NotFoundError);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getRunInfo
-// ---------------------------------------------------------------------------
-
-describe("getRunInfo", () => {
   it("returns parsed response on 200", async () => {
-    const runInfo = { id: "run-1", status: "running" };
-    mockFetch.mockResolvedValueOnce(mockResponse(200, runInfo));
-    await expect(getRunInfo("run-1")).resolves.toEqual(runInfo);
+    const data = { status: "completed", steps: [{ stepName: "update-chart" }] };
+    mockFetch.mockResolvedValueOnce(mockResponse(200, data));
+    await expect(getCandidateSteps("mig-1", "billing-api")).resolves.toEqual(data);
   });
 
   it("returns null on 404 instead of throwing", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(404, "not found"));
-    await expect(getRunInfo("missing")).resolves.toBeNull();
+    await expect(getCandidateSteps("mig-1", "missing")).resolves.toBeNull();
   });
 
   it("throws with the response body text on other errors", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(500, "server error"));
-    await expect(getRunInfo("id")).rejects.toThrow("server error");
+    await expect(getCandidateSteps("mig-1", "billing-api")).rejects.toThrow("server error");
   });
 });
 
 // ---------------------------------------------------------------------------
-// executeRun
+// startRun
 // ---------------------------------------------------------------------------
 
-describe("executeRun", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const candidate = { id: "cand-1", repo: "org/repo", ref: "main" } as any;
+describe("startRun", () => {
+  it("calls the correct candidate-scoped URL", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(202, null));
+    await startRun("migration-id", "billing-api");
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/migrations/migration-id/candidates/billing-api/start",
+    );
+  });
 
-  it("returns the response on success", async () => {
-    const data = { runId: "run-123" };
-    mockFetch.mockResolvedValueOnce(mockResponse(200, data));
-    await expect(executeRun("migration-id", candidate)).resolves.toEqual(data);
+  it("resolves without a value on 202", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(202, null));
+    await expect(startRun("migration-id", "billing-api")).resolves.toBeUndefined();
   });
 
   it("throws ConflictError on 409", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(409, "already queued"));
-    await expect(executeRun("migration-id", candidate)).rejects.toBeInstanceOf(
-      ConflictError,
-    );
+    await expect(startRun("migration-id", "billing-api")).rejects.toBeInstanceOf(ConflictError);
   });
 
   it("throws with the response body text on other errors", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(500, "server error"));
-    await expect(executeRun("migration-id", candidate)).rejects.toThrow(
-      "server error",
-    );
+    await expect(startRun("migration-id", "billing-api")).rejects.toThrow("server error");
   });
 
-  it("omits inputs key when inputs is undefined", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await executeRun("migration-id", candidate);
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body).not.toHaveProperty("inputs");
+  it("omits body entirely when inputs is undefined", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(202, null));
+    await startRun("migration-id", "billing-api");
+    expect(mockFetch.mock.calls[0][1].body).toBeUndefined();
   });
 
-  it("omits inputs key when inputs is an empty object", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await executeRun("migration-id", candidate, {});
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body).not.toHaveProperty("inputs");
+  it("omits body when inputs is an empty object", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(202, null));
+    await startRun("migration-id", "billing-api", {});
+    expect(mockFetch.mock.calls[0][1].body).toBeUndefined();
   });
 
   it("includes inputs in the body when non-empty inputs are provided", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await executeRun("migration-id", candidate, { token: "abc", env: "prod" });
+    mockFetch.mockResolvedValueOnce(mockResponse(202, null));
+    await startRun("migration-id", "billing-api", { token: "abc", env: "prod" });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.inputs).toEqual({ token: "abc", env: "prod" });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// registerMigration
-// ---------------------------------------------------------------------------
-
-describe("registerMigration", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const req = { name: "My Migration" } as any;
-
-  it("sends POST to /api/migrations", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, { id: "new-migration", name: "My Migration", description: "", requiredInputs: [], candidates: [], steps: [], createdAt: new Date().toISOString(), cancelledAt: null }));
-    await registerMigration(req);
-    expect(mockFetch).toHaveBeenCalledWith(
-      "/api/migrations",
-      expect.objectContaining({ method: "POST" }),
-    );
-  });
-
-  it("returns the new migration on success", async () => {
-    const migration = { id: "new-migration", name: "My Migration" };
-    mockFetch.mockResolvedValueOnce(mockResponse(200, migration));
-    await expect(registerMigration(req)).resolves.toEqual(migration);
-  });
-
-  it("throws with the response body text on error", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(400, "bad request"));
-    await expect(registerMigration(req)).rejects.toThrow("bad request");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deleteMigration
-// ---------------------------------------------------------------------------
-
-describe("deleteMigration", () => {
-  it("sends DELETE to /api/migrations/{id}", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await deleteMigration("my-id");
-    expect(mockFetch).toHaveBeenCalledWith("/api/migrations/my-id", {
-      method: "DELETE",
-    });
-  });
-
-  it("resolves to undefined on success", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(200, {}));
-    await expect(deleteMigration("id")).resolves.toBeUndefined();
-  });
-
-  it("throws with the response body text on error", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse(500, "server error"));
-    await expect(deleteMigration("id")).rejects.toThrow("server error");
   });
 });
 

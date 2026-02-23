@@ -8,7 +8,7 @@ import { DashboardStats } from "@/components/dashboard-stats";
 import { ActiveRuns } from "@/components/active-runs";
 import { RecentFailures } from "@/components/recent-failures";
 import { Input, Skeleton } from "@/components/ui";
-import type { RegisteredMigration } from "@/lib/api";
+import type { Migration } from "@/lib/api";
 
 export default function Dashboard() {
   const { migrations, loading } = useMigrationPolling(5000);
@@ -19,21 +19,20 @@ export default function Dashboard() {
     if (!q) return [];
 
     const hits: {
-      migration: RegisteredMigration;
+      migration: Migration;
       id: string;
       status: string;
-      runId: string | null;
+      hasRun: boolean;
     }[] = [];
 
     for (const m of migrations) {
       for (const t of m.candidates) {
         if (t.id.toLowerCase().includes(q)) {
-          const run = m.candidateRuns?.[t.id];
           hits.push({
             migration: m,
             id: t.id,
-            status: run?.status ?? "not_started",
-            runId: run ? `${m.id}__${t.id}` : null,
+            status: t.status ?? "not_started",
+            hasRun: t.status === "running" || t.status === "completed",
           });
         }
       }
@@ -114,12 +113,12 @@ export default function Dashboard() {
                 <StatusChip status={r.status} />
 
                 {/* Action link */}
-                {r.runId ? (
+                {r.hasRun ? (
                   <Link
-                    href={ROUTES.runDetail(r.runId)}
+                    href={ROUTES.candidateSteps(r.migration.id, r.id)}
                     className="text-xs text-teal-400 hover:text-teal-300 font-medium shrink-0 transition-colors"
                   >
-                    View run →
+                    View steps →
                   </Link>
                 ) : (
                   <Link

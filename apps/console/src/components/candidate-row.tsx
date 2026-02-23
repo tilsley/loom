@@ -1,20 +1,20 @@
 import { useState } from "react";
 import Link from "next/link";
-import type { Candidate, CandidateRun } from "@/lib/api";
+import type { Candidate } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
 import { Button } from "@/components/ui";
 
 interface CandidateRowProps {
   candidate: Candidate;
-  candidateRun?: CandidateRun;
-  runId?: string;
+  migrationId?: string;
   onPreview: (candidate: Candidate) => void;
   isRunning: boolean;
 }
 
-export function CandidateRow({ candidate, candidateRun, runId, onPreview, isRunning }: CandidateRowProps) {
-  const isBlocked = candidateRun?.status === "running" || candidateRun?.status === "completed";
-  const hasRun = !!runId;
+export function CandidateRow({ candidate, migrationId, onPreview, isRunning }: CandidateRowProps) {
+  const status = candidate.status;
+  const isBlocked = status === "running" || status === "completed";
+  const hasRun = !!migrationId;
   const [filesExpanded, setFilesExpanded] = useState(false);
   const fileGroups = candidate.files ?? [];
   const totalFiles = fileGroups.reduce((n, g) => n + g.files.length, 0);
@@ -27,7 +27,7 @@ export function CandidateRow({ candidate, candidateRun, runId, onPreview, isRunn
     >
       {/* Candidate name */}
       <div className="flex items-center gap-2 min-w-0 flex-wrap">
-        <CandidateStatusDot status={candidateRun?.status} />
+        <CandidateStatusDot status={status} />
         <span className="text-sm font-mono text-zinc-300 truncate">{candidate.id}</span>
         {totalFiles > 0 && (
           <button
@@ -47,31 +47,28 @@ export function CandidateRow({ candidate, candidateRun, runId, onPreview, isRunn
 
       {/* Status */}
       <div>
-        {candidateRun ? (
-          <CandidateStatusBadge status={candidateRun.status} />
+        {status && status !== "not_started" ? (
+          <CandidateStatusBadge status={status} />
         ) : (
           <span className="text-xs text-zinc-600">not started</span>
         )}
       </div>
 
-      {/* Run ID + view link */}
+      {/* Steps link */}
       <div className="flex items-center gap-2 min-w-0">
         {hasRun ? (
-          <>
-            <span className="text-xs font-mono text-zinc-500 truncate">{runId}</span>
-            <span className="inline-flex items-center gap-1 text-xs text-zinc-600 group-hover/row:text-teal-400 transition-colors shrink-0">
-              View
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M5 3l4 4-4 4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-          </>
+          <span className="inline-flex items-center gap-1 text-xs text-zinc-600 group-hover/row:text-teal-400 transition-colors shrink-0">
+            View steps
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M5 3l4 4-4 4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
         ) : (
           <span className="text-xs text-zinc-700">&mdash;</span>
         )}
@@ -91,9 +88,9 @@ export function CandidateRow({ candidate, candidateRun, runId, onPreview, isRunn
         >
           {isRunning
             ? "..."
-            : candidateRun?.status === "completed"
+            : status === "completed"
               ? "Done"
-              : candidateRun?.status === "running"
+              : status === "running"
                 ? "Running"
                 : "Preview"}
         </Button>
@@ -139,7 +136,7 @@ export function CandidateRow({ candidate, candidateRun, runId, onPreview, isRunn
   if (hasRun) {
     return (
       <Link
-        href={ROUTES.runDetail(runId ?? "")}
+        href={ROUTES.candidateSteps(migrationId ?? "", candidate.id)}
         className="group/row block bg-zinc-900/50 border border-zinc-800/80 hover:border-zinc-700 rounded-lg transition-all cursor-pointer"
       >
         {row}

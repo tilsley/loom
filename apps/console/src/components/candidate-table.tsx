@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { RegisteredMigration, Candidate } from "@/lib/api";
+import type { Migration, Candidate } from "@/lib/api";
 import { StatusFilter } from "./status-filter";
 import { CandidateRow } from "./candidate-row";
 import { Button, Input } from "@/components/ui";
@@ -9,7 +9,7 @@ import { Button, Input } from "@/components/ui";
 const PAGE_SIZE = 50;
 
 interface CandidateTableProps {
-  migration: RegisteredMigration;
+  migration: Migration;
   onPreview: (candidate: Candidate) => void;
   runningCandidate: string | null;
 }
@@ -17,20 +17,21 @@ interface CandidateTableProps {
 export function CandidateTable({ migration, onPreview, runningCandidate }: CandidateTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const kind = migration.candidates[0]?.kind ?? "candidate";
+  const kindPlural = kind + "s";
+  const kindCap = kind.charAt(0).toUpperCase() + kind.slice(1);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [groupBy, setGroupBy] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const c = { running: 0, completed: 0, not_started: 0 };
     for (const t of migration.candidates) {
-      const run = migration.candidateRuns?.[t.id];
-      if (!run) c.not_started++;
-      else if (run.status === "completed") c.completed++;
-      else if (run.status === "running") c.running++;
+      if (t.status === "completed") c.completed++;
+      else if (t.status === "running") c.running++;
       else c.not_started++;
     }
     return c;
-  }, [migration.candidates, migration.candidateRuns]);
+  }, [migration.candidates]);
 
   // Derive groupable keys from metadata across all candidates
   const groupKeys = useMemo(() => {
@@ -54,14 +55,13 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
 
     if (filter !== "all") {
       candidates = candidates.filter((t) => {
-        const run = migration.candidateRuns?.[t.id];
-        if (filter === "not_started") return !run;
-        return run?.status === filter;
+        if (filter === "not_started") return !t.status || t.status === "not_started";
+        return t.status === filter;
       });
     }
 
     return candidates;
-  }, [migration.candidates, migration.candidateRuns, search, filter]);
+  }, [migration.candidates, search, filter]);
 
   // Group filtered candidates by the active key, or null for flat list
   const groups = useMemo<[string, Candidate[]][] | null>(() => {
@@ -85,9 +85,9 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
 
   const columnHeader = (
     <div className="grid grid-cols-[1fr_100px_1fr_80px] gap-2 px-4 text-xs text-zinc-600 uppercase tracking-widest font-medium">
-      <span>Candidate</span>
+      <span>{kindCap}</span>
       <span>Status</span>
-      <span>Run</span>
+      <span>Steps</span>
       <span className="text-right">Actions</span>
     </div>
   );
@@ -114,7 +114,7 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
               setSearch(e.target.value);
               setVisibleCount(PAGE_SIZE);
             }}
-            placeholder="Search candidates..."
+            placeholder={`Search ${kindPlural}...`}
             className="pl-9 py-1.5 font-mono"
           />
         </div>
@@ -166,7 +166,7 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
         <div className="space-y-5">
           {groups.length === 0 ? (
             <div className="text-center py-8 text-sm text-zinc-600">
-              No candidates match the current filter.
+              No {kindPlural} match the current filter.
             </div>
           ) : (
             groups.map(([groupValue, candidates]) => (
@@ -174,7 +174,7 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
                 <div className="flex items-baseline gap-2 mb-2">
                   <span className="text-xs font-medium text-zinc-300">{groupValue}</span>
                   <span className="text-xs text-zinc-600">
-                    {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}
+                    {candidates.length} {candidates.length !== 1 ? kindPlural : kind}
                   </span>
                 </div>
                 {columnHeader}
@@ -183,10 +183,9 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
                     <CandidateRow
                       key={c.id}
                       candidate={c}
-                      candidateRun={migration.candidateRuns?.[c.id]}
-                      runId={migration.candidateRuns?.[c.id] ? `${migration.id}__${c.id}` : undefined}
+                      migrationId={(c.status === "running" || c.status === "completed") ? migration.id : undefined}
                       onPreview={onPreview}
-                      isRunning={runningCandidate === c.id || runningCandidate === `${migration.id}__${c.id}`}
+                      isRunning={runningCandidate === c.id}
                     />
                   ))}
                 </div>
@@ -204,17 +203,16 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
               <CandidateRow
                 key={t.id}
                 candidate={t}
-                candidateRun={migration.candidateRuns?.[t.id]}
-                runId={migration.candidateRuns?.[t.id] ? `${migration.id}__${t.id}` : undefined}
+                migrationId={(t.status === "running" || t.status === "completed") ? migration.id : undefined}
                 onPreview={onPreview}
-                isRunning={runningCandidate === t.id || runningCandidate === `${migration.id}__${t.id}`}
+                isRunning={runningCandidate === t.id}
               />
             ))}
           </div>
 
           {visible.length === 0 && (
             <div className="text-center py-8 text-sm text-zinc-600">
-              No candidates match the current filter.
+              No {kindPlural} match the current filter.
             </div>
           )}
 

@@ -69,9 +69,9 @@ type ResetCandidateRunInput struct {
 	CandidateID    string `json:"candidateId"`
 }
 
-// ResetCandidateRun removes the candidate run entry, returning it to not_started state.
+// ResetCandidateRun returns the candidate to not_started state.
 func (a *Activities) ResetCandidateRun(ctx context.Context, input ResetCandidateRunInput) error {
-	if err := a.store.DeleteCandidateRun(ctx, input.RegistrationID, input.CandidateID); err != nil {
+	if err := a.store.SetCandidateStatus(ctx, input.RegistrationID, input.CandidateID, api.CandidateStatusNotStarted); err != nil {
 		return fmt.Errorf("reset candidate run: %w", err)
 	}
 	a.log.Info("reset candidate run to not_started",
@@ -81,7 +81,7 @@ func (a *Activities) ResetCandidateRun(ctx context.Context, input ResetCandidate
 	return nil
 }
 
-// UpdateTargetRunStatus updates the candidate run status in the migration store.
+// UpdateTargetRunStatus updates the candidate status in the migration store.
 func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTargetRunStatusInput) error {
 	ctx, span := otel.Tracer(instrName).Start(ctx, "UpdateTargetRunStatus",
 		trace.WithAttributes(
@@ -91,10 +91,7 @@ func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTarg
 	)
 	defer span.End()
 
-	run := api.CandidateRun{
-		Status: api.CandidateRunStatus(input.Status),
-	}
-	if err := a.store.SetCandidateRun(ctx, input.RegistrationID, input.CandidateID, run); err != nil {
+	if err := a.store.SetCandidateStatus(ctx, input.RegistrationID, input.CandidateID, api.CandidateStatus(input.Status)); err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("update candidate run status: %w", err)
 	}

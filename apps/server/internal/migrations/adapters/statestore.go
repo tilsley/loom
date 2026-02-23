@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	indexKey         = "migrations:index"
-	storeKey         = "statestore"
-	keyPrefix        = "migration:"
-	candidatesPrefix = "migration-candidates:"
+	indexKey  = "migrations:index"
+	storeKey  = "statestore"
+	keyPrefix = "migration:"
 )
 
 // Compile-time check: *DaprMigrationStore implements migrations.MigrationStore.
@@ -31,8 +30,8 @@ func NewDaprMigrationStore(client dapr.Client) *DaprMigrationStore {
 	return &DaprMigrationStore{client: client}
 }
 
-// Save persists a registered migration to the Dapr state store.
-func (s *DaprMigrationStore) Save(ctx context.Context, m api.RegisteredMigration) error {
+// Save persists a migration to the Dapr state store.
+func (s *DaprMigrationStore) Save(ctx context.Context, m api.Migration) error {
 	data, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshal migration: %w", err)
@@ -57,8 +56,8 @@ func (s *DaprMigrationStore) Save(ctx context.Context, m api.RegisteredMigration
 	return s.saveIndex(ctx, ids)
 }
 
-// Get retrieves a registered migration by ID, returning nil if not found.
-func (s *DaprMigrationStore) Get(ctx context.Context, id string) (*api.RegisteredMigration, error) {
+// Get retrieves a migration by ID, returning nil if not found.
+func (s *DaprMigrationStore) Get(ctx context.Context, id string) (*api.Migration, error) {
 	item, err := s.client.GetState(ctx, storeKey, keyPrefix+id, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get state %q: %w", id, err)
@@ -66,21 +65,21 @@ func (s *DaprMigrationStore) Get(ctx context.Context, id string) (*api.Registere
 	if len(item.Value) == 0 {
 		return nil, nil //nolint:nilnil // caller checks nil value to detect "not found"
 	}
-	var m api.RegisteredMigration
+	var m api.Migration
 	if err := json.Unmarshal(item.Value, &m); err != nil {
 		return nil, fmt.Errorf("unmarshal migration %q: %w", id, err)
 	}
 	return &m, nil
 }
 
-// List returns all registered migrations.
-func (s *DaprMigrationStore) List(ctx context.Context) ([]api.RegisteredMigration, error) {
+// List returns all migrations.
+func (s *DaprMigrationStore) List(ctx context.Context) ([]api.Migration, error) {
 	ids, err := s.loadIndex(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load index: %w", err)
 	}
 
-	result := make([]api.RegisteredMigration, 0, len(ids))
+	result := make([]api.Migration, 0, len(ids))
 	for _, id := range ids {
 		m, err := s.Get(ctx, id)
 		if err != nil {
@@ -91,26 +90,6 @@ func (s *DaprMigrationStore) List(ctx context.Context) ([]api.RegisteredMigratio
 		}
 	}
 	return result, nil
-}
-
-// Delete removes a registered migration by ID.
-func (s *DaprMigrationStore) Delete(ctx context.Context, id string) error {
-	if err := s.client.DeleteState(ctx, storeKey, keyPrefix+id, nil); err != nil {
-		return fmt.Errorf("delete state %q: %w", id, err)
-	}
-
-	// Remove from index.
-	ids, err := s.loadIndex(ctx)
-	if err != nil {
-		return fmt.Errorf("load index: %w", err)
-	}
-	filtered := make([]string, 0, len(ids))
-	for _, v := range ids {
-		if v != id {
-			filtered = append(filtered, v)
-		}
-	}
-	return s.saveIndex(ctx, filtered)
 }
 
 // AppendCancelledAttempt records a cancelled run attempt on the migration.
@@ -134,11 +113,11 @@ func (s *DaprMigrationStore) AppendCancelledAttempt(ctx context.Context, migrati
 	return s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, data, nil)
 }
 
-// SetCandidateRun records the run status for a specific candidate within a migration.
-func (s *DaprMigrationStore) SetCandidateRun(
+// SetCandidateStatus updates the status of a specific candidate within a migration.
+func (s *DaprMigrationStore) SetCandidateStatus(
 	ctx context.Context,
 	migrationID, candidateID string,
-	run api.CandidateRun,
+	status api.CandidateStatus,
 ) error {
 	m, err := s.Get(ctx, migrationID)
 	if err != nil {
@@ -147,117 +126,79 @@ func (s *DaprMigrationStore) SetCandidateRun(
 	if m == nil {
 		return fmt.Errorf("migration %q not found", migrationID)
 	}
-	if m.CandidateRuns == nil {
-		m.CandidateRuns = &map[string]api.CandidateRun{}
+	for i, c := range m.Candidates {
+		if c.Id == candidateID {
+			m.Candidates[i].Status = &status
+			data, err := json.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("marshal migration: %w", err)
+			}
+			return s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, data, nil)
+		}
 	}
-	(*m.CandidateRuns)[candidateID] = run
-
-	data, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("marshal migration: %w", err)
-	}
-	return s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, data, nil)
+	return fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
 }
 
-// DeleteCandidateRun removes a candidate's run entry, returning it to not_started state.
-func (s *DaprMigrationStore) DeleteCandidateRun(ctx context.Context, migrationID, candidateID string) error {
-	m, err := s.Get(ctx, migrationID)
-	if err != nil {
-		return err
-	}
-	if m == nil {
-		return fmt.Errorf("migration %q not found", migrationID)
-	}
-	if m.CandidateRuns == nil {
-		return nil
-	}
-	delete(*m.CandidateRuns, candidateID)
-
-	data, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("marshal migration: %w", err)
-	}
-	return s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, data, nil)
-}
-
-// SaveCandidates persists the discovered candidate list for a migration.
-// It also updates the migration object's Candidates field so that List/Get
-// returns the correct count without a separate lookup.
-func (s *DaprMigrationStore) SaveCandidates(ctx context.Context, migrationID string, candidates []api.Candidate) error {
-	data, err := json.Marshal(candidates)
-	if err != nil {
-		return fmt.Errorf("marshal candidates: %w", err)
-	}
-	if err := s.client.SaveState(ctx, storeKey, candidatesPrefix+migrationID, data, nil); err != nil {
-		return fmt.Errorf("save candidates state %q: %w", migrationID, err)
-	}
-
-	// Keep the migration object in sync so List/Get returns the correct candidate count.
+// SaveCandidates merges the discovered candidate list into the migration.
+// Candidates already in running or completed state are preserved as-is.
+// Running/completed candidates not in the incoming list are also preserved.
+func (s *DaprMigrationStore) SaveCandidates(ctx context.Context, migrationID string, incoming []api.Candidate) error {
 	m, err := s.Get(ctx, migrationID)
 	if err != nil {
 		return fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
-	if m != nil {
-		m.Candidates = candidates
-		mData, err := json.Marshal(m)
-		if err != nil {
-			return fmt.Errorf("marshal migration: %w", err)
-		}
-		if err := s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, mData, nil); err != nil {
-			return fmt.Errorf("update migration candidates %q: %w", migrationID, err)
+	if m == nil {
+		return fmt.Errorf("migration %q not found", migrationID)
+	}
+
+	// Build a map of existing candidates by ID to check their status.
+	existing := make(map[string]api.Candidate, len(m.Candidates))
+	for _, c := range m.Candidates {
+		existing[c.Id] = c
+	}
+
+	notStarted := api.CandidateStatusNotStarted
+	incomingIDs := make(map[string]bool, len(incoming))
+	merged := make([]api.Candidate, 0, len(incoming))
+	for _, c := range incoming {
+		incomingIDs[c.Id] = true
+		if ex, ok := existing[c.Id]; ok && ex.Status != nil &&
+			(*ex.Status == api.CandidateStatusRunning || *ex.Status == api.CandidateStatusCompleted) {
+			// Preserve running/completed candidate state.
+			merged = append(merged, ex)
+		} else {
+			// New or not-started candidate: add with not_started status.
+			c.Status = &notStarted
+			merged = append(merged, c)
 		}
 	}
-	return nil
+
+	// Keep running/completed candidates that are no longer in the incoming list.
+	for _, ex := range m.Candidates {
+		if !incomingIDs[ex.Id] && ex.Status != nil &&
+			(*ex.Status == api.CandidateStatusRunning || *ex.Status == api.CandidateStatusCompleted) {
+			merged = append(merged, ex)
+		}
+	}
+
+	m.Candidates = merged
+	data, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshal migration: %w", err)
+	}
+	return s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, data, nil)
 }
 
-// GetCandidates returns the candidate list for a migration, enriched with
-// run status derived from the migration's targetRuns map.
-func (s *DaprMigrationStore) GetCandidates(ctx context.Context, migrationID string) ([]api.CandidateWithStatus, error) {
-	item, err := s.client.GetState(ctx, storeKey, candidatesPrefix+migrationID, nil)
-	if err != nil {
-		return nil, fmt.Errorf("get candidates state %q: %w", migrationID, err)
-	}
-
-	var candidates []api.Candidate
-	if len(item.Value) > 0 {
-		if err := json.Unmarshal(item.Value, &candidates); err != nil {
-			return nil, fmt.Errorf("unmarshal candidates %q: %w", migrationID, err)
-		}
-	}
-
-	// Load migration to access candidateRuns for status enrichment.
+// GetCandidates returns the candidate list for a migration with their current status.
+func (s *DaprMigrationStore) GetCandidates(ctx context.Context, migrationID string) ([]api.Candidate, error) {
 	m, err := s.Get(ctx, migrationID)
 	if err != nil {
 		return nil, fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
-
-	result := make([]api.CandidateWithStatus, 0, len(candidates))
-	for _, c := range candidates {
-		cs := api.CandidateWithStatus{
-			Id:       c.Id,
-			Kind:     c.Kind,
-			Metadata: c.Metadata,
-			State:    c.State,
-			Files:    c.Files,
-			Status:   api.CandidateStatusNotStarted,
-		}
-		if m != nil && m.CandidateRuns != nil {
-			if cr, ok := (*m.CandidateRuns)[c.Id]; ok {
-				runId := migrations.RunID(migrationID, c.Id)
-				switch cr.Status {
-				case api.CandidateRunStatusRunning:
-					cs.Status = api.CandidateStatusRunning
-					cs.RunId = &runId
-				case api.CandidateRunStatusCompleted:
-					cs.Status = api.CandidateStatusCompleted
-					cs.RunId = &runId
-				}
-			}
-		}
-		result = append(result, cs)
+	if m == nil {
+		return nil, nil //nolint:nilnil // migration not found treated as no candidates
 	}
-
-	return result, nil
+	return m.Candidates, nil
 }
 
 

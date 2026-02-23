@@ -1,16 +1,15 @@
 import Link from "next/link";
-import type { RegisteredMigration } from "@/lib/api";
+import type { Migration } from "@/lib/api";
 import { ProgressBar } from "./progress-bar";
 
 interface ActiveRunsProps {
-  migrations: RegisteredMigration[];
+  migrations: Migration[];
 }
 
 export function ActiveRuns({ migrations }: ActiveRunsProps) {
-  const active = migrations.filter((m) => {
-    if (!m.candidateRuns) return false;
-    return Object.values(m.candidateRuns).some((tr) => tr.status === "running");
-  });
+  const active = migrations.filter((m) =>
+    m.candidates.some((c) => c.status === "running"),
+  );
 
   return (
     <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg">
@@ -23,9 +22,7 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
         ) : (
           <div className="space-y-4">
             {active.map((m) => {
-              const runningCount = m.candidateRuns
-                ? Object.values(m.candidateRuns).filter((tr) => tr.status === "running").length
-                : 0;
+              const runningCount = m.candidates.filter((c) => c.status === "running").length;
 
               return (
                 <div key={m.id}>
@@ -40,7 +37,7 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
                       {runningCount}/{m.candidates.length} running
                     </span>
                   </div>
-                  <ProgressBar candidates={m.candidates} candidateRuns={m.candidateRuns} />
+                  <ProgressBar candidates={m.candidates} />
                 </div>
               );
             })}

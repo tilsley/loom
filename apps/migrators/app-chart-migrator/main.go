@@ -222,8 +222,8 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 	return api.MigrationAnnouncement{
 		Id:             "app-chart-migration",
 		Name:           "App Chart Migration",
-		Description:    &desc,
-		RequiredInputs: &[]string{"repoName"},
+		Description:    desc,
+		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository"}},
 		Candidates:     []api.Candidate{},
 		Steps:          stepDefs,
 	}

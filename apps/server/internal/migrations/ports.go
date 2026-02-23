@@ -27,15 +27,13 @@ type DryRunner interface {
 	DryRun(ctx context.Context, req api.DryRunRequest) (*api.DryRunResult, error)
 }
 
-// MigrationStore persists registered migration definitions.
+// MigrationStore persists migration definitions.
 type MigrationStore interface {
-	Save(ctx context.Context, m api.RegisteredMigration) error
-	Get(ctx context.Context, id string) (*api.RegisteredMigration, error)
-	List(ctx context.Context) ([]api.RegisteredMigration, error)
-	Delete(ctx context.Context, id string) error
+	Save(ctx context.Context, m api.Migration) error
+	Get(ctx context.Context, id string) (*api.Migration, error)
+	List(ctx context.Context) ([]api.Migration, error)
 	AppendCancelledAttempt(ctx context.Context, migrationID string, attempt api.CancelledAttempt) error
-	SetCandidateRun(ctx context.Context, migrationID, candidateID string, run api.CandidateRun) error
-	DeleteCandidateRun(ctx context.Context, migrationID, candidateID string) error
+	SetCandidateStatus(ctx context.Context, migrationID, candidateID string, status api.CandidateStatus) error
 	SaveCandidates(ctx context.Context, migrationID string, candidates []api.Candidate) error
-	GetCandidates(ctx context.Context, migrationID string) ([]api.CandidateWithStatus, error)
+	GetCandidates(ctx context.Context, migrationID string) ([]api.Candidate, error)
 }

@@ -1,7 +1,7 @@
-import type { RegisteredMigration } from "@/lib/api";
+import type { Migration } from "@/lib/api";
 
 interface DashboardStatsProps {
-  migrations: RegisteredMigration[];
+  migrations: Migration[];
 }
 
 export function DashboardStats({ migrations }: DashboardStatsProps) {
@@ -9,10 +9,9 @@ export function DashboardStats({ migrations }: DashboardStatsProps) {
   let completedCandidates = 0;
 
   for (const m of migrations) {
-    if (!m.candidateRuns) continue;
-    for (const tr of Object.values(m.candidateRuns)) {
-      if (tr.status === "running") activeCandidates++;
-      else if (tr.status === "completed") completedCandidates++;
+    for (const c of m.candidates) {
+      if (c.status === "running") activeCandidates++;
+      else if (c.status === "completed") completedCandidates++;
     }
   }
 

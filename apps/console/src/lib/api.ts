@@ -1,70 +1,16 @@
 import type { components } from "./api.gen";
 
-export type MigrationManifest = components["schemas"]["MigrationManifest"];
 export type StepDefinition = components["schemas"]["StepDefinition"];
 export type StepResult = components["schemas"]["StepResult"];
-export type MigrationResult = components["schemas"]["MigrationResult"];
-export type StatusResponse = components["schemas"]["StatusResponse"];
-export type StartResponse = components["schemas"]["StartResponse"];
-export type StartRequest = components["schemas"]["StartRequest"];
-export type RegisteredMigration = components["schemas"]["RegisteredMigration"];
-export type RegisterMigrationRequest = components["schemas"]["RegisterMigrationRequest"];
+export type Migration = components["schemas"]["Migration"];
 export type ListMigrationsResponse = components["schemas"]["ListMigrationsResponse"];
-export type ExecuteRunResponse = components["schemas"]["ExecuteRunResponse"];
-export type RunInfo = components["schemas"]["RunInfo"];
 export type Candidate = components["schemas"]["Candidate"];
-export type CandidateRun = components["schemas"]["CandidateRun"];
 export type CandidateStatus = components["schemas"]["CandidateStatus"];
-export type CandidateWithStatus = components["schemas"]["CandidateWithStatus"];
-export type SubmitCandidatesRequest = components["schemas"]["SubmitCandidatesRequest"];
-export type FileGroup = components["schemas"]["FileGroup"];
-export type FileRef = components["schemas"]["FileRef"];
+export type CandidateStepsResponse = components["schemas"]["CandidateStepsResponse"];
 export type DryRunResult = components["schemas"]["DryRunResult"];
-export type StepDryRunResult = components["schemas"]["StepDryRunResult"];
 export type FileDiff = components["schemas"]["FileDiff"];
 
 const BASE = "/api";
-
-export async function startMigration(manifest: MigrationManifest): Promise<StartResponse> {
-  const res = await fetch(`${BASE}/start`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ manifest }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export async function getStatus(id: string): Promise<StatusResponse> {
-  const res = await fetch(`${BASE}/status/${id}`);
-  if (!res.ok) {
-    const body = await res.text();
-    let message = body;
-    try {
-      const parsed = JSON.parse(body);
-      if (parsed.error) message = parsed.error;
-    } catch {
-      // plain text error, use as-is
-    }
-    if (res.status === 404 || message.includes("not found")) {
-      throw new NotFoundError(message);
-    }
-    throw new Error(message);
-  }
-  return res.json();
-}
-
-export async function registerMigration(
-  req: RegisterMigrationRequest,
-): Promise<RegisteredMigration> {
-  const res = await fetch(`${BASE}/migrations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
 
 export async function listMigrations(): Promise<ListMigrationsResponse> {
   const res = await fetch(`${BASE}/migrations`);
@@ -72,15 +18,10 @@ export async function listMigrations(): Promise<ListMigrationsResponse> {
   return res.json();
 }
 
-export async function getMigration(id: string): Promise<RegisteredMigration> {
+export async function getMigration(id: string): Promise<Migration> {
   const res = await fetch(`${BASE}/migrations/${id}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
-}
-
-export async function deleteMigration(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/migrations/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(await res.text());
 }
 
 export class ConflictError extends Error {
@@ -111,32 +52,42 @@ export async function completeStep(
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function getCandidates(id: string): Promise<CandidateWithStatus[]> {
+export async function getCandidates(id: string): Promise<Candidate[]> {
   const res = await fetch(`${BASE}/migrations/${id}/candidates`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
-export async function getRunInfo(runId: string): Promise<RunInfo | null> {
-  const res = await fetch(`${BASE}/runs/${runId}`);
+export async function getCandidateSteps(
+  migrationId: string,
+  candidateId: string,
+): Promise<CandidateStepsResponse | null> {
+  const res = await fetch(`${BASE}/migrations/${migrationId}/candidates/${candidateId}/steps`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
-export async function executeRun(
+export async function cancelRun(migrationId: string, candidateId: string): Promise<void> {
+  const res = await fetch(`${BASE}/migrations/${migrationId}/candidates/${candidateId}/cancel`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function startRun(
   migrationId: string,
-  candidate: Candidate,
+  candidateId: string,
   inputs?: Record<string, string>,
-): Promise<ExecuteRunResponse> {
-  const res = await fetch(`${BASE}/migrations/${migrationId}/execute`, {
+): Promise<void> {
+  const body = inputs && Object.keys(inputs).length > 0 ? { inputs } : undefined;
+  const res = await fetch(`${BASE}/migrations/${migrationId}/candidates/${candidateId}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ candidate, ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}) }),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (res.status === 409) throw new ConflictError(await res.text());
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
 }
 
 export async function dryRun(migrationId: string, candidate: Candidate): Promise<DryRunResult> {

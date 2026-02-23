@@ -77,31 +77,27 @@ func (d *stubDryRunner) DryRun(ctx context.Context, req api.DryRunRequest) (*api
 // ─── memStore ─────────────────────────────────────────────────────────────────
 
 type memStore struct {
-	data              map[string]api.RegisteredMigration
-	candidates        map[string][]api.CandidateWithStatus
+	data              map[string]api.Migration
 	cancelledAttempts map[string][]api.CancelledAttempt
 
 	// per-method error stubs
 	errSave                   error
 	errGet                    error
 	errList                   error
-	errDelete                 error
 	errAppendCancelledAttempt error
-	errSetCandidateRun        error
-	errDeleteCandidateRun     error
+	errSetCandidateStatus     error
 	errSaveCandidates         error
 	errGetCandidates          error
 }
 
 func newMemStore() *memStore {
 	return &memStore{
-		data:              make(map[string]api.RegisteredMigration),
-		candidates:        make(map[string][]api.CandidateWithStatus),
+		data:              make(map[string]api.Migration),
 		cancelledAttempts: make(map[string][]api.CancelledAttempt),
 	}
 }
 
-func (s *memStore) Save(_ context.Context, m api.RegisteredMigration) error {
+func (s *memStore) Save(_ context.Context, m api.Migration) error {
 	if s.errSave != nil {
 		return s.errSave
 	}
@@ -109,7 +105,7 @@ func (s *memStore) Save(_ context.Context, m api.RegisteredMigration) error {
 	return nil
 }
 
-func (s *memStore) Get(_ context.Context, id string) (*api.RegisteredMigration, error) {
+func (s *memStore) Get(_ context.Context, id string) (*api.Migration, error) {
 	if s.errGet != nil {
 		return nil, s.errGet
 	}
@@ -120,23 +116,15 @@ func (s *memStore) Get(_ context.Context, id string) (*api.RegisteredMigration, 
 	return &m, nil
 }
 
-func (s *memStore) List(_ context.Context) ([]api.RegisteredMigration, error) {
+func (s *memStore) List(_ context.Context) ([]api.Migration, error) {
 	if s.errList != nil {
 		return nil, s.errList
 	}
-	out := make([]api.RegisteredMigration, 0, len(s.data))
+	out := make([]api.Migration, 0, len(s.data))
 	for _, m := range s.data {
 		out = append(out, m)
 	}
 	return out, nil
-}
-
-func (s *memStore) Delete(_ context.Context, id string) error {
-	if s.errDelete != nil {
-		return s.errDelete
-	}
-	delete(s.data, id)
-	return nil
 }
 
 func (s *memStore) AppendCancelledAttempt(_ context.Context, migrationID string, attempt api.CancelledAttempt) error {
@@ -147,35 +135,22 @@ func (s *memStore) AppendCancelledAttempt(_ context.Context, migrationID string,
 	return nil
 }
 
-func (s *memStore) SetCandidateRun(_ context.Context, migrationID, candidateID string, run api.CandidateRun) error {
-	if s.errSetCandidateRun != nil {
-		return s.errSetCandidateRun
-	}
-	m, ok := s.data[migrationID]
-	if !ok {
-		return fmt.Errorf("migration %q not found", migrationID)
-	}
-	if m.CandidateRuns == nil {
-		runs := make(map[string]api.CandidateRun)
-		m.CandidateRuns = &runs
-	}
-	(*m.CandidateRuns)[candidateID] = run
-	s.data[migrationID] = m
-	return nil
-}
-
-func (s *memStore) DeleteCandidateRun(_ context.Context, migrationID, candidateID string) error {
-	if s.errDeleteCandidateRun != nil {
-		return s.errDeleteCandidateRun
+func (s *memStore) SetCandidateStatus(_ context.Context, migrationID, candidateID string, status api.CandidateStatus) error {
+	if s.errSetCandidateStatus != nil {
+		return s.errSetCandidateStatus
 	}
 	m, ok := s.data[migrationID]
 	if !ok {
 		return nil
 	}
-	if m.CandidateRuns != nil {
-		delete(*m.CandidateRuns, candidateID)
+	for i, c := range m.Candidates {
+		if c.Id == candidateID {
+			st := status
+			m.Candidates[i].Status = &st
+			s.data[migrationID] = m
+			return nil
+		}
 	}
-	s.data[migrationID] = m
 	return nil
 }
 
@@ -183,67 +158,39 @@ func (s *memStore) SaveCandidates(_ context.Context, migrationID string, candida
 	if s.errSaveCandidates != nil {
 		return s.errSaveCandidates
 	}
-	cs := make([]api.CandidateWithStatus, len(candidates))
-	for i, c := range candidates {
-		cs[i] = api.CandidateWithStatus{
-			Id:       c.Id,
-			Kind:     c.Kind,
-			Metadata: c.Metadata,
-			State:    c.State,
-			Files:    c.Files,
-			Status:   api.CandidateStatusNotStarted,
+	m, ok := s.data[migrationID]
+	if !ok {
+		return fmt.Errorf("migration %q not found", migrationID)
+	}
+	ns := api.CandidateStatusNotStarted
+	for i := range candidates {
+		if candidates[i].Status == nil {
+			candidates[i].Status = &ns
 		}
 	}
-	s.candidates[migrationID] = cs
+	m.Candidates = candidates
+	s.data[migrationID] = m
 	return nil
 }
 
-func (s *memStore) GetCandidates(_ context.Context, migrationID string) ([]api.CandidateWithStatus, error) {
+func (s *memStore) GetCandidates(_ context.Context, migrationID string) ([]api.Candidate, error) {
 	if s.errGetCandidates != nil {
 		return nil, s.errGetCandidates
 	}
-	return s.candidates[migrationID], nil
+	m, ok := s.data[migrationID]
+	if !ok {
+		return nil, nil
+	}
+	return m.Candidates, nil
 }
 
 // ─── constructor helper ───────────────────────────────────────────────────────
 
 func newSvc(store *memStore, engine *stubEngine, dr *stubDryRunner) *migrations.Service {
-	return migrations.NewService(engine, store, dr, "test-org")
+	return migrations.NewService(engine, store, dr)
 }
 
 // ─── tests ────────────────────────────────────────────────────────────────────
-
-func TestService_Register(t *testing.T) {
-	t.Run("returns migration with generated ID and org", func(t *testing.T) {
-		store := newMemStore()
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		m, err := svc.Register(context.Background(), api.RegisterMigrationRequest{
-			Name:  "Test Migration",
-			Steps: []api.StepDefinition{{Name: "step-1", WorkerApp: "app"}},
-		})
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, m.Id)
-		assert.Equal(t, "Test Migration", m.Name)
-		assert.Equal(t, ptr("test-org"), m.Org)
-		assert.WithinDuration(t, time.Now(), m.CreatedAt, 2*time.Second)
-
-		// persisted to the store
-		stored, _ := store.Get(context.Background(), m.Id)
-		require.NotNil(t, stored)
-		assert.Equal(t, m.Id, stored.Id)
-	})
-
-	t.Run("propagates store save error", func(t *testing.T) {
-		store := newMemStore()
-		store.errSave = errors.New("disk full")
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		_, err := svc.Register(context.Background(), api.RegisterMigrationRequest{Name: "x"})
-		require.ErrorContains(t, err, "disk full")
-	})
-}
 
 func TestService_Announce(t *testing.T) {
 	t.Run("creates new migration when not found", func(t *testing.T) {
@@ -257,7 +204,6 @@ func TestService_Announce(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "app-chart-migration", m.Id)
-		assert.Equal(t, ptr("test-org"), m.Org)
 		assert.WithinDuration(t, time.Now(), m.CreatedAt, 2*time.Second)
 	})
 
@@ -267,7 +213,7 @@ func TestService_Announce(t *testing.T) {
 		ctx := context.Background()
 
 		createdAt := time.Now().Add(-24 * time.Hour).UTC()
-		_ = store.Save(ctx, api.RegisteredMigration{
+		_ = store.Save(ctx, api.Migration{
 			Id:         "app-chart-migration",
 			Name:       "Old Name",
 			CreatedAt:  createdAt,
@@ -285,7 +231,6 @@ func TestService_Announce(t *testing.T) {
 		assert.Equal(t, createdAt, m.CreatedAt, "createdAt must be preserved")
 		assert.Len(t, m.Candidates, 1, "candidates must be preserved")
 		assert.Len(t, m.Steps, 1, "steps must be updated")
-		assert.Equal(t, ptr("test-org"), m.Org)
 	})
 
 	t.Run("propagates store Get error", func(t *testing.T) {
@@ -310,8 +255,8 @@ func TestService_Announce(t *testing.T) {
 func TestService_List(t *testing.T) {
 	t.Run("returns all migrations from store", func(t *testing.T) {
 		store := newMemStore()
-		_ = store.Save(context.Background(), api.RegisteredMigration{Id: "m1", Name: "M1"})
-		_ = store.Save(context.Background(), api.RegisteredMigration{Id: "m2", Name: "M2"})
+		_ = store.Save(context.Background(), api.Migration{Id: "m1", Name: "M1"})
+		_ = store.Save(context.Background(), api.Migration{Id: "m2", Name: "M2"})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
 		list, err := svc.List(context.Background())
@@ -332,7 +277,7 @@ func TestService_List(t *testing.T) {
 func TestService_Get(t *testing.T) {
 	t.Run("returns migration by ID", func(t *testing.T) {
 		store := newMemStore()
-		_ = store.Save(context.Background(), api.RegisteredMigration{Id: "m1", Name: "M1"})
+		_ = store.Save(context.Background(), api.Migration{Id: "m1", Name: "M1"})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
 		m, err := svc.Get(context.Background(), "m1")
@@ -359,34 +304,11 @@ func TestService_Get(t *testing.T) {
 	})
 }
 
-func TestService_DeleteMigration(t *testing.T) {
-	t.Run("removes migration from store", func(t *testing.T) {
-		store := newMemStore()
-		ctx := context.Background()
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1"})
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		require.NoError(t, svc.DeleteMigration(ctx, "m1"))
-
-		m, _ := store.Get(ctx, "m1")
-		assert.Nil(t, m)
-	})
-
-	t.Run("propagates store error", func(t *testing.T) {
-		store := newMemStore()
-		store.errDelete = errors.New("delete failed")
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		err := svc.DeleteMigration(context.Background(), "m1")
-		require.ErrorContains(t, err, "delete failed")
-	})
-}
-
 func TestService_SubmitCandidates(t *testing.T) {
 	t.Run("saves candidates for known migration", func(t *testing.T) {
 		store := newMemStore()
 		ctx := context.Background()
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1"})
+		_ = store.Save(ctx, api.Migration{Id: "m1"})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
 		err := svc.SubmitCandidates(ctx, "m1", api.SubmitCandidatesRequest{
@@ -416,27 +338,33 @@ func TestService_SubmitCandidates(t *testing.T) {
 }
 
 func TestService_GetCandidates(t *testing.T) {
-	const runID = "m1__repo-a"
-
 	t.Run("returns candidates unchanged when none are running", func(t *testing.T) {
 		store := newMemStore()
-		store.candidates["m1"] = []api.CandidateWithStatus{
-			{Id: "repo-a", Status: api.CandidateStatusNotStarted},
-			{Id: "repo-b", Status: api.CandidateStatusCompleted},
-		}
+		ns := api.CandidateStatusNotStarted
+		completed := api.CandidateStatusCompleted
+		_ = store.Save(context.Background(), api.Migration{
+			Id: "m1",
+			Candidates: []api.Candidate{
+				{Id: "repo-a", Status: &ns},
+				{Id: "repo-b", Status: &completed},
+			},
+		})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
 		assert.Len(t, cs, 2)
-		assert.Equal(t, api.CandidateStatusNotStarted, cs[0].Status)
+		require.NotNil(t, cs[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, *cs[0].Status)
 	})
 
 	t.Run("running candidate with live workflow is unchanged", func(t *testing.T) {
 		store := newMemStore()
-		store.candidates["m1"] = []api.CandidateWithStatus{
-			{Id: "repo-a", Status: api.CandidateStatusRunning, RunId: ptr(runID)},
-		}
+		running := api.CandidateStatusRunning
+		_ = store.Save(context.Background(), api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
 				return &migrations.WorkflowStatus{RuntimeStatus: "RUNNING"}, nil
@@ -446,15 +374,17 @@ func TestService_GetCandidates(t *testing.T) {
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
-		assert.Equal(t, api.CandidateStatusRunning, cs[0].Status)
-		assert.NotNil(t, cs[0].RunId)
+		require.NotNil(t, cs[0].Status)
+		assert.Equal(t, api.CandidateStatusRunning, *cs[0].Status)
 	})
 
 	t.Run("stale running candidate is reset to not_started", func(t *testing.T) {
 		store := newMemStore()
-		store.candidates["m1"] = []api.CandidateWithStatus{
-			{Id: "repo-a", Status: api.CandidateStatusRunning, RunId: ptr(runID)},
-		}
+		running := api.CandidateStatusRunning
+		_ = store.Save(context.Background(), api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, id string) (*migrations.WorkflowStatus, error) {
 				return nil, migrations.WorkflowNotFoundError{InstanceID: id}
@@ -464,15 +394,17 @@ func TestService_GetCandidates(t *testing.T) {
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
-		assert.Equal(t, api.CandidateStatusNotStarted, cs[0].Status)
-		assert.Nil(t, cs[0].RunId)
+		require.NotNil(t, cs[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, *cs[0].Status)
 	})
 
 	t.Run("non-not-found engine error leaves candidate unchanged", func(t *testing.T) {
 		store := newMemStore()
-		store.candidates["m1"] = []api.CandidateWithStatus{
-			{Id: "repo-a", Status: api.CandidateStatusRunning, RunId: ptr(runID)},
-		}
+		running := api.CandidateStatusRunning
+		_ = store.Save(context.Background(), api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
 				return nil, errors.New("connection timeout")
@@ -482,7 +414,8 @@ func TestService_GetCandidates(t *testing.T) {
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
-		assert.Equal(t, api.CandidateStatusRunning, cs[0].Status, "should not reset on non-not-found error")
+		require.NotNil(t, cs[0].Status)
+		assert.Equal(t, api.CandidateStatusRunning, *cs[0].Status, "should not reset on non-not-found error")
 	})
 
 	t.Run("propagates store error", func(t *testing.T) {
@@ -495,82 +428,67 @@ func TestService_GetCandidates(t *testing.T) {
 	})
 }
 
-func TestService_GetRunInfo(t *testing.T) {
+func TestService_GetCandidateSteps(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("invalid run ID returns nil without error", func(t *testing.T) {
-		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
+	t.Run("returns completed steps when workflow output is present", func(t *testing.T) {
+		output, _ := json.Marshal(map[string]interface{}{
+			"status":  "completed",
+			"results": []api.StepResult{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Success: true}},
+		})
+		engine := &stubEngine{
+			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
+				return &migrations.WorkflowStatus{RuntimeStatus: "COMPLETED", Output: output}, nil
+			},
+		}
+		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 
-		info, err := svc.GetRunInfo(ctx, "no-separator-here")
+		resp, err := svc.GetCandidateSteps(ctx, "m1", "repo-a")
 		require.NoError(t, err)
-		assert.Nil(t, info)
+		require.NotNil(t, resp)
+		assert.Equal(t, api.CandidateStepsResponseStatusCompleted, resp.Status)
+		assert.Len(t, resp.Steps, 1)
+		assert.Equal(t, "step-1", resp.Steps[0].StepName)
 	})
 
-	t.Run("migration not found returns nil without error", func(t *testing.T) {
-		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
+	t.Run("returns running status when workflow has no output yet", func(t *testing.T) {
+		engine := &stubEngine{
+			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
+				return &migrations.WorkflowStatus{RuntimeStatus: "RUNNING"}, nil
+			},
+		}
+		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 
-		info, err := svc.GetRunInfo(ctx, "missing__repo-a")
+		resp, err := svc.GetCandidateSteps(ctx, "m1", "repo-a")
 		require.NoError(t, err)
-		assert.Nil(t, info)
+		require.NotNil(t, resp)
+		assert.Equal(t, api.CandidateStepsResponseStatusRunning, resp.Status)
+		assert.Empty(t, resp.Steps)
 	})
 
-	t.Run("migration with no candidate runs returns nil", func(t *testing.T) {
-		store := newMemStore()
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1"})
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+	t.Run("returns nil when workflow not found", func(t *testing.T) {
+		engine := &stubEngine{
+			getStatusFn: func(_ context.Context, id string) (*migrations.WorkflowStatus, error) {
+				return nil, migrations.WorkflowNotFoundError{InstanceID: id}
+			},
+		}
+		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 
-		info, err := svc.GetRunInfo(ctx, "m1__repo-a")
+		resp, err := svc.GetCandidateSteps(ctx, "m1", "repo-a")
 		require.NoError(t, err)
-		assert.Nil(t, info)
+		assert.Nil(t, resp)
 	})
 
-	t.Run("candidate run not in map returns nil", func(t *testing.T) {
-		store := newMemStore()
-		runs := map[string]api.CandidateRun{"other": {Status: api.CandidateRunStatusRunning}}
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1", CandidateRuns: &runs})
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+	t.Run("propagates engine error", func(t *testing.T) {
+		engine := &stubEngine{
+			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
+				return nil, errors.New("engine down")
+			},
+		}
+		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 
-		info, err := svc.GetRunInfo(ctx, "m1__repo-a")
-		require.NoError(t, err)
-		assert.Nil(t, info)
-	})
-
-	t.Run("running candidate run returns RunInfo with running status", func(t *testing.T) {
-		store := newMemStore()
-		runs := map[string]api.CandidateRun{"repo-a": {Status: api.CandidateRunStatusRunning}}
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1", CandidateRuns: &runs})
-		store.candidates["m1"] = []api.CandidateWithStatus{{Id: "repo-a", Status: api.CandidateStatusRunning}}
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		info, err := svc.GetRunInfo(ctx, "m1__repo-a")
-		require.NoError(t, err)
-		require.NotNil(t, info)
-		assert.Equal(t, api.RunInfoStatusRunning, info.Status)
-		assert.Equal(t, "m1__repo-a", info.RunId)
-		assert.Equal(t, "m1", info.MigrationId)
-		assert.Equal(t, "repo-a", info.Candidate.Id)
-	})
-
-	t.Run("completed candidate run returns RunInfo with completed status", func(t *testing.T) {
-		store := newMemStore()
-		runs := map[string]api.CandidateRun{"repo-a": {Status: api.CandidateRunStatusCompleted}}
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1", CandidateRuns: &runs})
-		store.candidates["m1"] = []api.CandidateWithStatus{{Id: "repo-a", Status: api.CandidateStatusCompleted}}
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		info, err := svc.GetRunInfo(ctx, "m1__repo-a")
-		require.NoError(t, err)
-		require.NotNil(t, info)
-		assert.Equal(t, api.RunInfoStatusCompleted, info.Status)
-	})
-
-	t.Run("propagates store Get error", func(t *testing.T) {
-		store := newMemStore()
-		store.errGet = errors.New("store down")
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		_, err := svc.GetRunInfo(ctx, "m1__repo-a")
-		require.ErrorContains(t, err, "store down")
+		_, err := svc.GetCandidateSteps(ctx, "m1", "repo-a")
+		require.ErrorContains(t, err, "engine down")
 	})
 }
 
@@ -578,7 +496,7 @@ func TestService_Cancel(t *testing.T) {
 	ctx := context.Background()
 
 	setup := func(store *memStore) {
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1"})
+		_ = store.Save(ctx, api.Migration{Id: "m1"})
 	}
 
 	t.Run("cancels workflow, writes audit entry, resets candidate", func(t *testing.T) {
@@ -593,12 +511,11 @@ func TestService_Cancel(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		err := svc.Cancel(ctx, "m1__repo-a")
+		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.NoError(t, err)
 		assert.Equal(t, "m1__repo-a", cancelledID)
 		require.Len(t, store.cancelledAttempts["m1"], 1)
 		assert.Equal(t, "repo-a", store.cancelledAttempts["m1"][0].CandidateId)
-		assert.Equal(t, "m1__repo-a", store.cancelledAttempts["m1"][0].RunId)
 	})
 
 	t.Run("workflow not found is tolerated; audit and reset still proceed", func(t *testing.T) {
@@ -611,7 +528,7 @@ func TestService_Cancel(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		err := svc.Cancel(ctx, "m1__repo-a")
+		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.NoError(t, err)
 		assert.Len(t, store.cancelledAttempts["m1"], 1, "audit entry must still be written")
 	})
@@ -625,15 +542,8 @@ func TestService_Cancel(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		err := svc.Cancel(ctx, "m1__repo-a")
+		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.ErrorContains(t, err, "temporal unavailable")
-	})
-
-	t.Run("invalid run ID returns error", func(t *testing.T) {
-		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
-
-		err := svc.Cancel(ctx, "no-separator")
-		require.Error(t, err)
 	})
 
 	t.Run("propagates AppendCancelledAttempt error", func(t *testing.T) {
@@ -641,17 +551,17 @@ func TestService_Cancel(t *testing.T) {
 		store.errAppendCancelledAttempt = errors.New("append failed")
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
-		err := svc.Cancel(ctx, "m1__repo-a")
+		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.ErrorContains(t, err, "append failed")
 	})
 
-	t.Run("propagates DeleteCandidateRun error", func(t *testing.T) {
+	t.Run("propagates SetCandidateStatus error", func(t *testing.T) {
 		store := newMemStore()
 		setup(store)
-		store.errDeleteCandidateRun = errors.New("delete failed")
+		store.errSetCandidateStatus = errors.New("delete failed")
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
-		err := svc.Cancel(ctx, "m1__repo-a")
+		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.ErrorContains(t, err, "delete failed")
 	})
 }
@@ -661,7 +571,7 @@ func TestService_DryRun(t *testing.T) {
 
 	t.Run("passes migration steps to dry runner and returns result", func(t *testing.T) {
 		store := newMemStore()
-		_ = store.Save(ctx, api.RegisteredMigration{
+		_ = store.Save(ctx, api.Migration{
 			Id:    "m1",
 			Steps: []api.StepDefinition{{Name: "step-1", WorkerApp: "app"}},
 		})
@@ -689,7 +599,7 @@ func TestService_DryRun(t *testing.T) {
 
 	t.Run("propagates dry runner error", func(t *testing.T) {
 		store := newMemStore()
-		_ = store.Save(ctx, api.RegisteredMigration{Id: "m1"})
+		_ = store.Save(ctx, api.Migration{Id: "m1"})
 		dr := &stubDryRunner{err: errors.New("worker unreachable")}
 		svc := newSvc(store, &stubEngine{}, dr)
 
@@ -707,24 +617,21 @@ func TestService_DryRun(t *testing.T) {
 	})
 }
 
-func TestService_Execute(t *testing.T) {
+func TestService_Start(t *testing.T) {
 	ctx := context.Background()
 
-	saveMigration := func(store *memStore, runs map[string]api.CandidateRun) {
-		var runsPtr *map[string]api.CandidateRun
-		if runs != nil {
-			runsPtr = &runs
-		}
-		_ = store.Save(ctx, api.RegisteredMigration{
-			Id:            "m1",
-			Steps:         []api.StepDefinition{{Name: "step-1"}},
-			CandidateRuns: runsPtr,
+	// saveMigration saves m1 with the given candidates pre-populated.
+	saveMigration := func(store *memStore, candidates []api.Candidate) {
+		_ = store.Save(ctx, api.Migration{
+			Id:         "m1",
+			Steps:      []api.StepDefinition{{Name: "step-1"}},
+			Candidates: candidates,
 		})
 	}
 
 	t.Run("starts workflow and marks candidate as running", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, nil)
+		saveMigration(store, []api.Candidate{{Id: "repo-a"}})
 		var startedID string
 		engine := &stubEngine{
 			startFn: func(_ context.Context, _, id string, _ any) (string, error) {
@@ -734,19 +641,20 @@ func TestService_Execute(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		runID, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, nil)
+		runID, err := svc.Start(ctx, "m1", "repo-a", nil)
 		require.NoError(t, err)
 		assert.Equal(t, "m1__repo-a", runID)
 		assert.Equal(t, "m1__repo-a", startedID)
 
 		m, _ := store.Get(ctx, "m1")
-		require.NotNil(t, m.CandidateRuns)
-		assert.Equal(t, api.CandidateRunStatusRunning, (*m.CandidateRuns)["repo-a"].Status)
+		require.Len(t, m.Candidates, 1)
+		require.NotNil(t, m.Candidates[0].Status)
+		assert.Equal(t, api.CandidateStatusRunning, *m.Candidates[0].Status)
 	})
 
 	t.Run("merges inputs into candidate metadata before starting workflow", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, nil)
+		saveMigration(store, []api.Candidate{{Id: "repo-a"}})
 		var capturedManifest api.MigrationManifest
 		engine := &stubEngine{
 			startFn: func(_ context.Context, _, _ string, input any) (string, error) {
@@ -757,17 +665,34 @@ func TestService_Execute(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		_, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, map[string]string{"repoName": "my-repo"})
+		_, err := svc.Start(ctx, "m1", "repo-a", map[string]string{"repoName": "my-repo"})
 		require.NoError(t, err)
 		require.NotNil(t, capturedManifest.Candidates[0].Metadata)
 		assert.Equal(t, "my-repo", (*capturedManifest.Candidates[0].Metadata)["repoName"])
 	})
 
+	t.Run("manifest MigrationId is the migration ID, not the run ID", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, []api.Candidate{{Id: "repo-a"}})
+		var capturedManifest api.MigrationManifest
+		engine := &stubEngine{
+			startFn: func(_ context.Context, _, _ string, input any) (string, error) {
+				b, _ := json.Marshal(input)
+				_ = json.Unmarshal(b, &capturedManifest)
+				return "id", nil
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		_, err := svc.Start(ctx, "m1", "repo-a", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "m1", capturedManifest.MigrationId)
+	})
+
 	t.Run("blocks when candidate is already running and workflow still exists", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, map[string]api.CandidateRun{
-			"repo-a": {Status: api.CandidateRunStatusRunning},
-		})
+		running := api.CandidateStatusRunning
+		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: &running}})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
 				return &migrations.WorkflowStatus{RuntimeStatus: "RUNNING"}, nil
@@ -775,7 +700,7 @@ func TestService_Execute(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		_, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, nil)
+		_, err := svc.Start(ctx, "m1", "repo-a", nil)
 		var alreadyRun migrations.CandidateAlreadyRunError
 		require.ErrorAs(t, err, &alreadyRun)
 		assert.Equal(t, "repo-a", alreadyRun.ID)
@@ -784,9 +709,8 @@ func TestService_Execute(t *testing.T) {
 
 	t.Run("blocks when candidate is completed and workflow still exists", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, map[string]api.CandidateRun{
-			"repo-a": {Status: api.CandidateRunStatusCompleted},
-		})
+		completed := api.CandidateStatusCompleted
+		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: &completed}})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
 				return &migrations.WorkflowStatus{RuntimeStatus: "COMPLETED"}, nil
@@ -794,7 +718,7 @@ func TestService_Execute(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		_, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, nil)
+		_, err := svc.Start(ctx, "m1", "repo-a", nil)
 		var alreadyRun migrations.CandidateAlreadyRunError
 		require.ErrorAs(t, err, &alreadyRun)
 		assert.Equal(t, "completed", alreadyRun.Status)
@@ -802,9 +726,8 @@ func TestService_Execute(t *testing.T) {
 
 	t.Run("allows re-execution when workflow is gone", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, map[string]api.CandidateRun{
-			"repo-a": {Status: api.CandidateRunStatusRunning},
-		})
+		running := api.CandidateStatusRunning
+		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: &running}})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, id string) (*migrations.WorkflowStatus, error) {
 				return nil, migrations.WorkflowNotFoundError{InstanceID: id}
@@ -812,7 +735,7 @@ func TestService_Execute(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		runID, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, nil)
+		runID, err := svc.Start(ctx, "m1", "repo-a", nil)
 		require.NoError(t, err)
 		assert.Equal(t, "m1__repo-a", runID)
 	})
@@ -820,13 +743,23 @@ func TestService_Execute(t *testing.T) {
 	t.Run("returns error when migration not found", func(t *testing.T) {
 		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
 
-		_, err := svc.Execute(ctx, "missing", api.Candidate{Id: "repo-a"}, nil)
+		_, err := svc.Start(ctx, "missing", "repo-a", nil)
+		require.ErrorContains(t, err, "not found")
+	})
+
+	t.Run("returns error when candidate not found in migration", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, []api.Candidate{{Id: "other-repo"}})
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		_, err := svc.Start(ctx, "m1", "repo-a", nil)
+		require.ErrorContains(t, err, "candidate")
 		require.ErrorContains(t, err, "not found")
 	})
 
 	t.Run("propagates workflow start error", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, nil)
+		saveMigration(store, []api.Candidate{{Id: "repo-a"}})
 		engine := &stubEngine{
 			startFn: func(_ context.Context, _, _ string, _ any) (string, error) {
 				return "", errors.New("temporal down")
@@ -834,96 +767,18 @@ func TestService_Execute(t *testing.T) {
 		}
 		svc := newSvc(store, engine, &stubDryRunner{})
 
-		_, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, nil)
+		_, err := svc.Start(ctx, "m1", "repo-a", nil)
 		require.ErrorContains(t, err, "temporal down")
 	})
 
-	t.Run("propagates SetCandidateRun error", func(t *testing.T) {
+	t.Run("propagates SetCandidateStatus error", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, nil)
-		store.errSetCandidateRun = errors.New("state write failed")
+		saveMigration(store, []api.Candidate{{Id: "repo-a"}})
+		store.errSetCandidateStatus = errors.New("state write failed")
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
-		_, err := svc.Execute(ctx, "m1", api.Candidate{Id: "repo-a"}, nil)
+		_, err := svc.Start(ctx, "m1", "repo-a", nil)
 		require.ErrorContains(t, err, "state write failed")
-	})
-}
-
-func TestService_Start(t *testing.T) {
-	t.Run("delegates to engine with MigrationOrchestrator workflow name", func(t *testing.T) {
-		var capturedName string
-		engine := &stubEngine{
-			startFn: func(_ context.Context, name, id string, _ any) (string, error) {
-				capturedName = name
-				return id, nil
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-
-		id, err := svc.Start(context.Background(), api.MigrationManifest{MigrationId: "run-123"})
-		require.NoError(t, err)
-		assert.Equal(t, "run-123", id)
-		assert.Equal(t, "MigrationOrchestrator", capturedName)
-	})
-
-	t.Run("propagates engine error", func(t *testing.T) {
-		engine := &stubEngine{
-			startFn: func(_ context.Context, _, _ string, _ any) (string, error) {
-				return "", errors.New("temporal unavailable")
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-
-		_, err := svc.Start(context.Background(), api.MigrationManifest{})
-		require.ErrorContains(t, err, "temporal unavailable")
-	})
-}
-
-func TestService_Status(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("returns status with parsed result when output is present", func(t *testing.T) {
-		result := api.MigrationResult{MigrationId: "run-123", Status: "completed"}
-		output, _ := json.Marshal(result)
-		engine := &stubEngine{
-			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
-				return &migrations.WorkflowStatus{RuntimeStatus: "COMPLETED", Output: output}, nil
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-
-		ms, err := svc.Status(ctx, "run-123")
-		require.NoError(t, err)
-		assert.Equal(t, "COMPLETED", ms.RuntimeStatus)
-		assert.Equal(t, "run-123", ms.InstanceID)
-		require.NotNil(t, ms.Result)
-		assert.Equal(t, "run-123", ms.Result.MigrationId)
-	})
-
-	t.Run("returns status without result when no output", func(t *testing.T) {
-		engine := &stubEngine{
-			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
-				return &migrations.WorkflowStatus{RuntimeStatus: "RUNNING"}, nil
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-
-		ms, err := svc.Status(ctx, "run-123")
-		require.NoError(t, err)
-		assert.Equal(t, "RUNNING", ms.RuntimeStatus)
-		assert.Nil(t, ms.Result)
-	})
-
-	t.Run("propagates engine error", func(t *testing.T) {
-		engine := &stubEngine{
-			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {
-				return nil, errors.New("engine down")
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-
-		_, err := svc.Status(ctx, "run-123")
-		require.ErrorContains(t, err, "engine down")
 	})
 }
 
@@ -990,3 +845,6 @@ func TestService_HandlePROpened(t *testing.T) {
 		require.ErrorContains(t, err, "signal failed")
 	})
 }
+
+// Ensure ptr is used (suppress unused warning)
+var _ = ptr[string]

@@ -4,22 +4,20 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  getStatus,
+  getCandidateSteps,
   getMigration,
   completeStep,
-  NotFoundError,
-  type StatusResponse,
-  type RegisteredMigration,
+  type CandidateStepsResponse,
+  type Migration,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
-import { StatusBadge } from "@/components/status-badge";
 import { StepTimeline } from "@/components/step-timeline";
 import { Skeleton, buttonVariants } from "@/components/ui";
 
-export default function RunDetail() {
-  const { id } = useParams<{ id: string }>();
-  const [status, setStatus] = useState<StatusResponse | null>(null);
-  const [migration, setMigration] = useState<RegisteredMigration | null>(null);
+export default function CandidateStepsPage() {
+  const { id, candidateId } = useParams<{ id: string; candidateId: string }>();
+  const [stepsData, setStepsData] = useState<CandidateStepsResponse | null>(null);
+  const [migration, setMigration] = useState<Migration | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -31,45 +29,35 @@ export default function RunDetail() {
     }
   }, []);
 
-  const startPolling = useCallback(
-    (pollFn: () => Promise<void>) => {
-      stopPolling();
-      void pollFn();
-      intervalRef.current = setInterval(() => void pollFn(), 2000);
-    },
-    [stopPolling],
-  );
-
   const poll = useCallback(async () => {
     try {
-      const data = await getStatus(id);
-      setStatus(data);
-      setError(null);
-    } catch (e) {
-      if (e instanceof NotFoundError) {
+      const data = await getCandidateSteps(id, candidateId);
+      if (data === null) {
         setNotFound(true);
         stopPolling();
         return;
       }
+      setStepsData(data);
+      setError(null);
+      // Stop polling once completed
+      if (data.status === "completed") {
+        stopPolling();
+      }
+    } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch");
     }
-  }, [id, stopPolling]);
+  }, [id, candidateId, stopPolling]);
 
   useEffect(() => {
-    startPolling(poll);
+    void poll();
+    intervalRef.current = setInterval(() => void poll(), 2000);
     return stopPolling;
-  }, [poll, startPolling, stopPolling]);
+  }, [poll, stopPolling]);
 
-  // Run ID format is "{migrationId}__{candidateId}" — split on "__" to recover the
-  // registration ID. status.result.migrationId is the run ID, not the reg ID.
-  const registrationId = id.split("__")[0] ?? id;
   useEffect(() => {
-    getMigration(registrationId)
-      .then(setMigration)
-      .catch(() => {});
-  }, [registrationId]);
+    getMigration(id).then(setMigration).catch(() => {});
+  }, [id]);
 
-  // Map stepName → description from the registered migration
   const stepDescriptions = useMemo(() => {
     if (!migration) return new Map<string, string>();
     return new Map(
@@ -77,30 +65,18 @@ export default function RunDetail() {
     );
   }, [migration]);
 
-  // Unique candidates involved in this run
-  const candidates = useMemo(() => {
-    if (!status?.result?.results.length) return [];
-    const seen = new Set<string>();
-    return status.result.results
-      .map((r) => r.candidate)
-      .filter((c) => {
-        if (seen.has(c.id)) return false;
-        seen.add(c.id);
-        return true;
-      });
-  }, [status]);
-
   const stats = useMemo(() => {
-    if (!status?.result) return null;
-    const results = status.result.results;
-    const completed = results.filter(
-      (r) => r.success && r.metadata?.phase !== "in_progress",
-    ).length;
+    if (!stepsData) return null;
+    const results = stepsData.steps;
+    const completed = results.filter((r) => r.success && r.metadata?.phase !== "in_progress").length;
     const failed = results.filter((r) => !r.success).length;
     const prs = results.filter((r) => r.metadata?.prUrl).length;
     const merged = results.filter((r) => r.metadata?.phase === "merged").length;
     return { total: results.length, completed, failed, prs, merged };
-  }, [status]);
+  }, [stepsData]);
+
+  // Run ID used for event callbacks — derived from migration + candidate IDs
+  const runId = `${id}__${candidateId}`;
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -119,47 +95,41 @@ export default function RunDetail() {
           </div>
           <h2 className="text-lg font-semibold text-zinc-100 mb-1">Workflow Not Found</h2>
           <p className="text-sm text-zinc-500 mb-2 max-w-md">
-            The workflow instance for this run no longer exists. This typically happens when the
-            orchestration engine is restarted and ephemeral state is lost.
+            No active or completed workflow found for this candidate. This typically happens when
+            the orchestration engine is restarted and ephemeral state is lost.
           </p>
-          <p className="text-xs font-mono text-zinc-600 mb-6 break-all max-w-md">{id}</p>
-          <Link href={ROUTES.migrations} className={buttonVariants({ variant: "outline" })}>
-            Back to Migrations
+          <p className="text-xs font-mono text-zinc-600 mb-6 break-all max-w-md">{candidateId}</p>
+          <Link href={ROUTES.migrationDetail(id)} className={buttonVariants({ variant: "outline" })}>
+            Back to Migration
           </Link>
         </div>
       ) : (
         <>
-          {/* Header — single line: back link · targets · run id  [status] */}
+          {/* Header */}
           <div className="flex items-center gap-2 flex-wrap">
             <Link
-              href={ROUTES.migrationDetail(registrationId)}
+              href={ROUTES.migrationDetail(id)}
               className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              {migration?.name ?? registrationId}
+              {migration?.name ?? id}
             </Link>
-
-            {candidates.length > 0 && <span className="text-zinc-700 select-none">·</span>}
-            {candidates.map((t) => {
-              const team = t.metadata?.team;
-              const appName = t.id;
-              return (
-                <span
-                  key={t.id}
-                  className="inline-flex items-center gap-1.5 text-xs font-mono bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 px-2 py-0.5 rounded-md"
-                >
-                  {team ? <span className="text-zinc-500">{team} /</span> : null}
-                  {appName}
-                </span>
-              );
-            })}
-
-            {status ? (
+            <span className="text-zinc-700 select-none">·</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-mono bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 px-2 py-0.5 rounded-md">
+              {candidateId}
+            </span>
+            {stepsData ? (
               <>
                 <span className="flex-1" />
-                <StatusBadge status={status.runtimeStatus} />
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-md border shrink-0 ${
+                  stepsData.status === "completed"
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                }`}>
+                  {stepsData.status}
+                </span>
               </>
             ) : null}
           </div>
@@ -171,15 +141,11 @@ export default function RunDetail() {
           ) : null}
 
           {/* Loading skeleton */}
-          {!status && !error ? (
+          {!stepsData && !error ? (
             <div className="space-y-4">
               <div className="grid grid-cols-4 gap-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <Skeleton
-                    key={i}
-                    className="h-[72px]"
-                    style={{ animationDelay: `${i * 80}ms` }}
-                  />
+                  <Skeleton key={i} className="h-[72px]" style={{ animationDelay: `${i * 80}ms` }} />
                 ))}
               </div>
               <Skeleton className="h-32 w-full" />
@@ -190,16 +156,8 @@ export default function RunDetail() {
           {stats ? (
             <div className="grid grid-cols-4 gap-3">
               <StatCard label="Total Steps" value={stats.total} />
-              <StatCard
-                label="Completed"
-                value={stats.completed}
-                accent={stats.completed > 0 ? "emerald" : undefined}
-              />
-              <StatCard
-                label="Failed"
-                value={stats.failed}
-                accent={stats.failed > 0 ? "red" : undefined}
-              />
+              <StatCard label="Completed" value={stats.completed} accent={stats.completed > 0 ? "emerald" : undefined} />
+              <StatCard label="Failed" value={stats.failed} accent={stats.failed > 0 ? "red" : undefined} />
               <StatCard
                 label="Pull Requests"
                 value={stats.prs}
@@ -210,25 +168,21 @@ export default function RunDetail() {
           ) : null}
 
           {/* Step timeline */}
-          {status ? (
+          {stepsData ? (
             <section className="w-fit min-w-[700px] mx-auto">
               <div className="flex items-center gap-2 mb-4">
-                <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-widest">
-                  Steps
-                </h2>
-                {status.result ? (
-                  <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
-                    {status.result.results.length}
-                  </span>
-                ) : null}
+                <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-widest">Steps</h2>
+                <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                  {stepsData.steps.length}
+                </span>
               </div>
               <div className="border border-zinc-800/80 rounded-lg p-6 overflow-y-auto max-h-[44rem]">
                 <StepTimeline
-                  results={status.result?.results ?? []}
+                  results={stepsData.steps}
                   stepDescriptions={stepDescriptions}
                   onComplete={(stepName, candidate, success) => {
                     void (async () => {
-                      await completeStep(id, stepName, candidate, success);
+                      await completeStep(runId, stepName, candidate, success);
                       void poll();
                     })();
                   }}
@@ -241,7 +195,6 @@ export default function RunDetail() {
     </div>
   );
 }
-
 
 function StatCard({
   label,

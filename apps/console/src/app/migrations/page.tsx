@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useMigrations } from "@/lib/hooks";
-import { ROUTES } from "@/lib/routes";
 import { MigrationCard } from "@/components/migration-card";
-import { buttonVariants, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 
 export default function MigrationsPage() {
   const { migrations, loading, error } = useMigrations();
@@ -23,20 +21,6 @@ export default function MigrationsPage() {
             </span>
           )}
         </div>
-        <Link
-          href={ROUTES.newMigration}
-          className={buttonVariants({ size: "sm", className: "gap-1.5" })}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path
-              d="M6 2v8M2 6h8"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-          New
-        </Link>
       </div>
 
       {/* Error */}
@@ -66,15 +50,7 @@ export default function MigrationsPage() {
             </svg>
           </div>
           <p className="text-sm text-zinc-500">No migrations registered yet</p>
-          <p className="text-xs text-zinc-600 mt-1">
-            Workers can announce migrations via pub/sub, or{" "}
-            <Link
-              href={ROUTES.newMigration}
-              className="text-teal-500 hover:text-teal-400 transition-colors"
-            >
-              register one manually
-            </Link>
-          </p>
+          <p className="text-xs text-zinc-600 mt-1">Workers announce migrations via pub/sub on startup</p>
         </div>
       ) : (
         <div className="grid gap-2 stagger-children">

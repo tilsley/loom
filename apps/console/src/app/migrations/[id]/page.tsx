@@ -1,31 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { toast } from "sonner";
 import {
   getMigration,
   getCandidates,
-  deleteMigration,
-  type RegisteredMigration,
+  type Migration,
   type Candidate,
-  type CandidateRun,
-  type CandidateWithStatus,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { Button, Input, Skeleton } from "@/components/ui";
+import { Input, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [migration, setMigration] = useState<RegisteredMigration | null>(null);
-  const [candidates, setCandidates] = useState<CandidateWithStatus[]>([]);
+  const [migration, setMigration] = useState<Migration | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
   const [previewInputs, setPreviewInputs] = useState<Record<string, string>>({});
@@ -59,48 +54,20 @@ export default function MigrationDetail() {
     return () => clearInterval(interval);
   }, [fetchMigration, fetchCandidates]);
 
-  // Derive Candidate[] and CandidateRun map from candidates for CandidateTable / ProgressBar
-  const derivedCandidates = useMemo<Candidate[]>(
-    () => candidates.map((c) => ({ id: c.id, kind: c.kind, metadata: c.metadata, state: c.state, files: c.files })),
-    [candidates],
-  );
-
-  const derivedCandidateRuns = useMemo<Record<string, CandidateRun>>(() => {
-    const runs: Record<string, CandidateRun> = {};
-    for (const c of candidates) {
-      if (c.status !== "not_started") {
-        runs[c.id] = {
-          status: c.status as CandidateRun["status"],
-        };
-      }
-    }
-    return runs;
-  }, [candidates]);
+  const kindPlural = (candidates[0]?.kind ?? "candidate") + "s";
+  const kindPluralCap = kindPlural.charAt(0).toUpperCase() + kindPlural.slice(1);
 
   function handlePreview(candidate: Candidate) {
     const required = migration?.requiredInputs ?? [];
     if (required.length > 0) {
       const prefilled: Record<string, string> = {};
-      for (const key of required) {
-        prefilled[key] = candidate.metadata?.[key] ?? "";
+      for (const inp of required) {
+        prefilled[inp.name] = candidate.metadata?.[inp.name] ?? "";
       }
       setPreviewInputs(prefilled);
       setPreviewCandidate(candidate);
     } else {
       router.push(ROUTES.preview(id, candidate.id));
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirm("Delete this migration? This cannot be undone.")) return;
-    setDeleting(true);
-    try {
-      await deleteMigration(id);
-      toast.success("Migration deleted");
-      router.push(ROUTES.migrations);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete");
-      setDeleting(false);
     }
   }
 
@@ -131,25 +98,25 @@ export default function MigrationDetail() {
                 </button>
               </div>
               <div className="px-5 py-4 space-y-4">
-                {requiredInputs.map((key) => (
-                  <div key={key}>
+                {requiredInputs.map((inp) => (
+                  <div key={inp.name}>
                     <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
-                      {key}
+                      {inp.label}
                     </label>
                     <Input
                       type="text"
-                      value={previewInputs[key] ?? ""}
-                      onChange={(e) => setPreviewInputs((v) => ({ ...v, [key]: e.target.value }))}
+                      value={previewInputs[inp.name] ?? ""}
+                      onChange={(e) => setPreviewInputs((v) => ({ ...v, [inp.name]: e.target.value }))}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && requiredInputs.every((k) => previewInputs[k]?.trim())) {
+                        if (e.key === "Enter" && requiredInputs.every((i) => previewInputs[i.name]?.trim())) {
                           const params = new URLSearchParams(previewInputs);
                           router.push(ROUTES.preview(id, previewCandidate.id) + "?" + params.toString());
                           setPreviewCandidate(null);
                         }
                       }}
-                      placeholder={key}
+                      placeholder={inp.label}
                       className="font-mono"
-                      autoFocus={requiredInputs[0] === key}
+                      autoFocus={requiredInputs[0]?.name === inp.name}
                     />
                   </div>
                 ))}
@@ -167,7 +134,7 @@ export default function MigrationDetail() {
                     router.push(ROUTES.preview(id, previewCandidate.id) + "?" + params.toString());
                     setPreviewCandidate(null);
                   }}
-                  disabled={requiredInputs.some((k) => !previewInputs[k]?.trim())}
+                  disabled={requiredInputs.some((inp) => !previewInputs[inp.name]?.trim())}
                   className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Preview
@@ -195,7 +162,7 @@ export default function MigrationDetail() {
                 <div>
                   <h3 className="text-[14px] font-semibold text-zinc-100">Workflow definition</h3>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    {migration.steps.length} steps — applies to all candidates
+                    {migration.steps.length} steps — applies to all {kindPlural}
                   </p>
                 </div>
                 <button
@@ -307,39 +274,27 @@ export default function MigrationDetail() {
               {migration.steps.length} steps
             </button>
           </div>
-          {Boolean(migration.description) && (
-            <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
-              {migration.description}
-            </p>
-          )}
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => void handleDelete()}
-            disabled={deleting}
-          >
-            {deleting ? "..." : "Delete"}
-          </Button>
+          <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
+            {migration.description}
+          </p>
         </div>
       </div>
 
       {/* Progress bar */}
-      <ProgressBar candidates={derivedCandidates} candidateRuns={derivedCandidateRuns} />
+      <ProgressBar candidates={candidates} />
 
       {/* Candidates table */}
       <section>
         <div className="flex items-center gap-2 mb-4">
           <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
-            Candidates
+            {kindPluralCap}
           </h3>
           <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
             {candidates.length}
           </span>
         </div>
         <CandidateTable
-          migration={{ ...migration, candidates: derivedCandidates, candidateRuns: derivedCandidateRuns }}
+          migration={{ ...migration, candidates }}
           onPreview={handlePreview}
           runningCandidate={null}
         />

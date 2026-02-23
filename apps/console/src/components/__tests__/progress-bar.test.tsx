@@ -1,19 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import type { CandidateStatus } from "@/lib/api";
 import { ProgressBar } from "../progress-bar";
 
 const c = (...ids: string[]) => ids.map((id) => ({ id }));
-const runs = (entries: Record<string, string>) => {
-  type CandidateRun = {
-    status: "completed" | "running";
-  };
-  return Object.fromEntries(
-    Object.entries(entries).map(([id, status]) => [
-      id,
-      { status } as CandidateRun,
-    ]),
-  ) as Record<string, CandidateRun>;
-};
+const withStatus = (id: string, status: CandidateStatus) => ({ id, status });
 
 describe("ProgressBar", () => {
   it("counts candidates with no associated run as not started", () => {
@@ -25,9 +16,11 @@ describe("ProgressBar", () => {
   it("buckets candidates into the correct status categories", () => {
     render(
       <ProgressBar
-        candidates={c("a", "b", "c")}
-        candidateRuns={runs({ a: "completed", b: "running" })}
-        // c has no run → not started
+        candidates={[
+          withStatus("a", "completed"),
+          withStatus("b", "running"),
+          { id: "c" }, // no status → not started
+        ]}
       />,
     );
 
@@ -39,8 +32,7 @@ describe("ProgressBar", () => {
   it("treats an unrecognised run status as not started", () => {
     render(
       <ProgressBar
-        candidates={c("a")}
-        candidateRuns={runs({ a: "cancelled" })}
+        candidates={[withStatus("a", "cancelled" as CandidateStatus)]}
       />,
     );
 
@@ -53,8 +45,7 @@ describe("ProgressBar", () => {
   it("only renders legend items for statuses with a non-zero count", () => {
     render(
       <ProgressBar
-        candidates={c("a")}
-        candidateRuns={runs({ a: "completed" })}
+        candidates={[withStatus("a", "completed")]}
       />,
     );
 
@@ -67,8 +58,12 @@ describe("ProgressBar", () => {
     // 2 of 4 candidates completed → segment should be 50%
     const { container } = render(
       <ProgressBar
-        candidates={c("a", "b", "c", "d")}
-        candidateRuns={runs({ a: "completed", b: "completed" })}
+        candidates={[
+          withStatus("a", "completed"),
+          withStatus("b", "completed"),
+          { id: "c" },
+          { id: "d" },
+        ]}
       />,
     );
 

@@ -11,14 +11,14 @@ defined here.
 ### Migration
 
 A **migration** is a registered definition describing *how* to move a set of candidates from one
-state to another. It is authored by a worker and registered with the server — either via
-pub/sub announcement on startup, or directly via the API.
+state to another. It is authored by a worker and registered with the server via pub/sub
+announcement on startup.
 
 A migration has:
 - A unique **id** (deterministic slug, e.g. `app-chart-migration`)
-- A human **name** and optional **description**
+- A human **name** and **description** (both required)
 - An ordered list of **steps** defining the work to be done
-- A map of **candidate runs** tracking per-candidate run state
+- An optional list of **required inputs** — each has a `name` (metadata key merged into the candidate at start time, e.g. `"repoName"`) and a `label` (human-readable display label shown in the UI, e.g. `"Repository"`)
 - An optional list of **cancelled attempts** (audit log)
 
 A migration is not tied to a specific set of candidates — it is a reusable definition. Candidates
@@ -34,7 +34,6 @@ A step has:
 - An optional **description** (human-readable explanation shown in the console)
 - A **worker app** identifier (which worker handles it)
 - Optional **config** (key/value pairs passed to the worker)
-- Optional **files** (URLs of files that will be touched)
 
 ### Candidate
 
@@ -45,32 +44,20 @@ A candidate has:
 - An **id** (the primary key — stable slug, e.g. `billing-api`)
 - An optional **kind** (what type of thing it is, e.g. `application`, `kafka-topic` — free-form string set by the discoverer)
 - Optional **metadata** (stable descriptive values set by the discoverer, e.g. `repoName`, `team`, `gitopsPath`)
-- Optional **state** (observed values at discovery time, e.g. `currentChart`, `currentVersion`)
+- Optional **files** (grouped file references populated by the discoverer — a list of `FileGroup` objects, each with a `name` context like `"prod"`, `"staging"`, or `"app-repo"`, the repo it belongs to, and a list of file paths + GitHub URLs)
+- An optional **status** (`not_started | running | completed`) — stored directly on the candidate
 
 The `id` is the primary key used throughout the server and console. It is a logical identifier,
-not a GitHub path. The GitHub `owner/repo` string lives in `metadata["repoName"]` (set by the
-worker's discoverer) and is only needed by the worker when creating PRs. The server and console
-treat metadata as an opaque key/value map.
+not a GitHub path. The GitHub repo name lives in `metadata["repoName"]` (set by the worker's
+discoverer) and is only needed by the worker when creating PRs. The server and console treat
+metadata as an opaque key/value map.
 
-Candidates are submitted by workers and stored per migration. They are the source of truth
-for *what* needs migrating.
+Candidates are submitted by workers and stored embedded within the migration object. They are
+the single source of truth for *what* needs migrating and its current status.
 
-When returned from the API, candidates are enriched into `CandidateWithStatus` — the status
-is derived server-side by joining the candidate list against the migration's candidate run map,
-and is not stored on the candidate itself.
-
-### Run
-
-A **run** represents the execution of a migration against one candidate. Each candidate has at
-most one run per migration — a migration is intended to be run once.
-
-A run has:
-- A **run ID** (deterministic: `{migrationId}__{candidateId}`, e.g. `app-chart-migration__billing-api`)
-- A **status** (see Candidate Status below)
-
-The run ID is fully recoverable from the migration ID and candidate ID — no separate lookup
-record is needed. Temporal uses it as the workflow instance ID, which naturally prevents
-duplicate runs for the same candidate.
+`SubmitCandidates` (called by workers on pod restart) uses merge-not-replace semantics: incoming
+candidates overwrite only `not_started` ones; `running` or `completed` candidates are preserved
+even if absent from the new discovery list.
 
 ---
 
@@ -94,7 +81,7 @@ When a running candidate is cancelled, a `CancelledAttempt` record is appended t
 the migration. The candidate resets to `not_started`. Cancelled attempts are not surfaced on
 the candidate row — they are accessible via the migration detail (admin view).
 
-A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
+A `CancelledAttempt` has: `candidateId`, `cancelledAt`.
 
 ---
 
@@ -105,7 +92,7 @@ A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
 | **Announce**  | Worker  | Register or update a migration definition via pub/sub             |
 | **Discover**  | Worker  | Scan a source of truth and submit a candidate list to the server  |
 | **Preview**   | Console | Navigate to the preview page; auto-calls dry-run (stateless)      |
-| **Execute**   | Console | Create a run and start the Temporal workflow atomically            |
+| **Start**     | Console | Start the Temporal workflow for a candidate; sets status to `running` |
 | **Cancel**    | Console | Stop a running workflow; resets candidate to `not_started` and records a `CancelledAttempt` |
 | **Complete**  | Worker  | Signal a step as done (success or failure) via the event endpoint |
 
@@ -122,7 +109,7 @@ A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
                                                       │
                                                  Preview (dry-run, stateless)
                                                       │
-                                                  Execute
+                                                  Start
                                                       │
                                                   [running] ──► Cancel ──► [not_started]
                                                       │                   (+ CancelledAttempt)
@@ -137,28 +124,29 @@ A `CancelledAttempt` has: `runId`, `candidateId`, `cancelledAt`.
 
 ```
 Migration  1 ──── * Step
-Migration  1 ──── * Candidate (via discovery)
+Migration  1 ──── * Candidate (via discovery, stored on migration object)
 Migration  1 ──── * CancelledAttempt (audit log)
-Candidate  1 ──── 0..1 CandidateRun (current state only)
-CandidateRun     holds: status
-Run ID           computed: {migrationId}__{candidateId}
+Candidate         carries: status (not_started | running | completed)
 ```
+
+> **Implementation note:** The Temporal workflow instance ID is derived as
+> `{migrationId}__{candidateId}`. This is an internal detail — it is not a domain concept and
+> does not appear in the API or UI.
 
 ---
 
 ## Naming Conventions
 
-| Concept            | Code (Go)              | API (JSON)           | UI (Console)         |
-|--------------------|------------------------|----------------------|----------------------|
-| Migration id       | `migration.Id`         | `id`                 | ID                   |
-| Candidate          | `api.Candidate`        | `candidate`          | Candidate            |
-| Candidate id       | `candidate.Id`         | `id`                 | (displayed as-is)    |
-| Candidate kind     | `candidate.Kind`       | `kind`               | —                    |
-| GitHub owner/repo  | `metadata["repoName"]` | `metadata.repoName`  | —                    |
-| Run ID             | `RunID(mId, cId)`      | `runId`              | Run                  |
-| Candidate run      | `api.CandidateRun`     | `candidateRuns[id]`  | —                    |
-| Preview a run      | —                      | —                    | "Preview"            |
-| Execute a run      | `service.Execute()`    | `POST .../execute`   | "Execute"            |
-| Cancel a run       | `service.Cancel()`     | `POST .../cancel`    | "Cancel"             |
-| Step               | `api.StepDefinition`   | `step`               | Step                 |
-| Worker app         | `step.WorkerApp`       | `workerApp`          | Worker               |
+| Concept            | Code (Go)                  | API (JSON)           | UI (Console)         |
+|--------------------|----------------------------|----------------------|----------------------|
+| Migration id       | `migration.Id`             | `id`                 | ID                   |
+| Candidate          | `api.Candidate`            | `candidate`          | Candidate            |
+| Candidate id       | `candidate.Id`             | `id`                 | (displayed as-is)    |
+| Candidate kind     | `candidate.Kind`           | `kind`               | —                    |
+| Candidate status   | `candidate.Status`         | `status`             | Status dot / badge   |
+| GitHub repo name   | `metadata["repoName"]`     | `metadata.repoName`  | —                    |
+| Preview a candidate| —                          | —                    | "Preview"            |
+| Start a candidate  | `service.Start()`          | `POST .../start`     | "Start"              |
+| Cancel a candidate | `service.Cancel()`         | `POST .../cancel`    | "Cancel"             |
+| Step               | `api.StepDefinition`       | `step`               | Step                 |
+| Worker app         | `step.WorkerApp`           | `workerApp`          | Worker               |
