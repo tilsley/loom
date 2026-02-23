@@ -363,7 +363,7 @@ func TestSubmitCandidates_MigrationNotFound(t *testing.T) {
 		Candidates: []api.Candidate{{Id: "billing-api"}},
 	})
 
-	require.Equal(t, http.StatusInternalServerError, w.Code)
+	require.Equal(t, http.StatusNotFound, w.Code)
 }
 
 // ─── GET /migrations/:id/candidates ──────────────────────────────────────────

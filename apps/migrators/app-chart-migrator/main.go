@@ -126,10 +126,8 @@ func main() {
 
 	ctx := context.Background()
 
-	// Announce migration on startup (after sidecar is ready)
-	go announceOnStartup(log, daprPort, gitopsOwner, gitopsRepoName, envs)
-
-	// Run candidate discovery once on startup (after announce completes)
+	// Announce migration on startup (after sidecar is ready), then discover candidates.
+	// Discovery is sequenced after announce so the migration exists before candidates are submitted.
 	discoverer := &discovery.AppChartDiscoverer{
 		Reader:      ghAdapter,
 		GitopsOwner: gitopsOwner,
@@ -142,7 +140,12 @@ func main() {
 		ServerURL:   loomURL,
 		Log:         log,
 	}
-	go discoveryRunner.Run(ctx)
+	go func() {
+		if !announceOnStartup(log, daprPort, gitopsOwner, gitopsRepoName, envs) {
+			return
+		}
+		discoveryRunner.Run(ctx)
+	}()
 
 	log.Info("worker starting", "port", port, "gitopsRepo", gitopsRepo, "envs", envs)
 	if err := r.Run(":" + port); err != nil {
@@ -229,7 +232,7 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 	}
 }
 
-func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName string, envs []string) {
+func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName string, envs []string) bool {
 	// Wait for Dapr sidecar readiness
 	time.Sleep(2 * time.Second)
 
@@ -238,7 +241,7 @@ func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName s
 	body, err := json.Marshal(announcement)
 	if err != nil {
 		log.Error("failed to marshal announcement", "error", err)
-		return
+		return false
 	}
 
 	url := fmt.Sprintf("http://localhost:%s/v1.0/publish/pubsub/migration-registry", daprPort)
@@ -257,7 +260,7 @@ func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName s
 			_ = resp.Body.Close() //nolint:errcheck // response body close errors are non-actionable
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				log.Info("migration announced", "id", announcement.Id, "steps", len(announcement.Steps))
-				return
+				return true
 			}
 			log.Warn("announce returned non-2xx", "status", resp.StatusCode, "attempt", i+1)
 		} else {
@@ -267,6 +270,7 @@ func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName s
 	}
 
 	log.Error("failed to announce migration after retries")
+	return false
 }
 
 func envOr(key, fallback string) string {

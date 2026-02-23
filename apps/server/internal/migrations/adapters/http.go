@@ -209,6 +209,10 @@ func (h *Handler) SubmitCandidates(c *gin.Context) {
 	}
 
 	if err := h.svc.SubmitCandidates(c.Request.Context(), id, req); err != nil {
+		if err.Error() == "migration \""+id+"\" not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
 		h.log.Error("failed to submit candidates", "id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
