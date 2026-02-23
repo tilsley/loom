@@ -153,7 +153,7 @@ export function CandidateTable({ migration, onPreview, onCancel, runningCandidat
                     <rect x="1" y="7" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" />
                     <rect x="7" y="7" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" />
                   </svg>
-                  {key}
+                  {migration.requiredInputs?.find((i) => i.name === key)?.label ?? key}
                   {isActive ? <span className="opacity-50">×</span> : null}
                 </button>
               );

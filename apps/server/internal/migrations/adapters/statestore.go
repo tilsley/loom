@@ -201,7 +201,6 @@ func (s *DaprMigrationStore) GetCandidates(ctx context.Context, migrationID stri
 	return m.Candidates, nil
 }
 
-
 // loadIndex reads the list of migration IDs from the index key.
 func (s *DaprMigrationStore) loadIndex(ctx context.Context) ([]string, error) {
 	item, err := s.client.GetState(ctx, storeKey, indexKey, nil)

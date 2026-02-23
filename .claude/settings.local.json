@@ -53,7 +53,11 @@
       "Bash(echo === $v ===:*)",
       "Bash(wc:*)",
       "Bash(cat:*)",
-      "Bash(tr  :*)"
+      "Bash(tr  :*)",
+      "Bash(GONOSUMDB=\"*\" GOFLAGS=\"-mod=mod\" go get:*)",
+      "Bash(NODE_OPTIONS='--trace-deprecation' timeout 10 bun run:*)",
+      "Bash(NODE_OPTIONS='--trace-deprecation' gtimeout 10:*)",
+      "Bash(pgrep:*)"
     ]
   }
 }

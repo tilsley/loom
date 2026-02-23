@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -9,18 +10,21 @@ import (
 	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.temporal.io/sdk/client"
+	otelcontrib "go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	otelcontrib "go.temporal.io/sdk/contrib/opentelemetry"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/apps/server/internal/migrations/adapters"
 	"github.com/tilsley/loom/apps/server/internal/migrations/execution"
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
-	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
 	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
+	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
 	"github.com/tilsley/loom/apps/server/internal/platform/validation"
 	"github.com/tilsley/loom/schemas"
 )
@@ -67,13 +71,28 @@ func main() {
 	engine := temporalplatform.NewEngine(tc)
 
 	// --- Platform: Dapr (pub/sub + state store) ---
+	//
+	// Build the gRPC connection manually so the OTel stats handler injects
+	// W3C traceparent metadata into every call to the Dapr sidecar.
+	// This links our server spans to Dapr's own distributed trace propagation.
 
-	daprClient, err := dapr.NewClient()
-	if err != nil {
-		tc.Close() // explicitly close before os.Exit so defer doesn't get skipped
-		slog.Error("dapr client init failed", "error", err)
-		os.Exit(1) //nolint:gocritic // tc.Close() called explicitly above
+	daprPort := os.Getenv("DAPR_GRPC_PORT")
+	if daprPort == "" {
+		daprPort = "50001"
 	}
+	daprConn, err := grpc.NewClient(
+		fmt.Sprintf("localhost:%s", daprPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		tc.Close()
+		slog.Error("dapr grpc connection failed", "error", err)
+		os.Exit(1) //nolint:gocritic
+	}
+	defer daprConn.Close()
+
+	daprClient := dapr.NewClientWithConnection(daprConn)
 	defer daprClient.Close()
 
 	// --- Adapters ---
@@ -121,7 +140,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	router.Use(gin.Recovery(), otelgin.Middleware("loom-server"), validator)
+	router.Use(gin.Recovery(), otelgin.Middleware(os.Getenv("OTEL_SERVICE_NAME")), validator)
 	adapters.RegisterRoutes(router, svc, slog)
 
 	port := os.Getenv("PORT")
