@@ -42,7 +42,7 @@ performed by a `Discoverer` implementation that scans a source of truth (e.g. a 
 
 A candidate has:
 - An **id** (the primary key — stable slug, e.g. `billing-api`)
-- An optional **kind** (what type of thing it is, e.g. `application`, `kafka-topic` — free-form string set by the discoverer)
+- A required **kind** (what type of thing it is, e.g. `application`, `kafka-topic` — free-form string set by the discoverer)
 - Optional **metadata** (stable descriptive values set by the discoverer, e.g. `repoName`, `team`, `gitopsPath`)
 - Optional **files** (grouped file references populated by the discoverer — a list of `FileGroup` objects, each with a `name` context like `"prod"`, `"staging"`, or `"app-repo"`, the repo it belongs to, and a list of file paths + GitHub URLs)
 - An optional **status** (`not_started | running | completed`) — stored directly on the candidate

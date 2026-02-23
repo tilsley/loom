@@ -227,10 +227,9 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 
 		appRepo := instance
 
-		kind := "application"
 		candidates = append(candidates, api.Candidate{
 			Id:   instance,
-			Kind: &kind,
+			Kind: "application",
 			Metadata: &map[string]string{
 				"repoName": appRepo,
 			},

@@ -285,7 +285,7 @@ components:
 
     Candidate:
       type: object
-      required: [id]
+      required: [id, kind]
       properties:
         id:
           type: string
