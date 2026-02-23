@@ -104,8 +104,8 @@ func MigrationOrchestrator(
 
 	for _, step := range manifest.Steps {
 		for _, candidate := range manifest.Candidates {
-			stepCompletedSignal := migrations.StepEventName(step.Name, candidate)
-			prOpenedSignal := migrations.PROpenedEventName(step.Name, candidate)
+			stepCompletedSignal := migrations.StepEventName(step.Name, candidate.Id)
+			prOpenedSignal := migrations.PROpenedEventName(step.Name, candidate.Id)
 			callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
 			// 1. Manual-review steps skip worker dispatch; all others go to the worker.
@@ -146,13 +146,23 @@ func MigrationOrchestrator(
 				sel.AddReceive(prOpenedCh, func(c workflow.ReceiveChannel, _ bool) {
 					var event api.StepCompletedEvent
 					c.Receive(ctx, &event)
-					upsertResult(&results, api.StepResult(event))
+					upsertResult(&results, api.StepResult{
+						StepName:  event.StepName,
+						Candidate: candidate,
+						Success:   event.Success,
+						Metadata:  event.Metadata,
+					})
 				})
 
 				sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
 					var event api.StepCompletedEvent
 					c.Receive(ctx, &event)
-					upsertResult(&results, api.StepResult(event))
+					upsertResult(&results, api.StepResult{
+						StepName:  event.StepName,
+						Candidate: candidate,
+						Success:   event.Success,
+						Metadata:  event.Metadata,
+					})
 					done = true
 				})
 

@@ -30,9 +30,9 @@ func dummyMigrator(env *testsuite.TestWorkflowEnvironment, acts *execution.Activ
 			req := args.Get(1).(api.DispatchStepRequest)
 			env.RegisterDelayedCallback(func() {
 				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
-					StepName:  req.StepName,
-					Candidate: req.Candidate,
-					Success:   true,
+					StepName:    req.StepName,
+					CandidateId: req.Candidate.Id,
+					Success:     true,
 				})
 			}, time.Millisecond)
 		})
@@ -149,9 +149,9 @@ func TestMigrationOrchestrator_StepFailure_SetsFailedStatus(t *testing.T) {
 			req := args.Get(1).(api.DispatchStepRequest)
 			env.RegisterDelayedCallback(func() {
 				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
-					StepName:  req.StepName,
-					Candidate: req.Candidate,
-					Success:   false,
+					StepName:    req.StepName,
+					CandidateId: req.Candidate.Id,
+					Success:     false,
 				})
 			}, time.Millisecond)
 		})
@@ -196,9 +196,9 @@ func TestMigrationOrchestrator_StepFailure_CompensatesPreviousSteps(t *testing.T
 			env.RegisterDelayedCallback(func() {
 				// First step succeeds, second step fails.
 				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
-					StepName:  req.StepName,
-					Candidate: req.Candidate,
-					Success:   thisCall == 1,
+					StepName:    req.StepName,
+					CandidateId: req.Candidate.Id,
+					Success:     thisCall == 1,
 				})
 			}, time.Millisecond)
 		})
@@ -250,12 +250,12 @@ func TestMigrationOrchestrator_ManualReviewStep_SkipsDispatch(t *testing.T) {
 	candidate := api.Candidate{Id: "billing-api"}
 
 	// Provide the step-completed signal manually (no dispatch → we send it directly).
-	stepSignal := migrations.StepEventName("review", candidate)
+	stepSignal := migrations.StepEventName("review", candidate.Id)
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow(stepSignal, api.StepCompletedEvent{
-			StepName:  "review",
-			Candidate: candidate,
-			Success:   true,
+			StepName:    "review",
+			CandidateId: candidate.Id,
+			Success:     true,
 		})
 	}, time.Millisecond)
 
@@ -300,22 +300,22 @@ func TestMigrationOrchestrator_PROpened_MetadataCaptured(t *testing.T) {
 			req := args.Get(1).(api.DispatchStepRequest)
 
 			// Send pr-opened first, then step-completed.
-			prSignal := migrations.PROpenedEventName(req.StepName, candidate)
+			prSignal := migrations.PROpenedEventName(req.StepName, candidate.Id)
 			env.RegisterDelayedCallback(func() {
 				env.SignalWorkflow(prSignal, api.StepCompletedEvent{
-					StepName:  req.StepName,
-					Candidate: candidate,
-					Success:   true,
-					Metadata:  &map[string]string{"prUrl": prURL},
+					StepName:    req.StepName,
+					CandidateId: candidate.Id,
+					Success:     true,
+					Metadata:    &map[string]string{"prUrl": prURL},
 				})
 			}, time.Millisecond)
 
 			env.RegisterDelayedCallback(func() {
 				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
-					StepName:  req.StepName,
-					Candidate: candidate,
-					Success:   true,
-					Metadata:  &map[string]string{"prUrl": prURL},
+					StepName:    req.StepName,
+					CandidateId: candidate.Id,
+					Success:     true,
+					Metadata:    &map[string]string{"prUrl": prURL},
 				})
 			}, 2*time.Millisecond)
 		})

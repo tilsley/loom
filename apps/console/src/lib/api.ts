@@ -41,13 +41,13 @@ export class NotFoundError extends Error {
 export async function completeStep(
   runId: string,
   stepName: string,
-  candidate: Candidate,
+  candidateId: string,
   success: boolean,
 ): Promise<void> {
   const res = await fetch(`${BASE}/event/${runId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stepName, candidate, success }),
+    body: JSON.stringify({ stepName, candidateId, success }),
   });
   if (!res.ok) throw new Error(await res.text());
 }

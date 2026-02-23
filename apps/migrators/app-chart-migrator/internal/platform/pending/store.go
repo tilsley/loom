@@ -7,8 +7,6 @@ import (
 	"log/slog"
 
 	dapr "github.com/dapr/go-sdk/client"
-
-	"github.com/tilsley/loom/pkg/api"
 )
 
 const stateStoreName = "statestore"
@@ -16,10 +14,10 @@ const keyPrefix = "pending-callback:"
 
 // Callback holds the Loom callback info for a PR awaiting merge.
 type Callback struct {
-	CallbackID string        `json:"callbackId"`
-	StepName   string        `json:"stepName"`
-	Candidate  api.Candidate `json:"candidate"`
-	PRURL      string        `json:"prUrl"`
+	CallbackID  string `json:"callbackId"`
+	StepName    string `json:"stepName"`
+	CandidateId string `json:"candidateId"`
+	PRURL       string `json:"prUrl"`
 }
 
 // Store persists pending PR-to-workflow callback mappings in Dapr state store

@@ -796,9 +796,9 @@ func TestService_HandleEvent(t *testing.T) {
 		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 		candidate := api.Candidate{Id: "repo-a"}
 
-		err := svc.HandleEvent(ctx, "run-123", api.StepCompletedEvent{StepName: "step-1", Candidate: candidate})
+		err := svc.HandleEvent(ctx, "run-123", api.StepCompletedEvent{StepName: "step-1", CandidateId: candidate.Id})
 		require.NoError(t, err)
-		assert.Equal(t, migrations.StepEventName("step-1", candidate), raisedEvent)
+		assert.Equal(t, migrations.StepEventName("step-1", candidate.Id), raisedEvent)
 	})
 
 	t.Run("propagates engine error", func(t *testing.T) {
@@ -828,9 +828,9 @@ func TestService_HandlePROpened(t *testing.T) {
 		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 		candidate := api.Candidate{Id: "repo-a"}
 
-		err := svc.HandlePROpened(ctx, "run-123", api.StepCompletedEvent{StepName: "step-1", Candidate: candidate})
+		err := svc.HandlePROpened(ctx, "run-123", api.StepCompletedEvent{StepName: "step-1", CandidateId: candidate.Id})
 		require.NoError(t, err)
-		assert.Equal(t, migrations.PROpenedEventName("step-1", candidate), raisedEvent)
+		assert.Equal(t, migrations.PROpenedEventName("step-1", candidate.Id), raisedEvent)
 	})
 
 	t.Run("propagates engine error", func(t *testing.T) {

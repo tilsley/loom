@@ -453,12 +453,13 @@ components:
 
     StepCompletedEvent:
       type: object
-      required: [stepName, candidate, success]
+      required: [stepName, candidateId, success]
       properties:
         stepName:
           type: string
-        candidate:
-          $ref: "#/components/schemas/Candidate"
+        candidateId:
+          type: string
+          description: ID of the candidate this event is for.
         success:
           type: boolean
         metadata:

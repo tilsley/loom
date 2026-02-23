@@ -180,9 +180,9 @@ export default function CandidateStepsPage() {
                 <StepTimeline
                   results={stepsData.steps}
                   stepDescriptions={stepDescriptions}
-                  onComplete={(stepName, candidate, success) => {
+                  onComplete={(stepName, candidateId, success) => {
                     void (async () => {
-                      await completeStep(runId, stepName, candidate, success);
+                      await completeStep(runId, stepName, candidateId, success);
                       void poll();
                     })();
                   }}

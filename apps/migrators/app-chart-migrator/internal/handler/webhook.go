@@ -58,7 +58,7 @@ func (w *Webhook) Handle(c *gin.Context) {
 		return
 	}
 
-	w.log.Info("PR merged, sending callback", "target", cb.Candidate.Id, "step", cb.StepName, "pr", cb.PRURL)
+	w.log.Info("PR merged, sending callback", "target", cb.CandidateId, "step", cb.StepName, "pr", cb.PRURL)
 
 	meta := map[string]string{
 		"phase":     "merged",
@@ -67,10 +67,10 @@ func (w *Webhook) Handle(c *gin.Context) {
 	}
 
 	event := api.StepCompletedEvent{
-		StepName:  cb.StepName,
-		Candidate: cb.Candidate,
-		Success:   true,
-		Metadata:  &meta,
+		StepName:    cb.StepName,
+		CandidateId: cb.CandidateId,
+		Success:     true,
+		Metadata:    &meta,
 	}
 
 	if err := w.loom.SendCallback(c.Request.Context(), cb.CallbackID, event); err != nil {
@@ -79,6 +79,6 @@ func (w *Webhook) Handle(c *gin.Context) {
 		return
 	}
 
-	w.log.Info("callback sent", "step", cb.StepName, "target", cb.Candidate.Id)
+	w.log.Info("callback sent", "step", cb.StepName, "target", cb.CandidateId)
 	c.JSON(http.StatusOK, gin.H{"status": "callback sent"})
 }

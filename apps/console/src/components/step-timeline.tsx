@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { StepResult, Candidate } from "@/lib/api";
+import type { StepResult } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui";
 
@@ -27,7 +27,7 @@ export function StepTimeline({
 }: {
   results: StepResult[];
   stepDescriptions?: Map<string, string>;
-  onComplete?: (stepName: string, candidate: Candidate, success: boolean) => void;
+  onComplete?: (stepName: string, candidateId: string, success: boolean) => void;
 }) {
   // Hooks must be declared before any early return
   const lastActiveIndex = results.reduce((acc, r, idx) => {
@@ -152,7 +152,7 @@ export function StepTimeline({
               {/* Open PR: manual merge action for local dev / no-webhook environments */}
               {phase === "open" && onComplete ? (
                 <div className="mt-3">
-                  <MergeAction onMerge={() => onComplete(r.stepName, r.candidate, true)} />
+                  <MergeAction onMerge={() => onComplete(r.stepName, r.candidate.id, true)} />
                 </div>
               ) : null}
 
@@ -175,7 +175,7 @@ export function StepTimeline({
                   ) : null}
                   {onComplete ? (
                     <ReviewActions
-                      onComplete={(success) => onComplete(r.stepName, r.candidate, success)}
+                      onComplete={(success) => onComplete(r.stepName, r.candidate.id, success)}
                     />
                   ) : null}
                 </div>

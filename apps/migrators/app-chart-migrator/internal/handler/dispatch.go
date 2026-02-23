@@ -110,10 +110,10 @@ func (d *Dispatch) Handle(c *gin.Context) {
 	// when the PR is merged.
 	key := fmt.Sprintf("%s/%s#%d", owner, repo, pr.Number)
 	d.pending.Add(key, pending.Callback{
-		CallbackID: req.CallbackId,
-		StepName:   req.StepName,
-		Candidate:  req.Candidate,
-		PRURL:      pr.HTMLURL,
+		CallbackID:  req.CallbackId,
+		StepName:    req.StepName,
+		CandidateId: req.Candidate.Id,
+		PRURL:       pr.HTMLURL,
 	})
 
 	// Notify Loom that a PR is open and awaiting review.
@@ -151,10 +151,10 @@ func (d *Dispatch) routeToHandler(ctx context.Context, req api.DispatchStepReque
 // sendProgress sends an intermediate progress update to Loom's pr-opened endpoint.
 func (d *Dispatch) sendProgress(ctx context.Context, req api.DispatchStepRequest, meta map[string]string) {
 	event := api.StepCompletedEvent{
-		StepName:  req.StepName,
-		Candidate: req.Candidate,
-		Success:   true,
-		Metadata:  &meta,
+		StepName:    req.StepName,
+		CandidateId: req.Candidate.Id,
+		Success:     true,
+		Metadata:    &meta,
 	}
 	if err := d.loom.SendProgress(ctx, req.CallbackId, event); err != nil {
 		d.log.Error("failed to send progress", "error", err, "phase", meta["phase"])
