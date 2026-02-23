@@ -48,7 +48,7 @@ func TestMigrationOrchestrator_SingleStep_Success(t *testing.T) {
 	env.RegisterActivity(acts)
 
 	dummyMigrator(env, acts)
-	env.OnActivity(acts.UpdateTargetRunStatus, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
@@ -78,7 +78,7 @@ func TestMigrationOrchestrator_MultiStep_Success(t *testing.T) {
 	env.RegisterActivity(acts)
 
 	dummyMigrator(env, acts)
-	env.OnActivity(acts.UpdateTargetRunStatus, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
@@ -110,7 +110,7 @@ func TestMigrationOrchestrator_MultiCandidate_Success(t *testing.T) {
 	env.RegisterActivity(acts)
 
 	dummyMigrator(env, acts)
-	env.OnActivity(acts.UpdateTargetRunStatus, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
@@ -157,7 +157,7 @@ func TestMigrationOrchestrator_StepFailure_SetsFailedStatus(t *testing.T) {
 		})
 
 	env.OnActivity(acts.CompensateStep, mock.Anything, mock.Anything).Return(nil)
-	env.OnActivity(acts.ResetCandidateRun, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.ResetCandidate, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
@@ -207,7 +207,7 @@ func TestMigrationOrchestrator_StepFailure_CompensatesPreviousSteps(t *testing.T
 	env.OnActivity(acts.CompensateStep, mock.Anything, mock.Anything).
 		Return(nil).
 		Run(func(_ mock.Arguments) { compensated++ })
-	env.OnActivity(acts.ResetCandidateRun, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.ResetCandidate, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
@@ -245,7 +245,7 @@ func TestMigrationOrchestrator_ManualReviewStep_SkipsDispatch(t *testing.T) {
 		Return(nil).
 		Run(func(_ mock.Arguments) { dispatched = true })
 
-	env.OnActivity(acts.UpdateTargetRunStatus, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
 
 	candidate := api.Candidate{Id: "billing-api"}
 
@@ -320,7 +320,7 @@ func TestMigrationOrchestrator_PROpened_MetadataCaptured(t *testing.T) {
 			}, 2*time.Millisecond)
 		})
 
-	env.OnActivity(acts.UpdateTargetRunStatus, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",

@@ -64,30 +64,30 @@ func MigrationOrchestrator(
 		if len(manifest.Candidates) == 0 {
 			return
 		}
-		input := UpdateTargetRunStatusInput{
-			RegistrationID: manifest.MigrationId,
-			CandidateID:    manifest.Candidates[0].Id,
-			Status:         status,
+		input := UpdateCandidateStatusInput{
+			MigrationID: manifest.MigrationId,
+			CandidateID: manifest.Candidates[0].Id,
+			Status:      status,
 		}
-		fut := workflow.ExecuteActivity(actCtx, "UpdateTargetRunStatus", input)
+		fut := workflow.ExecuteActivity(actCtx, "UpdateCandidateStatus", input)
 		if err := fut.Get(ctx, nil); err != nil {
-			workflow.GetLogger(ctx).Warn("failed to update candidate run status", "error", err, "status", status)
+			workflow.GetLogger(ctx).Warn("failed to update candidate status", "error", err, "status", status)
 		}
 	}
 
-	// resetCandidate clears the candidate run entry, returning it to not_started.
+	// resetCandidate clears the candidate, returning it to not_started.
 	// Used on failure — there is no "failed" status at the candidate level.
 	resetCandidate := func() {
 		if len(manifest.Candidates) == 0 {
 			return
 		}
-		input := ResetCandidateRunInput{
-			RegistrationID: manifest.MigrationId,
-			CandidateID:    manifest.Candidates[0].Id,
+		input := ResetCandidateInput{
+			MigrationID: manifest.MigrationId,
+			CandidateID: manifest.Candidates[0].Id,
 		}
-		fut := workflow.ExecuteActivity(actCtx, "ResetCandidateRun", input)
+		fut := workflow.ExecuteActivity(actCtx, "ResetCandidate", input)
 		if err := fut.Get(ctx, nil); err != nil {
-			workflow.GetLogger(ctx).Warn("failed to reset candidate run", "error", err)
+			workflow.GetLogger(ctx).Warn("failed to reset candidate", "error", err)
 		}
 	}
 

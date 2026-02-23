@@ -48,17 +48,17 @@ func PROpenedEventName(stepName, candidateId string) string {
 
 const runIDSep = "__"
 
-// RunID returns the deterministic run ID for a migration+candidate pair.
+// WorkflowID returns the deterministic Temporal workflow instance ID for a migration+candidate pair.
 // Since each candidate runs at most once per migration, the ID is stable and recoverable.
-func RunID(migrationID, candidateID string) string {
+func WorkflowID(migrationID, candidateID string) string {
 	return migrationID + runIDSep + candidateID
 }
 
-// ParseRunID splits a run ID back into its migrationID and candidateID components.
-func ParseRunID(runID string) (migrationID, candidateID string, err error) {
-	parts := strings.SplitN(runID, runIDSep, 2)
+// ParseWorkflowID splits a workflow ID back into its migrationID and candidateID components.
+func ParseWorkflowID(workflowID string) (migrationID, candidateID string, err error) {
+	parts := strings.SplitN(workflowID, runIDSep, 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid run ID %q: expected format <migrationId>_<candidateId>", runID)
+		return "", "", fmt.Errorf("invalid workflow ID %q: expected format <migrationId>_<candidateId>", workflowID)
 	}
 	return parts[0], parts[1], nil
 }

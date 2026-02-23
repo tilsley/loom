@@ -58,8 +58,8 @@ func NewService(engine WorkflowEngine, store MigrationStore, dryRunner DryRunner
 // GetCandidateSteps returns the step execution progress for a candidate's workflow.
 // Returns nil (no error) when the workflow does not exist.
 func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateID string) (*api.CandidateStepsResponse, error) {
-	runID := RunID(migrationID, candidateID)
-	ws, err := s.engine.GetStatus(ctx, runID)
+	workflowID := WorkflowID(migrationID, candidateID)
+	ws, err := s.engine.GetStatus(ctx, workflowID)
 	if err != nil {
 		var notFound WorkflowNotFoundError
 		if errors.As(err, &notFound) {
@@ -192,8 +192,8 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 		if c.Status == nil || *c.Status != api.CandidateStatusRunning {
 			continue
 		}
-		runID := RunID(migrationID, c.Id)
-		if _, err := s.engine.GetStatus(ctx, runID); err != nil {
+		workflowID := WorkflowID(migrationID, c.Id)
+		if _, err := s.engine.GetStatus(ctx, workflowID); err != nil {
 			var notFound WorkflowNotFoundError
 			if errors.As(err, &notFound) {
 				// Stale workflow — reset to not_started so the Preview button becomes active again.
@@ -210,9 +210,9 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 // Cancel stops a running workflow, records a CancelledAttempt audit entry, and resets
 // the candidate to not_started so it can be previewed and started again.
 func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) error {
-	runID := RunID(migrationID, candidateID)
+	workflowID := WorkflowID(migrationID, candidateID)
 
-	if err := s.engine.CancelWorkflow(ctx, runID); err != nil {
+	if err := s.engine.CancelWorkflow(ctx, workflowID); err != nil {
 		var notFound WorkflowNotFoundError
 		if !errors.As(err, &notFound) {
 			return fmt.Errorf("cancel workflow: %w", err)
@@ -302,12 +302,12 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		return "", fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
 	}
 
-	runID := RunID(migrationID, candidateID)
+	workflowID := WorkflowID(migrationID, candidateID)
 
 	// Guard: block if candidate is already running or completed.
 	if candidate.Status != nil &&
 		(*candidate.Status == api.CandidateStatusRunning || *candidate.Status == api.CandidateStatusCompleted) {
-		if _, err := s.engine.GetStatus(ctx, runID); err == nil {
+		if _, err := s.engine.GetStatus(ctx, workflowID); err == nil {
 			return "", CandidateAlreadyRunError{ID: candidateID, Status: string(*candidate.Status)}
 		}
 		// Workflow gone — fall through to allow re-execution.
@@ -329,7 +329,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		Steps:       m.Steps,
 	}
 
-	if _, err := s.engine.StartWorkflow(ctx, "MigrationOrchestrator", runID, manifest); err != nil {
+	if _, err := s.engine.StartWorkflow(ctx, "MigrationOrchestrator", workflowID, manifest); err != nil {
 		span.RecordError(err)
 		return "", fmt.Errorf("start workflow: %w", err)
 	}
@@ -341,5 +341,5 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 
 	s.runsStarted.Add(ctx, 1,
 		metric.WithAttributes(attribute.String("migration_id", migrationID)))
-	return runID, nil
+	return workflowID, nil
 }

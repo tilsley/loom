@@ -15,11 +15,11 @@ import (
 
 const instrName = "github.com/tilsley/loom"
 
-// UpdateTargetRunStatusInput is the input for the UpdateTargetRunStatus activity.
-type UpdateTargetRunStatusInput struct {
-	RegistrationID string `json:"registrationId"`
-	CandidateID    string `json:"candidateId"`
-	Status         string `json:"status"`
+// UpdateCandidateStatusInput is the input for the UpdateCandidateStatus activity.
+type UpdateCandidateStatusInput struct {
+	MigrationID string `json:"migrationId"`
+	CandidateID string `json:"candidateId"`
+	Status      string `json:"status"`
 }
 
 // Activities groups Temporal activity methods. The struct holds dependencies
@@ -63,27 +63,27 @@ func (a *Activities) CompensateStep(ctx context.Context, step api.StepResult) er
 	return nil
 }
 
-// ResetCandidateRunInput is the input for the ResetCandidateRun activity.
-type ResetCandidateRunInput struct {
-	RegistrationID string `json:"registrationId"`
-	CandidateID    string `json:"candidateId"`
+// ResetCandidateInput is the input for the ResetCandidate activity.
+type ResetCandidateInput struct {
+	MigrationID string `json:"migrationId"`
+	CandidateID string `json:"candidateId"`
 }
 
-// ResetCandidateRun returns the candidate to not_started state.
-func (a *Activities) ResetCandidateRun(ctx context.Context, input ResetCandidateRunInput) error {
-	if err := a.store.SetCandidateStatus(ctx, input.RegistrationID, input.CandidateID, api.CandidateStatusNotStarted); err != nil {
-		return fmt.Errorf("reset candidate run: %w", err)
+// ResetCandidate returns the candidate to not_started state.
+func (a *Activities) ResetCandidate(ctx context.Context, input ResetCandidateInput) error {
+	if err := a.store.SetCandidateStatus(ctx, input.MigrationID, input.CandidateID, api.CandidateStatusNotStarted); err != nil {
+		return fmt.Errorf("reset candidate: %w", err)
 	}
-	a.log.Info("reset candidate run to not_started",
-		"registrationId", input.RegistrationID,
+	a.log.Info("reset candidate to not_started",
+		"migrationId", input.MigrationID,
 		"candidate", input.CandidateID,
 	)
 	return nil
 }
 
-// UpdateTargetRunStatus updates the candidate status in the migration store.
-func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTargetRunStatusInput) error {
-	ctx, span := otel.Tracer(instrName).Start(ctx, "UpdateTargetRunStatus",
+// UpdateCandidateStatus updates the candidate status in the migration store.
+func (a *Activities) UpdateCandidateStatus(ctx context.Context, input UpdateCandidateStatusInput) error {
+	ctx, span := otel.Tracer(instrName).Start(ctx, "UpdateCandidateStatus",
 		trace.WithAttributes(
 			attribute.String("candidate.id", input.CandidateID),
 			attribute.String("status", input.Status),
@@ -91,12 +91,12 @@ func (a *Activities) UpdateTargetRunStatus(ctx context.Context, input UpdateTarg
 	)
 	defer span.End()
 
-	if err := a.store.SetCandidateStatus(ctx, input.RegistrationID, input.CandidateID, api.CandidateStatus(input.Status)); err != nil {
+	if err := a.store.SetCandidateStatus(ctx, input.MigrationID, input.CandidateID, api.CandidateStatus(input.Status)); err != nil {
 		span.RecordError(err)
-		return fmt.Errorf("update candidate run status: %w", err)
+		return fmt.Errorf("update candidate status: %w", err)
 	}
-	a.log.Info("updated candidate run status",
-		"registrationId", input.RegistrationID,
+	a.log.Info("updated candidate status",
+		"migrationId", input.MigrationID,
 		"candidate", input.CandidateID,
 		"status", input.Status,
 	)
