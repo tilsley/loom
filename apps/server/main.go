@@ -21,6 +21,8 @@ import (
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
 	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
 	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
+	"github.com/tilsley/loom/apps/server/internal/platform/validation"
+	"github.com/tilsley/loom/schemas"
 )
 
 func main() {
@@ -112,7 +114,14 @@ func main() {
 	svc := migrations.NewService(engine, store, dryRunner)
 
 	router := gin.New()
-	router.Use(gin.Recovery(), otelgin.Middleware("loom-server"))
+
+	validator, err := validation.New(schemas.OpenAPISpec)
+	if err != nil {
+		slog.Error("openapi validation middleware init failed", "error", err)
+		os.Exit(1)
+	}
+
+	router.Use(gin.Recovery(), otelgin.Middleware("loom-server"), validator)
 	adapters.RegisterRoutes(router, svc, slog)
 
 	port := os.Getenv("PORT")

@@ -150,6 +150,16 @@ func (h *Handler) CancelRun(c *gin.Context) {
 	)
 
 	if err := h.svc.Cancel(c.Request.Context(), id, candidateID); err != nil {
+		var notRunning migrations.CandidateNotRunningError
+		if errors.As(err, &notRunning) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		if err.Error() == "migration \""+id+"\" not found" ||
+			err.Error() == "candidate \""+candidateID+"\" not found in migration \""+id+"\"" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
 		h.log.Error("failed to cancel run", "id", id, "candidateId", candidateID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

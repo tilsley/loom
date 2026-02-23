@@ -210,6 +210,28 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 // Cancel stops a running workflow, records a CancelledAttempt audit entry, and resets
 // the candidate to not_started so it can be previewed and started again.
 func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) error {
+	m, err := s.store.Get(ctx, migrationID)
+	if err != nil {
+		return fmt.Errorf("get migration %q: %w", migrationID, err)
+	}
+	if m == nil {
+		return fmt.Errorf("migration %q not found", migrationID)
+	}
+
+	var found bool
+	for _, c := range m.Candidates {
+		if c.Id == candidateID {
+			found = true
+			if c.Status == nil || *c.Status != api.CandidateStatusRunning {
+				return CandidateNotRunningError{ID: candidateID}
+			}
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
+	}
+
 	workflowID := WorkflowID(migrationID, candidateID)
 
 	if err := s.engine.CancelWorkflow(ctx, workflowID); err != nil {

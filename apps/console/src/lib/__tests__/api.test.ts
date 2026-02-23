@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ConflictError,
-  NotFoundError,
   dryRun,
   startRun,
   getMigration,
@@ -49,18 +48,6 @@ describe("ConflictError", () => {
 
   it("has name ConflictError", () => {
     expect(new ConflictError("x").name).toBe("ConflictError");
-  });
-});
-
-describe("NotFoundError", () => {
-  it("is instanceof both NotFoundError and Error", () => {
-    const err = new NotFoundError("not found");
-    expect(err).toBeInstanceOf(NotFoundError);
-    expect(err).toBeInstanceOf(Error);
-  });
-
-  it("has name NotFoundError", () => {
-    expect(new NotFoundError("x").name).toBe("NotFoundError");
   });
 });
 
@@ -192,8 +179,7 @@ describe("startRun", () => {
 // ---------------------------------------------------------------------------
 
 describe("dryRun", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const candidate = { id: "cand-1", repo: "org/repo", ref: "main" } as any;
+  const candidate = { id: "cand-1", kind: "docker", repo: "org/repo", ref: "main" } as const;
 
   it("returns the result on success", async () => {
     const result = { steps: [] };

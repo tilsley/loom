@@ -142,8 +142,7 @@ describe("useMigrationPolling", () => {
 
   it("calls listMigrations again on each interval tick", () => {
     let tick: (() => void) | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(globalThis, "setInterval").mockImplementation((cb: any) => {
+    vi.spyOn(globalThis, "setInterval").mockImplementation((cb: unknown) => {
       tick = cb as () => void;
       return 99 as unknown as ReturnType<typeof setInterval>;
     });

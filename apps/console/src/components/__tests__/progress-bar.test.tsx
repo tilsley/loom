@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { CandidateStatus } from "@/lib/api";
 import { ProgressBar } from "../progress-bar";
 
-const c = (...ids: string[]) => ids.map((id) => ({ id }));
-const withStatus = (id: string, status: CandidateStatus) => ({ id, status });
+const c = (...ids: string[]) => ids.map((id) => ({ id, kind: "test" }));
+const withStatus = (id: string, status: CandidateStatus) => ({ id, kind: "test", status });
 
 describe("ProgressBar", () => {
   it("counts candidates with no associated run as not started", () => {
@@ -19,7 +19,7 @@ describe("ProgressBar", () => {
         candidates={[
           withStatus("a", "completed"),
           withStatus("b", "running"),
-          { id: "c" }, // no status → not started
+          { id: "c", kind: "test" }, // no status → not started
         ]}
       />,
     );
@@ -61,8 +61,8 @@ describe("ProgressBar", () => {
         candidates={[
           withStatus("a", "completed"),
           withStatus("b", "completed"),
-          { id: "c" },
-          { id: "d" },
+          { id: "c", kind: "test" },
+          { id: "d", kind: "test" },
         ]}
       />,
     );

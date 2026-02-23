@@ -204,6 +204,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/EventResponse"
 
+  /event/{id}/pr-opened:
+    post:
+      summary: Worker notifies that a PR has been opened for a step; signals the workflow so the PR URL is immediately visible
+      operationId: notifyPROpened
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StepCompletedEvent"
+      responses:
+        "202":
+          description: PR recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResponse"
+
 components:
   schemas:
     # --- Core domain types ---

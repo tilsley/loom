@@ -16,6 +16,16 @@ func (e CandidateAlreadyRunError) Error() string {
 	return fmt.Sprintf("candidate %q already has status %q", e.ID, e.Status)
 }
 
+// CandidateNotRunningError is returned when cancel is requested for a candidate that is not running.
+type CandidateNotRunningError struct {
+	ID string
+}
+
+// Error implements the error interface.
+func (e CandidateNotRunningError) Error() string {
+	return fmt.Sprintf("candidate %q is not running", e.ID)
+}
+
 // WorkflowNotFoundError is returned by the WorkflowEngine when the workflow instance
 // does not exist — typically after the engine is restarted in development.
 type WorkflowNotFoundError struct {

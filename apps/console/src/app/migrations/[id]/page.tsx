@@ -7,13 +7,14 @@ import Link from "next/link";
 import {
   getMigration,
   getCandidates,
+  cancelRun,
   type Migration,
   type Candidate,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { Input, Skeleton } from "@/components/ui";
+import { Button, Input, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,9 @@ export default function MigrationDetail() {
   const [stepsOpen, setStepsOpen] = useState(false);
   const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
   const [previewInputs, setPreviewInputs] = useState<Record<string, string>>({});
+  const [cancelCandidate, setCancelCandidate] = useState<Candidate | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const fetchMigration = useCallback(async () => {
     try {
@@ -68,6 +72,26 @@ export default function MigrationDetail() {
       setPreviewCandidate(candidate);
     } else {
       router.push(ROUTES.preview(id, candidate.id));
+    }
+  }
+
+  function handleCancel(candidate: Candidate) {
+    setCancelCandidate(candidate);
+    setCancelError(null);
+  }
+
+  async function confirmCancel() {
+    if (!cancelCandidate) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      await cancelRun(id, cancelCandidate.id);
+      setCancelCandidate(null);
+      void fetchCandidates();
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : "Failed to cancel");
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -206,6 +230,60 @@ export default function MigrationDetail() {
       )
     : null;
 
+  const cancelModal = cancelCandidate
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
+          onClick={() => { if (!cancelling) setCancelCandidate(null); }}
+        >
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="relative w-full max-w-md bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+                <h3 className="text-[14px] font-semibold text-zinc-100">Cancel migration?</h3>
+                <button
+                  onClick={() => { if (!cancelling) setCancelCandidate(null); }}
+                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-zinc-400">
+                  Stop the running migration for{" "}
+                  <span className="font-mono text-zinc-200">{cancelCandidate.id}</span>? This will
+                  reset it to not started.
+                </p>
+                {cancelError ? <p className="mt-3 text-sm text-red-400">{cancelError}</p> : null}
+              </div>
+              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-zinc-800">
+                <button
+                  onClick={() => setCancelCandidate(null)}
+                  disabled={cancelling}
+                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-50"
+                >
+                  Keep running
+                </button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => void confirmCancel()}
+                  disabled={cancelling}
+                >
+                  {cancelling ? "Cancelling…" : "Cancel run"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   if (error && !migration) {
     return (
       <div className="space-y-6 animate-fade-in-up">
@@ -245,6 +323,7 @@ export default function MigrationDetail() {
     <div className="space-y-8 animate-fade-in-up">
       {previewModal}
       {stepsModal}
+      {cancelModal}
       {/* Breadcrumb */}
       <Link
         href={ROUTES.migrations}
@@ -296,6 +375,7 @@ export default function MigrationDetail() {
         <CandidateTable
           migration={{ ...migration, candidates }}
           onPreview={handlePreview}
+          onCancel={handleCancel}
           runningCandidate={null}
         />
       </section>

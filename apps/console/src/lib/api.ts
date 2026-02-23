@@ -1,9 +1,7 @@
 import type { components } from "./api.gen";
 
-export type StepDefinition = components["schemas"]["StepDefinition"];
 export type StepResult = components["schemas"]["StepResult"];
 export type Migration = components["schemas"]["Migration"];
-export type ListMigrationsResponse = components["schemas"]["ListMigrationsResponse"];
 export type Candidate = components["schemas"]["Candidate"];
 export type CandidateStatus = components["schemas"]["CandidateStatus"];
 export type CandidateStepsResponse = components["schemas"]["CandidateStepsResponse"];
@@ -12,7 +10,7 @@ export type FileDiff = components["schemas"]["FileDiff"];
 
 const BASE = "/api";
 
-export async function listMigrations(): Promise<ListMigrationsResponse> {
+export async function listMigrations(): Promise<{ migrations: Migration[] }> {
   const res = await fetch(`${BASE}/migrations`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -28,13 +26,6 @@ export class ConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ConflictError";
-  }
-}
-
-export class NotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "NotFoundError";
   }
 }
 
@@ -68,13 +59,6 @@ export async function getCandidateSteps(
   return res.json();
 }
 
-export async function cancelRun(migrationId: string, candidateId: string): Promise<void> {
-  const res = await fetch(`${BASE}/migrations/${migrationId}/candidates/${candidateId}/cancel`, {
-    method: "POST",
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
 export async function startRun(
   migrationId: string,
   candidateId: string,
@@ -87,6 +71,13 @@ export async function startRun(
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (res.status === 409) throw new ConflictError(await res.text());
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function cancelRun(migrationId: string, candidateId: string): Promise<void> {
+  const res = await fetch(`${BASE}/migrations/${migrationId}/candidates/${candidateId}/cancel`, {
+    method: "POST",
+  });
   if (!res.ok) throw new Error(await res.text());
 }
 

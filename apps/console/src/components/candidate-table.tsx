@@ -11,10 +11,11 @@ const PAGE_SIZE = 50;
 interface CandidateTableProps {
   migration: Migration;
   onPreview: (candidate: Candidate) => void;
+  onCancel?: (candidate: Candidate) => void;
   runningCandidate: string | null;
 }
 
-export function CandidateTable({ migration, onPreview, runningCandidate }: CandidateTableProps) {
+export function CandidateTable({ migration, onPreview, onCancel, runningCandidate }: CandidateTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const kind = migration.candidates[0]?.kind ?? "candidate";
@@ -185,6 +186,7 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
                       candidate={c}
                       migrationId={(c.status === "running" || c.status === "completed") ? migration.id : undefined}
                       onPreview={onPreview}
+                      onCancel={onCancel}
                       isRunning={runningCandidate === c.id}
                     />
                   ))}
@@ -205,6 +207,7 @@ export function CandidateTable({ migration, onPreview, runningCandidate }: Candi
                 candidate={t}
                 migrationId={(t.status === "running" || t.status === "completed") ? migration.id : undefined}
                 onPreview={onPreview}
+                onCancel={onCancel}
                 isRunning={runningCandidate === t.id}
               />
             ))}

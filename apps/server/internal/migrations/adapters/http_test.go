@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,9 @@ import (
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/apps/server/internal/migrations/adapters"
+	"github.com/tilsley/loom/apps/server/internal/platform/validation"
 	"github.com/tilsley/loom/pkg/api"
+	"github.com/tilsley/loom/schemas"
 )
 
 func init() {
@@ -158,6 +161,18 @@ func newTestServer(t *testing.T) *testServer {
 	svc := migrations.NewService(ts.engine, ts.store, ts.dryRun)
 	r := gin.New()
 	adapters.RegisterRoutes(r, svc, slog.Default())
+	ts.router = r
+	return ts
+}
+
+func newTestServerWithValidation(t *testing.T) *testServer {
+	t.Helper()
+	ts := newTestServer(t)
+	mw, err := validation.New(schemas.OpenAPISpec)
+	require.NoError(t, err)
+	r := gin.New()
+	r.Use(mw)
+	adapters.RegisterRoutes(r, migrations.NewService(ts.engine, ts.store, ts.dryRun), slog.Default())
 	ts.router = r
 	return ts
 }
@@ -316,6 +331,39 @@ func TestCancelRun_Returns204(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code)
 }
 
+func TestCancelRun_MigrationNotFound_Returns404(t *testing.T) {
+	ts := newTestServer(t)
+
+	w := ts.do(http.MethodPost, "/migrations/unknown/candidates/billing-api/cancel", nil)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestCancelRun_CandidateNotFound_Returns404(t *testing.T) {
+	ts := newTestServer(t)
+	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
+		Id:         "mig-abc",
+		Candidates: []api.Candidate{{Id: "other"}},
+	}))
+
+	w := ts.do(http.MethodPost, "/migrations/mig-abc/candidates/billing-api/cancel", nil)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestCancelRun_CandidateNotRunning_Returns409(t *testing.T) {
+	ts := newTestServer(t)
+	notStarted := api.CandidateStatusNotStarted
+	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
+		Id:         "mig-abc",
+		Candidates: []api.Candidate{{Id: "billing-api", Status: &notStarted}},
+	}))
+
+	w := ts.do(http.MethodPost, "/migrations/mig-abc/candidates/billing-api/cancel", nil)
+
+	require.Equal(t, http.StatusConflict, w.Code)
+}
+
 // ─── GET /migrations/:id/candidates/:candidateId/steps ────────────────────────
 
 func TestGetCandidateSteps_NotFound_Returns404(t *testing.T) {
@@ -352,6 +400,36 @@ func TestSubmitCandidates_Success(t *testing.T) {
 	w := ts.do(http.MethodPost, "/migrations/mig-abc/candidates", api.SubmitCandidatesRequest{
 		Candidates: []api.Candidate{{Id: "billing-api"}, {Id: "payments-svc"}},
 	})
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// These two tests use the validation middleware to confirm the schema contract
+// is enforced end-to-end. If the middleware were removed, they would catch it.
+
+func TestSubmitCandidates_MissingKind_Returns400(t *testing.T) {
+	ts := newTestServerWithValidation(t)
+	require.NoError(t, ts.store.Save(context.Background(), api.Migration{Id: "mig-abc"}))
+
+	req := httptest.NewRequest(http.MethodPost, "/migrations/mig-abc/candidates",
+		strings.NewReader(`{"candidates":[{"id":"billing-api"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "error")
+}
+
+func TestSubmitCandidates_WithKind_PassesValidation(t *testing.T) {
+	ts := newTestServerWithValidation(t)
+	require.NoError(t, ts.store.Save(context.Background(), api.Migration{Id: "mig-abc"}))
+
+	req := httptest.NewRequest(http.MethodPost, "/migrations/mig-abc/candidates",
+		strings.NewReader(`{"candidates":[{"id":"billing-api","kind":"application"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 }

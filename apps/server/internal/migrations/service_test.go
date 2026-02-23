@@ -494,9 +494,13 @@ func TestService_GetCandidateSteps(t *testing.T) {
 
 func TestService_Cancel(t *testing.T) {
 	ctx := context.Background()
+	running := api.CandidateStatusRunning
 
 	setup := func(store *memStore) {
-		_ = store.Save(ctx, api.Migration{Id: "m1"})
+		_ = store.Save(ctx, api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+		})
 	}
 
 	t.Run("cancels workflow, writes audit entry, resets candidate", func(t *testing.T) {
@@ -535,6 +539,7 @@ func TestService_Cancel(t *testing.T) {
 
 	t.Run("other engine error is returned immediately", func(t *testing.T) {
 		store := newMemStore()
+		setup(store)
 		engine := &stubEngine{
 			cancelFn: func(_ context.Context, _ string) error {
 				return errors.New("temporal unavailable")
@@ -548,6 +553,7 @@ func TestService_Cancel(t *testing.T) {
 
 	t.Run("propagates AppendCancelledAttempt error", func(t *testing.T) {
 		store := newMemStore()
+		setup(store)
 		store.errAppendCancelledAttempt = errors.New("append failed")
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
@@ -563,6 +569,37 @@ func TestService_Cancel(t *testing.T) {
 
 		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.ErrorContains(t, err, "delete failed")
+	})
+
+	t.Run("migration not found returns error", func(t *testing.T) {
+		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
+
+		err := svc.Cancel(ctx, "unknown", "repo-a")
+		require.ErrorContains(t, err, "not found")
+	})
+
+	t.Run("candidate not found returns error", func(t *testing.T) {
+		store := newMemStore()
+		_ = store.Save(ctx, api.Migration{Id: "m1", Candidates: []api.Candidate{{Id: "other"}}})
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		err := svc.Cancel(ctx, "m1", "repo-a")
+		require.ErrorContains(t, err, "not found")
+	})
+
+	t.Run("candidate not running returns CandidateNotRunningError", func(t *testing.T) {
+		store := newMemStore()
+		notStarted := api.CandidateStatusNotStarted
+		_ = store.Save(ctx, api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &notStarted}},
+		})
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		err := svc.Cancel(ctx, "m1", "repo-a")
+		var notRunning migrations.CandidateNotRunningError
+		require.ErrorAs(t, err, &notRunning)
+		assert.Equal(t, "repo-a", notRunning.ID)
 	})
 }
 

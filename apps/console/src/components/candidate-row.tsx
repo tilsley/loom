@@ -8,10 +8,11 @@ interface CandidateRowProps {
   candidate: Candidate;
   migrationId?: string;
   onPreview: (candidate: Candidate) => void;
+  onCancel?: (candidate: Candidate) => void;
   isRunning: boolean;
 }
 
-export function CandidateRow({ candidate, migrationId, onPreview, isRunning }: CandidateRowProps) {
+export function CandidateRow({ candidate, migrationId, onPreview, onCancel, isRunning }: CandidateRowProps) {
   const status = candidate.status;
   const isBlocked = status === "running" || status === "completed";
   const hasRun = !!migrationId;
@@ -76,24 +77,39 @@ export function CandidateRow({ candidate, migrationId, onPreview, isRunning }: C
 
       {/* Actions — stop click from navigating */}
       <div className="flex justify-end" onClick={(e) => e.preventDefault()}>
-        <Button
-          size="sm"
-          variant={isBlocked ? "outline" : "default"}
-          onClick={(e) => {
-            e.stopPropagation();
-            onPreview(candidate);
-          }}
-          disabled={isRunning || isBlocked}
-          className={`text-xs py-1 px-2.5 ${isBlocked ? "cursor-not-allowed" : ""}`}
-        >
-          {isRunning
-            ? "..."
-            : status === "completed"
-              ? "Done"
-              : status === "running"
-                ? "Running"
-                : "Preview"}
-        </Button>
+        {status === "running" && onCancel ? (
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancel(candidate);
+            }}
+            className="text-xs py-1 px-2.5"
+          >
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant={isBlocked ? "outline" : "default"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPreview(candidate);
+            }}
+            disabled={isRunning || isBlocked}
+            className={`text-xs py-1 px-2.5 ${isBlocked ? "cursor-not-allowed" : ""}`}
+          >
+            {isRunning
+              ? "..."
+              : status === "completed"
+                ? "Done"
+                : status === "running"
+                  ? "Running"
+                  : "Preview"}
+          </Button>
+        )}
       </div>
       {/* Files panel */}
       {filesExpanded && fileGroups.length > 0 ? <div

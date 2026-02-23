@@ -51,7 +51,9 @@
       "Bash(go fmt:*)",
       "Bash(ls:*)",
       "Bash(echo === $v ===:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Bash(tr  :*)"
     ]
   }
 }

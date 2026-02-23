@@ -6,12 +6,4 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
   );
 }
 
-function SkeletonCard({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <Skeleton className={cn("h-[76px]", className)} {...props} />;
-}
-
-function SkeletonText({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <Skeleton className={cn("h-4 w-48", className)} {...props} />;
-}
-
-export { Skeleton, SkeletonCard, SkeletonText };
+export { Skeleton };
