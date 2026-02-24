@@ -71,12 +71,6 @@ func StepEventName(stepName, candidateId string) string {
 	return fmt.Sprintf("step-completed:%s:%s", stepName, candidateId)
 }
 
-// PROpenedEventName returns the deterministic signal name the workflow listens on
-// for intermediate PR-opened notifications for a given step+candidate combination.
-func PROpenedEventName(stepName, candidateId string) string {
-	return fmt.Sprintf("pr-opened:%s:%s", stepName, candidateId)
-}
-
 // RetryStepEventName returns the deterministic signal name the workflow listens on
 // when waiting for an operator to retry a failed step.
 func RetryStepEventName(stepName, candidateId string) string {

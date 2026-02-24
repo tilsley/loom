@@ -288,6 +288,9 @@ components:
         workerApp:
           type: string
           description: App-id of the worker that handles this step (matches the id the worker announces).
+        type:
+          type: string
+          description: Optional step type identifier (e.g. "manual-review"). Used by the UI to render step-type-specific controls.
         config:
           type: object
           additionalProperties:
@@ -354,7 +357,7 @@ components:
 
     Migration:
       type: object
-      required: [id, name, description, candidates, steps, createdAt]
+      required: [id, name, description, candidates, steps, createdAt, workerUrl]
       properties:
         id:
           type: string
@@ -363,6 +366,9 @@ components:
           type: string
         description:
           type: string
+        workerUrl:
+          type: string
+          description: Base URL the server uses to dispatch steps and invoke dry-run (e.g. http://app-chart-migrator:3001).
         requiredInputs:
           type: array
           items:
@@ -464,11 +470,14 @@ components:
 
     MigrationManifest:
       type: object
-      required: [migrationId, candidates, steps]
+      required: [migrationId, candidates, steps, workerUrl]
       description: Internal payload for the Temporal workflow.
       properties:
         migrationId:
           type: string
+        workerUrl:
+          type: string
+          description: Base URL the server uses to dispatch steps to the worker.
         candidates:
           type: array
           items:
@@ -480,7 +489,7 @@ components:
 
     DispatchStepRequest:
       type: object
-      required: [migrationId, stepName, candidate, callbackId, eventName, workerApp]
+      required: [migrationId, stepName, candidate, callbackId, eventName, workerApp, workerUrl]
       description: Posted directly to a worker's /dispatch-step endpoint by the server.
       properties:
         migrationId:
@@ -502,6 +511,9 @@ components:
         workerApp:
           type: string
           description: App-id of the worker handling this step (e.g. app-chart-migrator).
+        workerUrl:
+          type: string
+          description: Base URL of the worker (e.g. http://app-chart-migrator:3001). Used by the notifier to POST the request.
 
     StepCompletedEvent:
       type: object

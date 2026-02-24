@@ -909,37 +909,5 @@ func TestService_HandleEvent(t *testing.T) {
 	})
 }
 
-func TestService_HandlePROpened(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("raises event with deterministic pr-opened name", func(t *testing.T) {
-		var raisedEvent string
-		engine := &stubEngine{
-			raiseEventFn: func(_ context.Context, _, event string, _ any) error {
-				raisedEvent = event
-				return nil
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-		candidate := api.Candidate{Id: "repo-a"}
-
-		err := svc.HandlePROpened(ctx, "run-123", api.StepCompletedEvent{StepName: "step-1", CandidateId: candidate.Id})
-		require.NoError(t, err)
-		assert.Equal(t, migrations.PROpenedEventName("step-1", candidate.Id), raisedEvent)
-	})
-
-	t.Run("propagates engine error", func(t *testing.T) {
-		engine := &stubEngine{
-			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
-				return errors.New("signal failed")
-			},
-		}
-		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
-
-		err := svc.HandlePROpened(ctx, "run-123", api.StepCompletedEvent{})
-		require.ErrorContains(t, err, "signal failed")
-	})
-}
-
 // Ensure ptr is used (suppress unused warning)
 var _ = ptr[string]

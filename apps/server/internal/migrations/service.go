@@ -89,16 +89,6 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 	return &api.CandidateStepsResponse{Status: status, Steps: steps}, nil
 }
 
-// HandlePROpened signals the running workflow with a pr-opened event so the
-// query handler can expose intermediate PR URLs in real-time.
-func (s *Service) HandlePROpened(ctx context.Context, instanceID string, event api.StepCompletedEvent) error {
-	eventName := PROpenedEventName(event.StepName, event.CandidateId)
-	if err := s.engine.RaiseEvent(ctx, instanceID, eventName, event); err != nil {
-		return fmt.Errorf("raise event %q: %w", eventName, err)
-	}
-	return nil
-}
-
 // HandleEvent raises a StepCompleted signal into the running workflow,
 // unblocking the signal wait for the matching step+candidate.
 func (s *Service) HandleEvent(ctx context.Context, instanceID string, event api.StepCompletedEvent) error {

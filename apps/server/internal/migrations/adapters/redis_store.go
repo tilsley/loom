@@ -164,3 +164,4 @@ func (s *RedisMigrationStore) GetCandidates(ctx context.Context, migrationID str
 	}
 	return m.Candidates, nil
 }
+

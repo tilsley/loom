@@ -29,8 +29,8 @@ const (
 //
 // For each step in the manifest it iterates candidate repos sequentially:
 //  1. Dispatches the step to an external worker via the DispatchStep activity.
-//  2. Listens for both "pr-opened" and "step-completed" signals via a Selector.
-//  3. Records metadata (PR URLs, etc.) and advances to the next candidate/step.
+//  2. Waits for a "step-completed" signal from the worker.
+//  3. Records the result and advances to the next candidate/step.
 //
 // A query handler ("progress") exposes accumulated results in real-time.
 func MigrationOrchestrator(
@@ -102,30 +102,25 @@ func processStep(
 	callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	stepCompletedSignal := migrations.StepEventName(step.Name, candidate.Id)
 
-	prOpenedCh := workflow.GetSignalChannel(ctx, migrations.PROpenedEventName(step.Name, candidate.Id))
 	stepCompletedCh := workflow.GetSignalChannel(ctx, stepCompletedSignal)
 	retryCh := workflow.GetSignalChannel(ctx, migrations.RetryStepEventName(step.Name, candidate.Id))
 
 	for {
-		if isManualReview(step) {
-			upsertResult(results, manualReviewResult(step, candidate))
-		} else {
-			req := api.DispatchStepRequest{
-				MigrationId: manifest.MigrationId,
-				StepName:    step.Name,
-				Candidate:   candidate,
-				Config:      step.Config,
-				CallbackId:  callbackID,
-				EventName:   stepCompletedSignal,
-				WorkerApp:   step.WorkerApp,
-				WorkerUrl:   manifest.WorkerUrl,
-			}
-			if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
-				return false, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
-			}
+		req := api.DispatchStepRequest{
+			MigrationId: manifest.MigrationId,
+			StepName:    step.Name,
+			Candidate:   candidate,
+			Config:      step.Config,
+			CallbackId:  callbackID,
+			EventName:   stepCompletedSignal,
+			WorkerApp:   step.WorkerApp,
+			WorkerUrl:   manifest.WorkerUrl,
+		}
+		if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
+			return false, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
 		}
 
-		awaitStepCompletion(ctx, prOpenedCh, stepCompletedCh, candidate, results)
+		awaitStepCompletion(ctx, stepCompletedCh, candidate, results)
 
 		last := (*results)[len(*results)-1]
 		if last.Success {
@@ -141,43 +136,21 @@ func processStep(
 	}
 }
 
-// awaitStepCompletion blocks until a step-completed signal arrives, recording any
-// pr-opened signals that arrive first (intermediate progress updates from the worker).
+// awaitStepCompletion blocks until a step-completed signal arrives.
 func awaitStepCompletion(
 	ctx workflow.Context,
-	prOpenedCh, stepCompletedCh workflow.ReceiveChannel,
+	stepCompletedCh workflow.ReceiveChannel,
 	candidate api.Candidate,
 	results *[]api.StepResult,
 ) {
-	done := false
-	for !done {
-		sel := workflow.NewSelector(ctx)
-
-		sel.AddReceive(prOpenedCh, func(c workflow.ReceiveChannel, _ bool) {
-			var event api.StepCompletedEvent
-			c.Receive(ctx, &event)
-			upsertResult(results, api.StepResult{
-				StepName:  event.StepName,
-				Candidate: candidate,
-				Success:   event.Success,
-				Metadata:  event.Metadata,
-			})
-		})
-
-		sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
-			var event api.StepCompletedEvent
-			c.Receive(ctx, &event)
-			upsertResult(results, api.StepResult{
-				StepName:  event.StepName,
-				Candidate: candidate,
-				Success:   event.Success,
-				Metadata:  event.Metadata,
-			})
-			done = true
-		})
-
-		sel.Select(ctx)
-	}
+	var event api.StepCompletedEvent
+	stepCompletedCh.Receive(ctx, &event)
+	upsertResult(results, api.StepResult{
+		StepName:  event.StepName,
+		Candidate: candidate,
+		Success:   event.Success,
+		Metadata:  event.Metadata,
+	})
 }
 
 // awaitRetryOrCancel blocks until either a retry-step signal or workflow cancellation.
@@ -192,27 +165,6 @@ func awaitRetryOrCancel(ctx workflow.Context, retryCh workflow.ReceiveChannel) b
 	sel.AddReceive(ctx.Done(), func(_ workflow.ReceiveChannel, _ bool) {})
 	sel.Select(ctx)
 	return retryReceived
-}
-
-// isManualReview reports whether the step is a human gate rather than a worker dispatch.
-func isManualReview(step api.StepDefinition) bool {
-	return step.Config != nil && (*step.Config)["type"] == "manual-review"
-}
-
-// manualReviewResult builds the StepResult for a manual-review gate step.
-func manualReviewResult(step api.StepDefinition, candidate api.Candidate) api.StepResult {
-	meta := map[string]string{"phase": "awaiting_review"}
-	if step.Config != nil {
-		if instructions, ok := (*step.Config)["instructions"]; ok {
-			meta["instructions"] = instructions
-		}
-	}
-	return api.StepResult{
-		StepName:  step.Name,
-		Candidate: candidate,
-		Success:   true,
-		Metadata:  &meta,
-	}
 }
 
 // runUpdateCandidateStatus persists the final candidate status via the

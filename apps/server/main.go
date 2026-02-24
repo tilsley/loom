@@ -18,6 +18,7 @@ import (
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/apps/server/internal/migrations/adapters"
+	handlers "github.com/tilsley/loom/apps/server/internal/migrations/api"
 	"github.com/tilsley/loom/apps/server/internal/migrations/execution"
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
 	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
@@ -126,7 +127,7 @@ func main() {
 	}
 
 	router.Use(gin.Recovery(), otelgin.Middleware(os.Getenv("OTEL_SERVICE_NAME")), validator)
-	adapters.RegisterRoutes(router, svc, slog)
+	handlers.RegisterRoutes(router, svc, slog)
 
 	port := os.Getenv("PORT")
 	if port == "" {
