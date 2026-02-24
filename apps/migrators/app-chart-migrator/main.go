@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
 
 	githubadapter "github.com/tilsley/loom/apps/migrators/app-chart-migrator/internal/adapters/github"
@@ -31,7 +30,7 @@ func main() {
 
 	githubURL := envOr("GITHUB_API_URL", "http://localhost:9090")
 	loomURL := envOr("LOOM_URL", "http://localhost:8080")
-	daprPort := envOr("DAPR_HTTP_PORT", "3501")
+	workerURL := envOr("WORKER_URL", "http://localhost:3001")
 	port := envOr("PORT", "3001")
 
 	// Parse gitops repo from env
@@ -49,14 +48,9 @@ func main() {
 		Envs:        envs,
 	}
 
-	// --- Platform: Dapr ---
+	// --- Redis (pending callback store) ---
 
-	daprClient, err := dapr.NewClient()
-	if err != nil {
-		log.Error("dapr client init failed", "error", err)
-		os.Exit(1)
-	}
-	defer daprClient.Close()
+	redisAddr := envOr("REDIS_ADDR", "localhost:6379")
 
 	// --- GitHub adapter ---
 	// Token auth (local dev / CI): set GITHUB_TOKEN.
@@ -90,7 +84,7 @@ func main() {
 		log.Info("github: using token auth", "url", githubURL)
 	}
 
-	store := pending.NewStore(daprClient, log)
+	store := pending.NewStore(redisAddr, log)
 	loomClient := loom.NewClient(loomURL, log)
 	dispatch := handler.NewDispatch(ghAdapter, store, loomClient, log, stepCfg)
 	webhook := handler.NewWebhook(store, loomClient, log)
@@ -99,19 +93,8 @@ func main() {
 
 	r := gin.Default()
 
-	// Dapr subscription discovery
-	r.GET("/dapr/subscribe", func(c *gin.Context) {
-		c.JSON(http.StatusOK, []gin.H{
-			{
-				"pubsubname": "pubsub",
-				"topic":      "migration-steps",
-				"route":      "/steps/dispatch",
-			},
-		})
-	})
-
-	// Dapr delivers dispatched steps here
-	r.POST("/steps/dispatch", dispatch.Handle)
+	// Steps are dispatched here directly from the server (no Dapr).
+	r.POST("/dispatch-step", dispatch.Handle)
 
 	// GitHub webhook — called when a PR is merged
 	r.POST("/webhooks/github", webhook.Handle)
@@ -126,8 +109,7 @@ func main() {
 
 	ctx := context.Background()
 
-	// Announce migration on startup (after sidecar is ready), then discover candidates.
-	// Discovery is sequenced after announce so the migration exists before candidates are submitted.
+	// Announce migration on startup, then discover candidates.
 	discoverer := &discovery.AppChartDiscoverer{
 		Reader:      ghAdapter,
 		GitopsOwner: gitopsOwner,
@@ -141,21 +123,20 @@ func main() {
 		Log:         log,
 	}
 	go func() {
-		if !announceOnStartup(log, daprPort, gitopsOwner, gitopsRepoName, envs) {
+		if !announceOnStartup(log, loomURL, workerURL, gitopsOwner, gitopsRepoName, envs) {
 			return
 		}
 		discoveryRunner.Run(ctx)
 	}()
 
-	log.Info("worker starting", "port", port, "gitopsRepo", gitopsRepo, "envs", envs)
+	log.Info("worker starting", "port", port, "gitopsRepo", gitopsRepo, "envs", envs, "workerUrl", workerURL)
 	if err := r.Run(":" + port); err != nil {
-		daprClient.Close() // explicitly close before os.Exit so defer doesn't get skipped
 		log.Error("server failed", "error", err)
-		os.Exit(1) //nolint:gocritic // daprClient.Close() called explicitly above
+		os.Exit(1)
 	}
 }
 
-func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
+func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
 	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
 	stepDefs := make([]api.StepDefinition, 0, 2+4*len(envs)+2)
@@ -229,14 +210,15 @@ func buildAnnouncement(gitopsOwner, gitopsRepoName string, envs []string) api.Mi
 		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository"}},
 		Candidates:     []api.Candidate{},
 		Steps:          stepDefs,
+		WorkerUrl:      workerURL,
 	}
 }
 
-func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName string, envs []string) bool {
-	// Wait for Dapr sidecar readiness
+func announceOnStartup(log *slog.Logger, loomURL, workerURL, gitopsOwner, gitopsRepoName string, envs []string) bool {
+	// Small pause to let the server start accepting connections.
 	time.Sleep(2 * time.Second)
 
-	announcement := buildAnnouncement(gitopsOwner, gitopsRepoName, envs)
+	announcement := buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName, envs)
 
 	body, err := json.Marshal(announcement)
 	if err != nil {
@@ -244,9 +226,9 @@ func announceOnStartup(log *slog.Logger, daprPort, gitopsOwner, gitopsRepoName s
 		return false
 	}
 
-	url := fmt.Sprintf("http://localhost:%s/v1.0/publish/pubsub/migration-registry", daprPort)
+	url := loomURL + "/registry/announce"
 
-	// Retry up to 10 times (sidecar may not be ready yet)
+	// Retry up to 10 times (server may not be ready yet).
 	for i := range 10 {
 		httpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {

@@ -26,10 +26,6 @@ prefix() {
 
 cleanup() {
   printf "\n${C_BOLD}Shutting down…${C_RESET}\n"
-  # Ask dapr to stop its sidecars cleanly before we kill the process pipes.
-  dapr stop --app-id loom            2>/dev/null || true
-  dapr stop --app-id app-chart-migrator 2>/dev/null || true
-  # Closing the prefix pipes sends SIGPIPE to the app processes behind them.
   for pid in "${PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
@@ -53,7 +49,7 @@ make generate-ts --no-print-directory
 printf "\n${C_BOLD}Loom dev${C_RESET}\n"
 printf "  ${C_TEMPORAL}temporal${C_RESET}  → http://localhost:8088\n"
 printf "  ${C_SERVER}server${C_RESET}    → http://localhost:8080\n"
-printf "  ${C_WORKER}migrator${C_RESET}  → dapr app-id: migration-worker\n"
+printf "  ${C_WORKER}migrator${C_RESET}  → http://localhost:3001\n"
 printf "  ${C_MOCKGH}mock-gh${C_RESET}   → http://localhost:8081\n"
 printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n"
 
@@ -77,22 +73,12 @@ PIDS+=($!)
 sleep 1
 
 # 2. Server
-(cd apps/server && dapr run \
-  --app-id loom \
-  --app-port 8080 \
-  --dapr-http-port 3500 \
-  --resources-path ./dapr/components \
-  -- go run .) 2>&1 \
+(cd apps/server && go run .) 2>&1 \
   | prefix "server" "$C_SERVER" &
 PIDS+=($!)
 
 # 3. App chart migrator
-(cd apps/migrators/app-chart-migrator && dapr run \
-  --app-id app-chart-migrator \
-  --app-port 3001 \
-  --dapr-http-port 3501 \
-  --resources-path ./dapr/components \
-  -- go run .) 2>&1 \
+(cd apps/migrators/app-chart-migrator && go run .) 2>&1 \
   | prefix "migrator" "$C_WORKER" &
 PIDS+=($!)
 

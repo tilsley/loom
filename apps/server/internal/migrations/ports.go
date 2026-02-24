@@ -13,7 +13,6 @@ type WorkerNotifier interface {
 }
 
 // WorkflowEngine abstracts the durable workflow runtime.
-// The platform/dapr layer provides the concrete implementation.
 type WorkflowEngine interface {
 	StartWorkflow(ctx context.Context, workflowName, instanceID string, input any) (string, error)
 	GetStatus(ctx context.Context, instanceID string) (*WorkflowStatus, error)
@@ -22,9 +21,8 @@ type WorkflowEngine interface {
 }
 
 // DryRunner simulates a full migration run and returns per-step file diffs.
-// Implementations call a worker via service invocation (e.g. Dapr).
 type DryRunner interface {
-	DryRun(ctx context.Context, req api.DryRunRequest) (*api.DryRunResult, error)
+	DryRun(ctx context.Context, workerUrl string, req api.DryRunRequest) (*api.DryRunResult, error)
 }
 
 // MigrationStore persists migration definitions.

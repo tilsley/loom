@@ -29,7 +29,7 @@ func newRouter(t *testing.T) *gin.Engine {
 	r.NoRoute(func(c *gin.Context) { c.Status(http.StatusOK) })
 	r.POST("/migrations/:id/candidates", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	r.POST("/event/:id", func(c *gin.Context) { c.Status(http.StatusAccepted) })
-	r.POST("/dapr/subscribe", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.POST("/registry/announce", func(c *gin.Context) { c.Status(http.StatusOK) })
 	return r
 }
 
@@ -89,10 +89,10 @@ func TestRaiseEvent_ValidPayload_Passes(t *testing.T) {
 
 // ─── unknown routes pass through ─────────────────────────────────────────────
 
-func TestUnknownRoute_Dapr_PassesThrough(t *testing.T) {
+func TestUnknownRoute_PassesThrough(t *testing.T) {
 	r := newRouter(t)
-	// /dapr/subscribe is not in the OpenAPI spec — should pass through silently
-	w := do(r, http.MethodPost, "/dapr/subscribe", `{}`)
+	// /registry/announce is not in the OpenAPI spec — should pass through silently
+	w := do(r, http.MethodPost, "/registry/announce", `{}`)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 

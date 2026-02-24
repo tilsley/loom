@@ -287,7 +287,7 @@ components:
           type: string
         workerApp:
           type: string
-          description: Dapr app-id of the worker that handles this step.
+          description: App-id of the worker that handles this step (matches the id the worker announces).
         config:
           type: object
           additionalProperties:
@@ -434,10 +434,10 @@ components:
 
     MigrationAnnouncement:
       type: object
-      required: [id, name, description, candidates, steps]
+      required: [id, name, description, candidates, steps, workerUrl]
       description: >
-        Published by workers to the "migration-registry" Dapr topic on startup.
-        Loom subscribes and upserts the migration (idempotent by id).
+        POSTed by workers directly to /registry/announce on startup.
+        Loom upserts the migration (idempotent by id) and registers the worker URL.
       properties:
         id:
           type: string
@@ -458,6 +458,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StepDefinition"
+        workerUrl:
+          type: string
+          description: Base URL the server uses to dispatch steps and invoke dry-run (e.g. http://app-chart-migrator:3001).
 
     MigrationManifest:
       type: object
@@ -477,8 +480,8 @@ components:
 
     DispatchStepRequest:
       type: object
-      required: [migrationId, stepName, candidate, callbackId, eventName]
-      description: Message published to workers via Dapr pub/sub.
+      required: [migrationId, stepName, candidate, callbackId, eventName, workerApp]
+      description: Posted directly to a worker's /dispatch-step endpoint by the server.
       properties:
         migrationId:
           type: string
@@ -496,6 +499,9 @@ components:
         eventName:
           type: string
           description: Exact event name the workflow is waiting on.
+        workerApp:
+          type: string
+          description: App-id of the worker handling this step (e.g. app-chart-migrator).
 
     StepCompletedEvent:
       type: object

@@ -27,8 +27,6 @@ func RegisterRoutes(r *gin.Engine, svc *migrations.Service, log *slog.Logger) {
 	r.POST("/event/:id", h.Event)
 	r.POST("/event/:id/pr-opened", h.PROpened)
 
-	// Dapr pub/sub subscription discovery + handler
-	r.GET("/dapr/subscribe", h.DaprSubscribe)
 	r.POST("/registry/announce", h.Announce)
 
 	// Migrations
@@ -125,8 +123,9 @@ func (h *Handler) StartRun(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "migration \""+id+"\" not found" ||
-			err.Error() == "candidate \""+candidateID+"\" not found in migration \""+id+"\"" {
+		var migNotFound migrations.MigrationNotFoundError
+		var candNotFound migrations.CandidateNotFoundError
+		if errors.As(err, &migNotFound) || errors.As(err, &candNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -156,8 +155,9 @@ func (h *Handler) CancelRun(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "migration \""+id+"\" not found" ||
-			err.Error() == "candidate \""+candidateID+"\" not found in migration \""+id+"\"" {
+		var migNotFound migrations.MigrationNotFoundError
+		var candNotFound migrations.CandidateNotFoundError
+		if errors.As(err, &migNotFound) || errors.As(err, &candNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -187,8 +187,9 @@ func (h *Handler) RetryStep(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "migration \""+id+"\" not found" ||
-			err.Error() == "candidate \""+candidateID+"\" not found in migration \""+id+"\"" {
+		var migNotFound migrations.MigrationNotFoundError
+		var candNotFound migrations.CandidateNotFoundError
+		if errors.As(err, &migNotFound) || errors.As(err, &candNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -251,7 +252,8 @@ func (h *Handler) SubmitCandidates(c *gin.Context) {
 	}
 
 	if err := h.svc.SubmitCandidates(c.Request.Context(), id, req); err != nil {
-		if err.Error() == "migration \""+id+"\" not found" {
+		var migNotFound migrations.MigrationNotFoundError
+		if errors.As(err, &migNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -289,7 +291,8 @@ func (h *Handler) DryRun(c *gin.Context) {
 
 	result, err := h.svc.DryRun(c.Request.Context(), id, req.Candidate)
 	if err != nil {
-		if err.Error() == "migration \""+id+"\" not found" {
+		var migNotFound migrations.MigrationNotFoundError
+		if errors.As(err, &migNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -301,34 +304,21 @@ func (h *Handler) DryRun(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// DaprSubscribe handles GET /dapr/subscribe — Dapr calls this to discover pub/sub subscriptions.
-func (h *Handler) DaprSubscribe(c *gin.Context) {
-	c.JSON(http.StatusOK, []gin.H{
-		{
-			"pubsubname": "pubsub",
-			"topic":      "migration-registry",
-			"route":      "/registry/announce",
-		},
-	})
-}
-
-// Announce handles POST /registry/announce — Dapr delivers pub/sub messages here (CloudEvent envelope).
+// Announce handles POST /registry/announce — workers POST a MigrationAnnouncement directly.
 func (h *Handler) Announce(c *gin.Context) {
-	var envelope struct {
-		Data api.MigrationAnnouncement `json:"data"`
-	}
-	if err := c.ShouldBindJSON(&envelope); err != nil {
+	var announcement api.MigrationAnnouncement
+	if err := c.ShouldBindJSON(&announcement); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	m, err := h.svc.Announce(c.Request.Context(), envelope.Data)
+	m, err := h.svc.Announce(c.Request.Context(), announcement)
 	if err != nil {
-		h.log.Error("failed to handle announcement", "id", envelope.Data.Id, "error", err)
+		h.log.Error("failed to handle announcement", "id", announcement.Id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.log.Info("migration announced", "id", m.Id, "name", m.Name)
+	h.log.Info("migration announced", "id", m.Id, "name", m.Name, "workerUrl", announcement.WorkerUrl)
 	c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 }

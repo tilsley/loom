@@ -2,22 +2,19 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
-	dapr "github.com/dapr/go-sdk/client"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.temporal.io/sdk/client"
 	otelcontrib "go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/apps/server/internal/migrations/adapters"
@@ -70,40 +67,28 @@ func main() {
 
 	engine := temporalplatform.NewEngine(tc)
 
-	// --- Platform: Dapr (pub/sub + state store) ---
-	//
-	// Build the gRPC connection manually so the OTel stats handler injects
-	// W3C traceparent metadata into every call to the Dapr sidecar.
-	// This links our server spans to Dapr's own distributed trace propagation.
+	// --- Platform: Redis ---
 
-	daprPort := os.Getenv("DAPR_GRPC_PORT")
-	if daprPort == "" {
-		daprPort = "50001"
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
 	}
-	daprConn, err := grpc.NewClient(
-		fmt.Sprintf("localhost:%s", daprPort),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	)
-	if err != nil {
-		tc.Close()
-		slog.Error("dapr grpc connection failed", "error", err)
-		os.Exit(1) //nolint:gocritic
-	}
-	defer daprConn.Close()
-
-	daprClient := dapr.NewClientWithConnection(daprConn)
-	defer daprClient.Close()
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: os.Getenv("REDIS_PASSWORD"),
+	})
+	defer rdb.Close() //nolint:errcheck
 
 	// --- Adapters ---
 
-	bus := adapters.NewDaprBus(daprClient, "pubsub", "migration-steps")
-	store := adapters.NewDaprMigrationStore(daprClient)
-	dryRunner := adapters.NewDaprDryRunAdapter(daprClient)
+	store := adapters.NewRedisMigrationStore(rdb)
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	notifier := adapters.NewHTTPWorkerNotifier(httpClient)
+	dryRunner := adapters.NewHTTPDryRunAdapter(httpClient)
 
 	// --- Temporal Worker ---
 
-	activities := execution.NewActivities(bus, store, slog)
+	activities := execution.NewActivities(notifier, store, slog)
 
 	workerOpts := worker.Options{}
 	if otelEnabled {

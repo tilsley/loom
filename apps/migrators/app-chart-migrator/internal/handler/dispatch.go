@@ -36,16 +36,13 @@ func NewDispatch(
 	return &Dispatch{gr: gr, pending: store, loom: loomClient, log: log, stepCfg: stepCfg}
 }
 
-// Handle processes a CloudEvent-wrapped DispatchStepRequest.
+// Handle processes a DispatchStepRequest posted directly by the server.
 func (d *Dispatch) Handle(c *gin.Context) {
-	var envelope struct {
-		Data api.DispatchStepRequest `json:"data"`
-	}
-	if err := c.ShouldBindJSON(&envelope); err != nil {
+	var req api.DispatchStepRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	req := envelope.Data
 
 	d.log.Info("received dispatch", "step", req.StepName, "target", req.Candidate.Id, "callbackId", req.CallbackId)
 

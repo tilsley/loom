@@ -64,12 +64,14 @@ func (e *stubEngine) CancelWorkflow(ctx context.Context, id string) error {
 // ─── stubDryRunner ────────────────────────────────────────────────────────────
 
 type stubDryRunner struct {
-	result  *api.DryRunResult
-	err     error
-	lastReq api.DryRunRequest
+	result          *api.DryRunResult
+	err             error
+	lastReq         api.DryRunRequest
+	lastWorkerUrl   string
 }
 
-func (d *stubDryRunner) DryRun(ctx context.Context, req api.DryRunRequest) (*api.DryRunResult, error) {
+func (d *stubDryRunner) DryRun(_ context.Context, workerUrl string, req api.DryRunRequest) (*api.DryRunResult, error) {
+	d.lastWorkerUrl = workerUrl
 	d.lastReq = req
 	return d.result, d.err
 }

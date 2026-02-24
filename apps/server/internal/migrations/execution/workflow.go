@@ -33,16 +33,12 @@ const (
 //  3. Records metadata (PR URLs, etc.) and advances to the next candidate/step.
 //
 // A query handler ("progress") exposes accumulated results in real-time.
-// On failure, completed steps are compensated in reverse order (saga pattern).
-//
-//nolint:gocognit // orchestrator is inherently complex
 func MigrationOrchestrator(
 	ctx workflow.Context,
 	manifest api.MigrationManifest,
 ) (MigrationResult, error) {
 	results := make([]api.StepResult, 0, len(manifest.Steps)*len(manifest.Candidates))
 
-	// Register query handler so external callers can read live progress.
 	if err := workflow.SetQueryHandler(ctx, "progress", func() (MigrationResult, error) {
 		return MigrationResult{
 			MigrationId: manifest.MigrationId,
@@ -53,167 +49,202 @@ func MigrationOrchestrator(
 		return MigrationResult{}, fmt.Errorf("register query handler: %w", err)
 	}
 
-	actOpts := workflow.ActivityOptions{
+	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		TaskQueue:           workflow.GetInfo(ctx).TaskQueueName,
 		StartToCloseTimeout: 24 * time.Hour,
-	}
-	actCtx := workflow.WithActivityOptions(ctx, actOpts)
+	})
 
-	// updateCandidateStatus records the final status on the candidate in the store.
-	updateCandidateStatus := func(status string) {
-		if len(manifest.Candidates) == 0 {
-			return
-		}
-		input := UpdateCandidateStatusInput{
-			MigrationID: manifest.MigrationId,
-			CandidateID: manifest.Candidates[0].Id,
-			Status:      status,
-		}
-		fut := workflow.ExecuteActivity(actCtx, "UpdateCandidateStatus", input)
-		if err := fut.Get(ctx, nil); err != nil {
-			workflow.GetLogger(ctx).Warn("failed to update candidate status", "error", err, "status", status)
-		}
-	}
-
-	// resetCandidate clears the candidate, returning it to not_started.
-	// Used on failure — there is no "failed" status at the candidate level.
-	resetCandidate := func() {
-		if len(manifest.Candidates) == 0 {
-			return
-		}
-		input := ResetCandidateInput{
-			MigrationID: manifest.MigrationId,
-			CandidateID: manifest.Candidates[0].Id,
-		}
-		fut := workflow.ExecuteActivity(actCtx, "ResetCandidate", input)
-		if err := fut.Get(ctx, nil); err != nil {
-			workflow.GetLogger(ctx).Warn("failed to reset candidate", "error", err)
-		}
-	}
-
-	// On failure (context cancelled while waiting for retry), reset the candidate.
 	var failed bool
 	defer func() {
-		if !failed {
-			return
+		if failed {
+			// No saga compensation — PRs cannot be automatically undone.
+			runResetCandidate(actCtx, ctx, manifest)
 		}
-		resetCandidate()
-		// No saga compensation — PRs cannot be automatically undone.
 	}()
 
 	for _, step := range manifest.Steps {
 		for _, candidate := range manifest.Candidates {
-			stepCompletedSignal := migrations.StepEventName(step.Name, candidate.Id)
-			prOpenedSignal := migrations.PROpenedEventName(step.Name, candidate.Id)
-			callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
-
-			// Signal channels are created once per step+candidate and reused across retries.
-			prOpenedCh := workflow.GetSignalChannel(ctx, prOpenedSignal)
-			stepCompletedCh := workflow.GetSignalChannel(ctx, stepCompletedSignal)
-			retryCh := workflow.GetSignalChannel(ctx, migrations.RetryStepEventName(step.Name, candidate.Id))
-
-			for { // retry loop: re-dispatches the step until it succeeds or is cancelled
-				// 1. Manual-review steps skip worker dispatch; all others go to the worker.
-				if step.Config != nil && (*step.Config)["type"] == "manual-review" {
-					meta := map[string]string{"phase": "awaiting_review"}
-					if instructions, ok := (*step.Config)["instructions"]; ok {
-						meta["instructions"] = instructions
-					}
-					upsertResult(&results, api.StepResult{
-						StepName:  step.Name,
-						Candidate: candidate,
-						Success:   true,
-						Metadata:  &meta,
-					})
-				} else {
-					req := api.DispatchStepRequest{
-						MigrationId: manifest.MigrationId,
-						StepName:    step.Name,
-						Candidate:   candidate,
-						Config:      step.Config,
-						CallbackId:  callbackID,
-						EventName:   stepCompletedSignal,
-					}
-					if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
-						failed = true
-						return MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
-					}
-				}
-
-				// 2. Wait for signals. pr-opened is optional; step-completed ends the wait.
-				done := false
-				for !done {
-					sel := workflow.NewSelector(ctx)
-
-					sel.AddReceive(prOpenedCh, func(c workflow.ReceiveChannel, _ bool) {
-						var event api.StepCompletedEvent
-						c.Receive(ctx, &event)
-						upsertResult(&results, api.StepResult{
-							StepName:  event.StepName,
-							Candidate: candidate,
-							Success:   event.Success,
-							Metadata:  event.Metadata,
-						})
-					})
-
-					sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
-						var event api.StepCompletedEvent
-						c.Receive(ctx, &event)
-						upsertResult(&results, api.StepResult{
-							StepName:  event.StepName,
-							Candidate: candidate,
-							Success:   event.Success,
-							Metadata:  event.Metadata,
-						})
-						done = true
-					})
-
-					sel.Select(ctx)
-				}
-
-				// 3. Check if the step succeeded.
-				last := results[len(results)-1]
-				if last.Success {
-					break // advance to next step
-				}
-
-				// 4. Step failed — remove the failed result and wait for a retry signal or
-				// workflow cancellation. The candidate remains "running" so the operator can
-				// see the failed step and decide whether to retry or cancel.
-				removeResult(&results, step.Name, candidate.Id)
-
-				retryOrCancel := workflow.NewSelector(ctx)
-				var retryReceived bool
-				retryOrCancel.AddReceive(retryCh, func(c workflow.ReceiveChannel, _ bool) {
-					c.Receive(ctx, nil)
-					retryReceived = true
-				})
-				retryOrCancel.AddReceive(ctx.Done(), func(c workflow.ReceiveChannel, _ bool) {
-					// workflow cancelled by operator
-				})
-				retryOrCancel.Select(ctx)
-
-				if !retryReceived {
-					// Cancelled while waiting — reset the candidate via defer.
-					failed = true
-					return MigrationResult{
-						MigrationId: manifest.MigrationId,
-						Status:      statusFailed,
-						Results:     results,
-					}, nil
-				}
-				// retryReceived: loop back and re-dispatch the step
+			ok, err := processStep(ctx, actCtx, manifest, step, candidate, &results)
+			if err != nil {
+				failed = true
+				return MigrationResult{}, err
+			}
+			if !ok {
+				failed = true
+				return MigrationResult{
+					MigrationId: manifest.MigrationId,
+					Status:      statusFailed,
+					Results:     results,
+				}, nil
 			}
 		}
 	}
 
-	updateCandidateStatus(statusCompleted)
+	runUpdateCandidateStatus(actCtx, ctx, manifest, statusCompleted)
 
 	return MigrationResult{
 		MigrationId: manifest.MigrationId,
 		Status:      statusCompleted,
 		Results:     results,
 	}, nil
+}
+
+// processStep runs the retry loop for a single step+candidate pair.
+// Returns (true, nil) on success, (false, nil) if the operator cancels while
+// waiting for a retry, and (false, err) if the DispatchStep activity fails.
+func processStep(
+	ctx, actCtx workflow.Context,
+	manifest api.MigrationManifest,
+	step api.StepDefinition,
+	candidate api.Candidate,
+	results *[]api.StepResult,
+) (bool, error) {
+	callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
+	stepCompletedSignal := migrations.StepEventName(step.Name, candidate.Id)
+
+	prOpenedCh := workflow.GetSignalChannel(ctx, migrations.PROpenedEventName(step.Name, candidate.Id))
+	stepCompletedCh := workflow.GetSignalChannel(ctx, stepCompletedSignal)
+	retryCh := workflow.GetSignalChannel(ctx, migrations.RetryStepEventName(step.Name, candidate.Id))
+
+	for {
+		if isManualReview(step) {
+			upsertResult(results, manualReviewResult(step, candidate))
+		} else {
+			req := api.DispatchStepRequest{
+				MigrationId: manifest.MigrationId,
+				StepName:    step.Name,
+				Candidate:   candidate,
+				Config:      step.Config,
+				CallbackId:  callbackID,
+				EventName:   stepCompletedSignal,
+				WorkerApp:   step.WorkerApp,
+				WorkerUrl:   manifest.WorkerUrl,
+			}
+			if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
+				return false, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
+			}
+		}
+
+		awaitStepCompletion(ctx, prOpenedCh, stepCompletedCh, candidate, results)
+
+		last := (*results)[len(*results)-1]
+		if last.Success {
+			return true, nil
+		}
+
+		removeResult(results, step.Name, candidate.Id)
+
+		if !awaitRetryOrCancel(ctx, retryCh) {
+			return false, nil // operator cancelled while waiting for retry
+		}
+		// retry signal received: loop back and re-dispatch the step
+	}
+}
+
+// awaitStepCompletion blocks until a step-completed signal arrives, recording any
+// pr-opened signals that arrive first (intermediate progress updates from the worker).
+func awaitStepCompletion(
+	ctx workflow.Context,
+	prOpenedCh, stepCompletedCh workflow.ReceiveChannel,
+	candidate api.Candidate,
+	results *[]api.StepResult,
+) {
+	done := false
+	for !done {
+		sel := workflow.NewSelector(ctx)
+
+		sel.AddReceive(prOpenedCh, func(c workflow.ReceiveChannel, _ bool) {
+			var event api.StepCompletedEvent
+			c.Receive(ctx, &event)
+			upsertResult(results, api.StepResult{
+				StepName:  event.StepName,
+				Candidate: candidate,
+				Success:   event.Success,
+				Metadata:  event.Metadata,
+			})
+		})
+
+		sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
+			var event api.StepCompletedEvent
+			c.Receive(ctx, &event)
+			upsertResult(results, api.StepResult{
+				StepName:  event.StepName,
+				Candidate: candidate,
+				Success:   event.Success,
+				Metadata:  event.Metadata,
+			})
+			done = true
+		})
+
+		sel.Select(ctx)
+	}
+}
+
+// awaitRetryOrCancel blocks until either a retry-step signal or workflow cancellation.
+// Returns true if a retry was requested, false if the workflow was cancelled.
+func awaitRetryOrCancel(ctx workflow.Context, retryCh workflow.ReceiveChannel) bool {
+	var retryReceived bool
+	sel := workflow.NewSelector(ctx)
+	sel.AddReceive(retryCh, func(c workflow.ReceiveChannel, _ bool) {
+		c.Receive(ctx, nil)
+		retryReceived = true
+	})
+	sel.AddReceive(ctx.Done(), func(_ workflow.ReceiveChannel, _ bool) {})
+	sel.Select(ctx)
+	return retryReceived
+}
+
+// isManualReview reports whether the step is a human gate rather than a worker dispatch.
+func isManualReview(step api.StepDefinition) bool {
+	return step.Config != nil && (*step.Config)["type"] == "manual-review"
+}
+
+// manualReviewResult builds the StepResult for a manual-review gate step.
+func manualReviewResult(step api.StepDefinition, candidate api.Candidate) api.StepResult {
+	meta := map[string]string{"phase": "awaiting_review"}
+	if step.Config != nil {
+		if instructions, ok := (*step.Config)["instructions"]; ok {
+			meta["instructions"] = instructions
+		}
+	}
+	return api.StepResult{
+		StepName:  step.Name,
+		Candidate: candidate,
+		Success:   true,
+		Metadata:  &meta,
+	}
+}
+
+// runUpdateCandidateStatus persists the final candidate status via the
+// UpdateCandidateStatus activity. Errors are logged but not propagated —
+// a status update failure is not worth failing the workflow over.
+func runUpdateCandidateStatus(actCtx, ctx workflow.Context, manifest api.MigrationManifest, status string) {
+	if len(manifest.Candidates) == 0 {
+		return
+	}
+	input := UpdateCandidateStatusInput{
+		MigrationID: manifest.MigrationId,
+		CandidateID: manifest.Candidates[0].Id,
+		Status:      status,
+	}
+	if err := workflow.ExecuteActivity(actCtx, "UpdateCandidateStatus", input).Get(ctx, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("failed to update candidate status", "error", err, "status", status)
+	}
+}
+
+// runResetCandidate returns the candidate to not_started via the ResetCandidate activity.
+// Called from a deferred function when the workflow fails or is cancelled mid-run.
+func runResetCandidate(actCtx, ctx workflow.Context, manifest api.MigrationManifest) {
+	if len(manifest.Candidates) == 0 {
+		return
+	}
+	input := ResetCandidateInput{
+		MigrationID: manifest.MigrationId,
+		CandidateID: manifest.Candidates[0].Id,
+	}
+	if err := workflow.ExecuteActivity(actCtx, "ResetCandidate", input).Get(ctx, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("failed to reset candidate", "error", err)
+	}
 }
 
 // upsertResult updates an existing entry for the same step+candidate, or appends a new one.

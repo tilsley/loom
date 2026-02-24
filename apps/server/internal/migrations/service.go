@@ -123,6 +123,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		existing.Description = ann.Description
 		existing.RequiredInputs = ann.RequiredInputs
 		existing.Steps = ann.Steps
+		existing.WorkerUrl = ann.WorkerUrl
 		if err := s.store.Save(ctx, *existing); err != nil {
 			return nil, fmt.Errorf("save migration: %w", err)
 		}
@@ -137,6 +138,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		Candidates:     ann.Candidates,
 		Steps:          ann.Steps,
 		CreatedAt:      time.Now().UTC(),
+		WorkerUrl:      ann.WorkerUrl,
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -169,7 +171,7 @@ func (s *Service) SubmitCandidates(ctx context.Context, migrationID string, req 
 		return fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
-		return fmt.Errorf("migration %q not found", migrationID)
+		return MigrationNotFoundError{ID: migrationID}
 	}
 	if err := s.store.SaveCandidates(ctx, migrationID, req.Candidates); err != nil {
 		return err
@@ -215,7 +217,7 @@ func (s *Service) RetryStep(ctx context.Context, migrationID, candidateID, stepN
 		return fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
-		return fmt.Errorf("migration %q not found", migrationID)
+		return MigrationNotFoundError{ID: migrationID}
 	}
 
 	var found bool
@@ -229,7 +231,7 @@ func (s *Service) RetryStep(ctx context.Context, migrationID, candidateID, stepN
 		}
 	}
 	if !found {
-		return fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
+		return CandidateNotFoundError{MigrationID: migrationID, CandidateID: candidateID}
 	}
 
 	workflowID := WorkflowID(migrationID, candidateID)
@@ -248,7 +250,7 @@ func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) e
 		return fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
-		return fmt.Errorf("migration %q not found", migrationID)
+		return MigrationNotFoundError{ID: migrationID}
 	}
 
 	var found bool
@@ -262,7 +264,7 @@ func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) e
 		}
 	}
 	if !found {
-		return fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
+		return CandidateNotFoundError{MigrationID: migrationID, CandidateID: candidateID}
 	}
 
 	workflowID := WorkflowID(migrationID, candidateID)
@@ -298,7 +300,7 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 		return nil, fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
-		return nil, fmt.Errorf("migration %q not found", migrationID)
+		return nil, MigrationNotFoundError{ID: migrationID}
 	}
 
 	req := api.DryRunRequest{
@@ -306,7 +308,7 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 		Candidate:   candidate,
 		Steps:       m.Steps,
 	}
-	result, err := s.dryRunner.DryRun(ctx, req)
+	result, err := s.dryRunner.DryRun(ctx, m.WorkerUrl, req)
 	status := "ok"
 	if err != nil {
 		status = "error"
@@ -333,7 +335,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		return "", fmt.Errorf("get migration %q: %w", migrationID, err)
 	}
 	if m == nil {
-		return "", fmt.Errorf("migration %q not found", migrationID)
+		return "", MigrationNotFoundError{ID: migrationID}
 	}
 
 	// Find the candidate in the migration's candidate list.
@@ -347,7 +349,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		}
 	}
 	if !found {
-		return "", fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
+		return "", CandidateNotFoundError{MigrationID: migrationID, CandidateID: candidateID}
 	}
 
 	workflowID := WorkflowID(migrationID, candidateID)
@@ -375,6 +377,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		MigrationId: migrationID,
 		Candidates:  []api.Candidate{candidate},
 		Steps:       m.Steps,
+		WorkerUrl:   m.WorkerUrl,
 	}
 
 	if _, err := s.engine.StartWorkflow(ctx, "MigrationOrchestrator", workflowID, manifest); err != nil {

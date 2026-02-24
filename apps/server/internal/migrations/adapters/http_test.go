@@ -69,7 +69,7 @@ type stubDryRunner struct {
 	err    error
 }
 
-func (d *stubDryRunner) DryRun(_ context.Context, _ api.DryRunRequest) (*api.DryRunResult, error) {
+func (d *stubDryRunner) DryRun(_ context.Context, _ string, _ api.DryRunRequest) (*api.DryRunResult, error) {
 	return d.result, d.err
 }
 
@@ -561,20 +561,18 @@ func TestEvent_BadJSON_Returns400(t *testing.T) {
 
 // ─── POST /registry/announce ─────────────────────────────────────────────────
 
-func TestAnnounce_CloudEventEnvelope(t *testing.T) {
+func TestAnnounce_DirectJSON(t *testing.T) {
 	ts := newTestServer(t)
 
-	// Dapr wraps the payload in a CloudEvent envelope.
-	envelope := map[string]any{
-		"data": api.MigrationAnnouncement{
-			Id:          "migrate-chart",
-			Name:        "Migrate chart",
-			Description: "Upgrades Helm charts",
-			Steps:       []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
-		},
+	ann := api.MigrationAnnouncement{
+		Id:          "migrate-chart",
+		Name:        "Migrate chart",
+		Description: "Upgrades Helm charts",
+		Steps:       []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		WorkerUrl:   "http://app-chart-migrator:3001",
 	}
 
-	w := ts.do(http.MethodPost, "/registry/announce", envelope)
+	w := ts.do(http.MethodPost, "/registry/announce", ann)
 
 	require.Equal(t, http.StatusOK, w.Code)
 	// Migration should be persisted in the store.
@@ -582,20 +580,4 @@ func TestAnnounce_CloudEventEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	assert.Equal(t, "Migrate chart", m.Name)
-}
-
-// ─── GET /dapr/subscribe ──────────────────────────────────────────────────────
-
-func TestDaprSubscribe_ReturnsSubscriptions(t *testing.T) {
-	ts := newTestServer(t)
-
-	w := ts.do(http.MethodGet, "/dapr/subscribe", nil)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var subs []map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &subs))
-	require.Len(t, subs, 1)
-	assert.Equal(t, "pubsub", subs[0]["pubsubname"])
-	assert.Equal(t, "migration-registry", subs[0]["topic"])
-	assert.Equal(t, "/registry/announce", subs[0]["route"])
 }

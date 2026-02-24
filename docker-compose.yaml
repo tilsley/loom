@@ -7,19 +7,12 @@ services:
       - "8080:8080"
     environment:
       - TEMPORAL_HOSTPORT=temporal:7233
+      - REDIS_ADDR=redis:6379
     depends_on:
       temporal:
         condition: service_started
-      placement:
+      redis:
         condition: service_started
-    networks:
-      - loom
-
-  placement:
-    image: "daprio/dapr:latest"
-    command: ["./placement", "--port", "50006"]
-    ports:
-      - "50006:50006"
     networks:
       - loom
 

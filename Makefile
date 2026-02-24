@@ -19,22 +19,11 @@ dev-otel:
 setup:
 	@command -v go >/dev/null 2>&1 || { echo "go not found — install from https://go.dev/dl/ and re-run make setup"; exit 1; }
 	@echo "✓ go $(shell go version | awk '{print $$3}')"
-	@command -v brew >/dev/null 2>&1 || { echo "homebrew not found — install from https://brew.sh and re-run make setup"; exit 1; }
-	@if ! command -v dapr >/dev/null 2>&1; then \
-		echo "installing dapr CLI..."; \
-		brew install dapr/tap/dapr-cli; \
-	fi
-	@echo "✓ dapr CLI installed"
 	@if ! command -v temporal >/dev/null 2>&1; then \
 		echo "installing temporal CLI..."; \
 		brew install temporal; \
 	fi
 	@echo "✓ temporal CLI installed"
-	@if [ ! -f "$(HOME)/.dapr/bin/daprd" ]; then \
-		echo "initializing dapr runtime (requires Docker)..."; \
-		dapr init; \
-	fi
-	@echo "✓ dapr runtime initialized ($(shell dapr version 2>/dev/null | grep 'Runtime' | awk '{print $$3}'))"
 	@go mod tidy
 	@echo "✓ go dependencies resolved"
 	@cd $(CONSOLE_DIR) && bun install --silent
@@ -65,7 +54,7 @@ build: generate-go
 	cd $(SERVER_DIR) && go build -o bin/loom-server .
 
 run:
-	cd $(SERVER_DIR) && dapr run --app-id loom --app-port 8080 --dapr-http-port 3500 --resources-path ./dapr/components -- go run .
+	cd $(SERVER_DIR) && go run .
 
 demo:
 	@command -v jq >/dev/null 2>&1 || { echo "jq not found — brew install jq"; exit 1; }
@@ -78,12 +67,12 @@ mock-github:
 	go run ./apps/mock-github
 
 migrator:
-	cd apps/migrators/app-chart-migrator && dapr run --app-id app-chart-migrator --app-port 3001 --dapr-http-port 3501 --resources-path ./dapr/components -- go run .
+	cd apps/migrators/app-chart-migrator && go run .
 
 reset:
-	@echo "Flushing Redis (state store + pub/sub)..."
-	@docker exec dapr_redis redis-cli FLUSHDB
-	@echo "✓ Redis cleared — migrations, pending callbacks, and pub/sub messages removed"
+	@echo "Flushing Redis..."
+	@docker exec loom-redis-1 redis-cli FLUSHDB 2>/dev/null || docker exec loom_redis_1 redis-cli FLUSHDB 2>/dev/null || redis-cli FLUSHDB
+	@echo "✓ Redis cleared — migrations and pending callbacks removed"
 	@echo "Deleting Temporal SQLite database..."
 	@rm -f .temporal.db .temporal.db-shm .temporal.db-wal
 	@echo "✓ Temporal state cleared — restart 'make temporal' to get a fresh server"

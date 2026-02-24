@@ -5,6 +5,27 @@ import (
 	"strings"
 )
 
+// MigrationNotFoundError is returned when the requested migration does not exist in the store.
+type MigrationNotFoundError struct {
+	ID string
+}
+
+// Error implements the error interface.
+func (e MigrationNotFoundError) Error() string {
+	return fmt.Sprintf("migration %q not found", e.ID)
+}
+
+// CandidateNotFoundError is returned when the requested candidate does not exist in the migration.
+type CandidateNotFoundError struct {
+	MigrationID string
+	CandidateID string
+}
+
+// Error implements the error interface.
+func (e CandidateNotFoundError) Error() string {
+	return fmt.Sprintf("candidate %q not found in migration %q", e.CandidateID, e.MigrationID)
+}
+
 // CandidateAlreadyRunError is returned when a candidate already has a running or completed run.
 type CandidateAlreadyRunError struct {
 	ID     string
