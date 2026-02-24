@@ -133,38 +133,52 @@ func TestMigrationOrchestrator_MultiCandidate_Success(t *testing.T) {
 	require.Contains(t, ids, "payments-svc")
 }
 
-// ─── Failure + saga compensation ─────────────────────────────────────────────
+// ─── Failure + retry ─────────────────────────────────────────────────────────
 
-func TestMigrationOrchestrator_StepFailure_SetsFailedStatus(t *testing.T) {
+func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 	ts := &testsuite.WorkflowTestSuite{}
 	env := ts.NewTestWorkflowEnvironment()
 
 	acts := newActivities()
 	env.RegisterActivity(acts)
 
-	// Dummy migrator that signals failure.
+	// First dispatch signals failure; a retry signal is then sent; second dispatch succeeds.
+	retrySent := false
 	env.OnActivity(acts.DispatchStep, mock.Anything, mock.Anything).
 		Return(nil).
 		Run(func(args mock.Arguments) {
 			req := args.Get(1).(api.DispatchStepRequest)
 			env.RegisterDelayedCallback(func() {
-				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
-					StepName:    req.StepName,
-					CandidateId: req.Candidate.Id,
-					Success:     false,
-				})
+				if !retrySent {
+					env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
+						StepName:    req.StepName,
+						CandidateId: req.Candidate.Id,
+						Success:     false,
+					})
+					// After the workflow receives the failure and starts waiting, send retry.
+					env.RegisterDelayedCallback(func() {
+						retrySent = true
+						env.SignalWorkflow(
+							migrations.RetryStepEventName(req.StepName, req.Candidate.Id),
+							nil,
+						)
+					}, time.Millisecond)
+				} else {
+					env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
+						StepName:    req.StepName,
+						CandidateId: req.Candidate.Id,
+						Success:     true,
+					})
+				}
 			}, time.Millisecond)
 		})
 
-	env.OnActivity(acts.CompensateStep, mock.Anything, mock.Anything).Return(nil)
-	env.OnActivity(acts.ResetCandidate, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
 
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
 		Candidates:  []api.Candidate{{Id: "billing-api"}},
-		Steps: []api.StepDefinition{
-			{Name: "update-chart", WorkerApp: "app-chart-migrator"},
-		},
+		Steps:       []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
 	}
 
 	env.ExecuteWorkflow(execution.MigrationOrchestrator, manifest)
@@ -174,60 +188,9 @@ func TestMigrationOrchestrator_StepFailure_SetsFailedStatus(t *testing.T) {
 
 	var result execution.MigrationResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, "failed", result.Status)
+	require.Equal(t, "completed", result.Status)
 	require.Len(t, result.Results, 1)
-	require.False(t, result.Results[0].Success)
-}
-
-func TestMigrationOrchestrator_StepFailure_CompensatesPreviousSteps(t *testing.T) {
-	ts := &testsuite.WorkflowTestSuite{}
-	env := ts.NewTestWorkflowEnvironment()
-
-	acts := newActivities()
-	env.RegisterActivity(acts)
-
-	callCount := 0
-	env.OnActivity(acts.DispatchStep, mock.Anything, mock.Anything).
-		Return(nil).
-		Run(func(args mock.Arguments) {
-			req := args.Get(1).(api.DispatchStepRequest)
-			callCount++
-			thisCall := callCount
-			env.RegisterDelayedCallback(func() {
-				// First step succeeds, second step fails.
-				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
-					StepName:    req.StepName,
-					CandidateId: req.Candidate.Id,
-					Success:     thisCall == 1,
-				})
-			}, time.Millisecond)
-		})
-
-	compensated := 0
-	env.OnActivity(acts.CompensateStep, mock.Anything, mock.Anything).
-		Return(nil).
-		Run(func(_ mock.Arguments) { compensated++ })
-	env.OnActivity(acts.ResetCandidate, mock.Anything, mock.Anything).Return(nil)
-
-	manifest := api.MigrationManifest{
-		MigrationId: "mig-abc",
-		Candidates:  []api.Candidate{{Id: "billing-api"}},
-		Steps: []api.StepDefinition{
-			{Name: "step-one", WorkerApp: "app-chart-migrator"},
-			{Name: "step-two", WorkerApp: "app-chart-migrator"},
-		},
-	}
-
-	env.ExecuteWorkflow(execution.MigrationOrchestrator, manifest)
-
-	require.True(t, env.IsWorkflowCompleted())
-
-	var result execution.MigrationResult
-	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, "failed", result.Status)
-	// Both steps are compensated in reverse order: step-two then step-one.
-	// The saga always compensates the full result set, including the failing step.
-	require.Equal(t, 2, compensated, "both steps should be compensated in reverse")
+	require.True(t, result.Results[0].Success)
 }
 
 // ─── Manual review step ───────────────────────────────────────────────────────

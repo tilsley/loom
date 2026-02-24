@@ -77,23 +77,20 @@ func (d *stubDryRunner) DryRun(ctx context.Context, req api.DryRunRequest) (*api
 // ─── memStore ─────────────────────────────────────────────────────────────────
 
 type memStore struct {
-	data              map[string]api.Migration
-	cancelledAttempts map[string][]api.CancelledAttempt
+	data map[string]api.Migration
 
 	// per-method error stubs
-	errSave                   error
-	errGet                    error
-	errList                   error
-	errAppendCancelledAttempt error
-	errSetCandidateStatus     error
-	errSaveCandidates         error
-	errGetCandidates          error
+	errSave               error
+	errGet                error
+	errList               error
+	errSetCandidateStatus error
+	errSaveCandidates     error
+	errGetCandidates      error
 }
 
 func newMemStore() *memStore {
 	return &memStore{
-		data:              make(map[string]api.Migration),
-		cancelledAttempts: make(map[string][]api.CancelledAttempt),
+		data: make(map[string]api.Migration),
 	}
 }
 
@@ -125,14 +122,6 @@ func (s *memStore) List(_ context.Context) ([]api.Migration, error) {
 		out = append(out, m)
 	}
 	return out, nil
-}
-
-func (s *memStore) AppendCancelledAttempt(_ context.Context, migrationID string, attempt api.CancelledAttempt) error {
-	if s.errAppendCancelledAttempt != nil {
-		return s.errAppendCancelledAttempt
-	}
-	s.cancelledAttempts[migrationID] = append(s.cancelledAttempts[migrationID], attempt)
-	return nil
 }
 
 func (s *memStore) SetCandidateStatus(_ context.Context, migrationID, candidateID string, status api.CandidateStatus) error {
@@ -492,6 +481,80 @@ func TestService_GetCandidateSteps(t *testing.T) {
 	})
 }
 
+func TestService_RetryStep(t *testing.T) {
+	ctx := context.Background()
+	running := api.CandidateStatusRunning
+
+	setup := func(store *memStore) {
+		_ = store.Save(ctx, api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+		})
+	}
+
+	t.Run("raises retry signal for running candidate", func(t *testing.T) {
+		store := newMemStore()
+		setup(store)
+		var raisedEvent string
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, _, event string, _ any) error {
+				raisedEvent = event
+				return nil
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.RetryStep(ctx, "m1", "repo-a", "step-1")
+		require.NoError(t, err)
+		assert.Equal(t, migrations.RetryStepEventName("step-1", "repo-a"), raisedEvent)
+	})
+
+	t.Run("migration not found returns error", func(t *testing.T) {
+		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
+
+		err := svc.RetryStep(ctx, "unknown", "repo-a", "step-1")
+		require.ErrorContains(t, err, "not found")
+	})
+
+	t.Run("candidate not found returns error", func(t *testing.T) {
+		store := newMemStore()
+		_ = store.Save(ctx, api.Migration{Id: "m1", Candidates: []api.Candidate{{Id: "other"}}})
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		err := svc.RetryStep(ctx, "m1", "repo-a", "step-1")
+		require.ErrorContains(t, err, "not found")
+	})
+
+	t.Run("candidate not running returns CandidateNotRunningError", func(t *testing.T) {
+		store := newMemStore()
+		notStarted := api.CandidateStatusNotStarted
+		_ = store.Save(ctx, api.Migration{
+			Id:         "m1",
+			Candidates: []api.Candidate{{Id: "repo-a", Status: &notStarted}},
+		})
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		err := svc.RetryStep(ctx, "m1", "repo-a", "step-1")
+		var notRunning migrations.CandidateNotRunningError
+		require.ErrorAs(t, err, &notRunning)
+		assert.Equal(t, "repo-a", notRunning.ID)
+	})
+
+	t.Run("propagates engine error", func(t *testing.T) {
+		store := newMemStore()
+		setup(store)
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
+				return errors.New("signal failed")
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.RetryStep(ctx, "m1", "repo-a", "step-1")
+		require.ErrorContains(t, err, "signal failed")
+	})
+}
+
 func TestService_Cancel(t *testing.T) {
 	ctx := context.Background()
 	running := api.CandidateStatusRunning
@@ -503,7 +566,7 @@ func TestService_Cancel(t *testing.T) {
 		})
 	}
 
-	t.Run("cancels workflow, writes audit entry, resets candidate", func(t *testing.T) {
+	t.Run("cancels workflow and resets candidate to not_started", func(t *testing.T) {
 		store := newMemStore()
 		setup(store)
 		var cancelledID string
@@ -518,11 +581,12 @@ func TestService_Cancel(t *testing.T) {
 		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.NoError(t, err)
 		assert.Equal(t, "m1__repo-a", cancelledID)
-		require.Len(t, store.cancelledAttempts["m1"], 1)
-		assert.Equal(t, "repo-a", store.cancelledAttempts["m1"][0].CandidateId)
+		m, _ := store.Get(ctx, "m1")
+		require.NotNil(t, m.Candidates[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, *m.Candidates[0].Status)
 	})
 
-	t.Run("workflow not found is tolerated; audit and reset still proceed", func(t *testing.T) {
+	t.Run("workflow not found is tolerated; reset still proceeds", func(t *testing.T) {
 		store := newMemStore()
 		setup(store)
 		engine := &stubEngine{
@@ -534,7 +598,9 @@ func TestService_Cancel(t *testing.T) {
 
 		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.NoError(t, err)
-		assert.Len(t, store.cancelledAttempts["m1"], 1, "audit entry must still be written")
+		m, _ := store.Get(ctx, "m1")
+		require.NotNil(t, m.Candidates[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, *m.Candidates[0].Status)
 	})
 
 	t.Run("other engine error is returned immediately", func(t *testing.T) {
@@ -549,16 +615,6 @@ func TestService_Cancel(t *testing.T) {
 
 		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.ErrorContains(t, err, "temporal unavailable")
-	})
-
-	t.Run("propagates AppendCancelledAttempt error", func(t *testing.T) {
-		store := newMemStore()
-		setup(store)
-		store.errAppendCancelledAttempt = errors.New("append failed")
-		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
-
-		err := svc.Cancel(ctx, "m1", "repo-a")
-		require.ErrorContains(t, err, "append failed")
 	})
 
 	t.Run("propagates SetCandidateStatus error", func(t *testing.T) {

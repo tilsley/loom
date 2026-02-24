@@ -6,7 +6,6 @@ import { useMigrationPolling } from "@/lib/hooks";
 import { ROUTES } from "@/lib/routes";
 import { DashboardStats } from "@/components/dashboard-stats";
 import { ActiveRuns } from "@/components/active-runs";
-import { RecentFailures } from "@/components/recent-failures";
 import { Input, Skeleton } from "@/components/ui";
 import type { Migration } from "@/lib/api";
 
@@ -58,10 +57,7 @@ export default function Dashboard() {
         <>
           <DashboardStats migrations={migrations} />
 
-          <div className="grid grid-cols-2 gap-6">
-            <ActiveRuns migrations={migrations} />
-            <RecentFailures migrations={migrations} />
-          </div>
+          <ActiveRuns migrations={migrations} />
         </>
       )}
 

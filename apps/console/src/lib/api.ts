@@ -81,6 +81,22 @@ export async function cancelRun(migrationId: string, candidateId: string): Promi
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function retryStep(
+  migrationId: string,
+  candidateId: string,
+  stepName: string,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE}/migrations/${migrationId}/candidates/${candidateId}/retry-step`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stepName }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function dryRun(migrationId: string, candidate: Candidate): Promise<DryRunResult> {
   const res = await fetch(`${BASE}/migrations/${encodeURIComponent(migrationId)}/dry-run`, {
     method: "POST",

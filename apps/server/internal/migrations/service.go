@@ -207,8 +207,41 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 	return candidates, nil
 }
 
-// Cancel stops a running workflow, records a CancelledAttempt audit entry, and resets
-// the candidate to not_started so it can be previewed and started again.
+// RetryStep raises a retry-step signal into a running workflow, re-dispatching the
+// named step to the worker. Returns CandidateNotRunningError if the candidate is not running.
+func (s *Service) RetryStep(ctx context.Context, migrationID, candidateID, stepName string) error {
+	m, err := s.store.Get(ctx, migrationID)
+	if err != nil {
+		return fmt.Errorf("get migration %q: %w", migrationID, err)
+	}
+	if m == nil {
+		return fmt.Errorf("migration %q not found", migrationID)
+	}
+
+	var found bool
+	for _, c := range m.Candidates {
+		if c.Id == candidateID {
+			found = true
+			if c.Status == nil || *c.Status != api.CandidateStatusRunning {
+				return CandidateNotRunningError{ID: candidateID}
+			}
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
+	}
+
+	workflowID := WorkflowID(migrationID, candidateID)
+	eventName := RetryStepEventName(stepName, candidateID)
+	if err := s.engine.RaiseEvent(ctx, workflowID, eventName, nil); err != nil {
+		return fmt.Errorf("raise retry event: %w", err)
+	}
+	return nil
+}
+
+// Cancel stops a running workflow and resets the candidate to not_started so it can
+// be previewed and started again.
 func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) error {
 	m, err := s.store.Get(ctx, migrationID)
 	if err != nil {
@@ -241,13 +274,6 @@ func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) e
 		}
 	}
 
-	attempt := api.CancelledAttempt{
-		CandidateId: candidateID,
-		CancelledAt: time.Now().UTC(),
-	}
-	if err := s.store.AppendCancelledAttempt(ctx, migrationID, attempt); err != nil {
-		return fmt.Errorf("record cancelled attempt: %w", err)
-	}
 	if err := s.store.SetCandidateStatus(ctx, migrationID, candidateID, api.CandidateStatusNotStarted); err != nil {
 		return fmt.Errorf("reset candidate run: %w", err)
 	}

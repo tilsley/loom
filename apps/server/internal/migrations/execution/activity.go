@@ -52,17 +52,6 @@ func (a *Activities) DispatchStep(ctx context.Context, req api.DispatchStepReque
 	return nil
 }
 
-// CompensateStep is a placeholder for saga rollback. Real implementation
-// (close PR, delete branch) will be added later.
-func (a *Activities) CompensateStep(ctx context.Context, step api.StepResult) error {
-	a.log.Info("compensating step",
-		"step", step.StepName,
-		"candidate", step.Candidate,
-		"metadata", step.Metadata,
-	)
-	return nil
-}
-
 // ResetCandidateInput is the input for the ResetCandidate activity.
 type ResetCandidateInput struct {
 	MigrationID string `json:"migrationId"`

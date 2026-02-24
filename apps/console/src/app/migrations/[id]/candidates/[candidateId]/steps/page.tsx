@@ -7,6 +7,7 @@ import {
   getCandidateSteps,
   getMigration,
   completeStep,
+  retryStep,
   type CandidateStepsResponse,
   type Migration,
 } from "@/lib/api";
@@ -183,6 +184,12 @@ export default function CandidateStepsPage() {
                   onComplete={(stepName, candidateId, success) => {
                     void (async () => {
                       await completeStep(workflowId, stepName, candidateId, success);
+                      void poll();
+                    })();
+                  }}
+                  onRetry={(stepName, candidateId) => {
+                    void (async () => {
+                      await retryStep(id, candidateId, stepName);
                       void poll();
                     })();
                   }}

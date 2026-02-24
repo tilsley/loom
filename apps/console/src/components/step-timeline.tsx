@@ -24,10 +24,12 @@ export function StepTimeline({
   results,
   stepDescriptions,
   onComplete,
+  onRetry,
 }: {
   results: StepResult[];
   stepDescriptions?: Map<string, string>;
   onComplete?: (stepName: string, candidateId: string, success: boolean) => void;
+  onRetry?: (stepName: string, candidateId: string) => void;
 }) {
   // Hooks must be declared before any early return
   const lastActiveIndex = results.reduce((acc, r, idx) => {
@@ -153,6 +155,13 @@ export function StepTimeline({
               {phase === "open" && onComplete ? (
                 <div className="mt-3">
                   <MergeAction onMerge={() => onComplete(r.stepName, r.candidate.id, true)} />
+                </div>
+              ) : null}
+
+              {/* Failed step: retry action */}
+              {phase === "failed" && onRetry ? (
+                <div className="mt-3">
+                  <RetryAction onRetry={() => onRetry(r.stepName, r.candidate.id)} />
                 </div>
               ) : null}
 
@@ -298,6 +307,24 @@ function MergeAction({ onMerge }: { onMerge: () => void }) {
         {pending ? "Sending..." : "Mark as merged"}
       </Button>
       <span className="text-xs text-zinc-600">PR merged but no webhook? Use this to advance the run.</span>
+    </div>
+  );
+}
+
+function RetryAction({ onRetry }: { onRetry: () => void }) {
+  const [pending, setPending] = useState(false);
+
+  return (
+    <div className="flex items-center gap-3">
+      <Button
+        size="sm"
+        variant="default"
+        disabled={pending}
+        onClick={() => { setPending(true); onRetry(); }}
+      >
+        {pending ? "Retrying..." : "Retry"}
+      </Button>
+      <span className="text-xs text-zinc-600">Re-dispatch this step to the worker.</span>
     </div>
   );
 }

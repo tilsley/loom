@@ -91,15 +91,14 @@ func MigrationOrchestrator(
 		}
 	}
 
-	// Saga: on failure, compensate completed steps in reverse.
+	// On failure (context cancelled while waiting for retry), reset the candidate.
 	var failed bool
 	defer func() {
 		if !failed {
 			return
 		}
 		resetCandidate()
-		// Use a disconnected context so compensation runs even if the workflow is cancelled.
-		compensateAll(ctx, actOpts, results)
+		// No saga compensation — PRs cannot be automatically undone.
 	}()
 
 	for _, step := range manifest.Steps {
@@ -108,76 +107,102 @@ func MigrationOrchestrator(
 			prOpenedSignal := migrations.PROpenedEventName(step.Name, candidate.Id)
 			callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
-			// 1. Manual-review steps skip worker dispatch; all others go to the worker.
-			if step.Config != nil && (*step.Config)["type"] == "manual-review" {
-				meta := map[string]string{"phase": "awaiting_review"}
-				if instructions, ok := (*step.Config)["instructions"]; ok {
-					meta["instructions"] = instructions
-				}
-				upsertResult(&results, api.StepResult{
-					StepName:  step.Name,
-					Candidate: candidate,
-					Success:   true,
-					Metadata:  &meta,
-				})
-			} else {
-				req := api.DispatchStepRequest{
-					MigrationId: manifest.MigrationId,
-					StepName:    step.Name,
-					Candidate:   candidate,
-					Config:      step.Config,
-					CallbackId:  callbackID,
-					EventName:   stepCompletedSignal,
-				}
-				if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
-					failed = true
-					return MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
-				}
-			}
-
-			// 2. Wait for signals. pr-opened is optional; step-completed ends the wait.
+			// Signal channels are created once per step+candidate and reused across retries.
 			prOpenedCh := workflow.GetSignalChannel(ctx, prOpenedSignal)
 			stepCompletedCh := workflow.GetSignalChannel(ctx, stepCompletedSignal)
+			retryCh := workflow.GetSignalChannel(ctx, migrations.RetryStepEventName(step.Name, candidate.Id))
 
-			done := false
-			for !done {
-				sel := workflow.NewSelector(ctx)
-
-				sel.AddReceive(prOpenedCh, func(c workflow.ReceiveChannel, _ bool) {
-					var event api.StepCompletedEvent
-					c.Receive(ctx, &event)
+			for { // retry loop: re-dispatches the step until it succeeds or is cancelled
+				// 1. Manual-review steps skip worker dispatch; all others go to the worker.
+				if step.Config != nil && (*step.Config)["type"] == "manual-review" {
+					meta := map[string]string{"phase": "awaiting_review"}
+					if instructions, ok := (*step.Config)["instructions"]; ok {
+						meta["instructions"] = instructions
+					}
 					upsertResult(&results, api.StepResult{
-						StepName:  event.StepName,
+						StepName:  step.Name,
 						Candidate: candidate,
-						Success:   event.Success,
-						Metadata:  event.Metadata,
+						Success:   true,
+						Metadata:  &meta,
 					})
-				})
+				} else {
+					req := api.DispatchStepRequest{
+						MigrationId: manifest.MigrationId,
+						StepName:    step.Name,
+						Candidate:   candidate,
+						Config:      step.Config,
+						CallbackId:  callbackID,
+						EventName:   stepCompletedSignal,
+					}
+					if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
+						failed = true
+						return MigrationResult{}, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
+					}
+				}
 
-				sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
-					var event api.StepCompletedEvent
-					c.Receive(ctx, &event)
-					upsertResult(&results, api.StepResult{
-						StepName:  event.StepName,
-						Candidate: candidate,
-						Success:   event.Success,
-						Metadata:  event.Metadata,
+				// 2. Wait for signals. pr-opened is optional; step-completed ends the wait.
+				done := false
+				for !done {
+					sel := workflow.NewSelector(ctx)
+
+					sel.AddReceive(prOpenedCh, func(c workflow.ReceiveChannel, _ bool) {
+						var event api.StepCompletedEvent
+						c.Receive(ctx, &event)
+						upsertResult(&results, api.StepResult{
+							StepName:  event.StepName,
+							Candidate: candidate,
+							Success:   event.Success,
+							Metadata:  event.Metadata,
+						})
 					})
-					done = true
+
+					sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
+						var event api.StepCompletedEvent
+						c.Receive(ctx, &event)
+						upsertResult(&results, api.StepResult{
+							StepName:  event.StepName,
+							Candidate: candidate,
+							Success:   event.Success,
+							Metadata:  event.Metadata,
+						})
+						done = true
+					})
+
+					sel.Select(ctx)
+				}
+
+				// 3. Check if the step succeeded.
+				last := results[len(results)-1]
+				if last.Success {
+					break // advance to next step
+				}
+
+				// 4. Step failed — remove the failed result and wait for a retry signal or
+				// workflow cancellation. The candidate remains "running" so the operator can
+				// see the failed step and decide whether to retry or cancel.
+				removeResult(&results, step.Name, candidate.Id)
+
+				retryOrCancel := workflow.NewSelector(ctx)
+				var retryReceived bool
+				retryOrCancel.AddReceive(retryCh, func(c workflow.ReceiveChannel, _ bool) {
+					c.Receive(ctx, nil)
+					retryReceived = true
 				})
+				retryOrCancel.AddReceive(ctx.Done(), func(c workflow.ReceiveChannel, _ bool) {
+					// workflow cancelled by operator
+				})
+				retryOrCancel.Select(ctx)
 
-				sel.Select(ctx)
-			}
-
-			// 3. Check if the last completed step failed.
-			last := results[len(results)-1]
-			if !last.Success {
-				failed = true
-				return MigrationResult{
-					MigrationId: manifest.MigrationId,
-					Status:      statusFailed,
-					Results:     results,
-				}, nil
+				if !retryReceived {
+					// Cancelled while waiting — reset the candidate via defer.
+					failed = true
+					return MigrationResult{
+						MigrationId: manifest.MigrationId,
+						Status:      statusFailed,
+						Results:     results,
+					}, nil
+				}
+				// retryReceived: loop back and re-dispatch the step
 			}
 		}
 	}
@@ -191,19 +216,6 @@ func MigrationOrchestrator(
 	}, nil
 }
 
-// compensateAll runs CompensateStep for each completed result in reverse order.
-// A disconnected context is used so compensation runs even if the workflow is cancelled.
-func compensateAll(ctx workflow.Context, actOpts workflow.ActivityOptions, results []api.StepResult) {
-	compCtx, _ := workflow.NewDisconnectedContext(ctx)
-	compCtx = workflow.WithActivityOptions(compCtx, actOpts)
-	for i := len(results) - 1; i >= 0; i-- {
-		fut := workflow.ExecuteActivity(compCtx, "CompensateStep", results[i])
-		if err := fut.Get(compCtx, nil); err != nil {
-			workflow.GetLogger(compCtx).Warn("compensation step failed", "error", err, "step", results[i].StepName)
-		}
-	}
-}
-
 // upsertResult updates an existing entry for the same step+candidate, or appends a new one.
 func upsertResult(results *[]api.StepResult, r api.StepResult) {
 	for i, existing := range *results {
@@ -213,4 +225,14 @@ func upsertResult(results *[]api.StepResult, r api.StepResult) {
 		}
 	}
 	*results = append(*results, r)
+}
+
+// removeResult removes the entry for the given step+candidate from results (inverse of upsertResult).
+func removeResult(results *[]api.StepResult, stepName, candidateId string) {
+	for i, r := range *results {
+		if r.StepName == stepName && r.Candidate.Id == candidateId {
+			*results = append((*results)[:i], (*results)[i+1:]...)
+			return
+		}
+	}
 }

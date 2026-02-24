@@ -107,10 +107,6 @@ func (m *memStore) List(_ context.Context) ([]api.Migration, error) {
 	return out, nil
 }
 
-func (m *memStore) AppendCancelledAttempt(_ context.Context, _ string, _ api.CancelledAttempt) error {
-	return nil
-}
-
 func (m *memStore) SetCandidateStatus(ctx context.Context, migID, candidateID string, status api.CandidateStatus) error {
 	if m.setStatusFn != nil {
 		return m.setStatusFn(ctx, migID, candidateID, status)
@@ -314,6 +310,45 @@ func TestStartRun_InvalidJSON_Returns400(t *testing.T) {
 	w := httptest.NewRecorder()
 	ts.router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// ─── POST /migrations/:id/candidates/:candidateId/retry-step ─────────────────
+
+func TestRetryStep_Success(t *testing.T) {
+	ts := newTestServer(t)
+	running := api.CandidateStatusRunning
+	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
+		Id:         "mig-abc",
+		Candidates: []api.Candidate{{Id: "billing-api", Status: &running}},
+	}))
+
+	w := ts.do(http.MethodPost, "/migrations/mig-abc/candidates/billing-api/retry-step",
+		api.RetryStepRequest{StepName: "update-chart"})
+
+	require.Equal(t, http.StatusAccepted, w.Code)
+}
+
+func TestRetryStep_MigrationNotFound_Returns404(t *testing.T) {
+	ts := newTestServer(t)
+
+	w := ts.do(http.MethodPost, "/migrations/unknown/candidates/billing-api/retry-step",
+		api.RetryStepRequest{StepName: "update-chart"})
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestRetryStep_CandidateNotRunning_Returns409(t *testing.T) {
+	ts := newTestServer(t)
+	notStarted := api.CandidateStatusNotStarted
+	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
+		Id:         "mig-abc",
+		Candidates: []api.Candidate{{Id: "billing-api", Status: &notStarted}},
+	}))
+
+	w := ts.do(http.MethodPost, "/migrations/mig-abc/candidates/billing-api/retry-step",
+		api.RetryStepRequest{StepName: "update-chart"})
+
+	require.Equal(t, http.StatusConflict, w.Code)
 }
 
 // ─── POST /migrations/:id/candidates/:candidateId/cancel ──────────────────────
@@ -547,33 +582,6 @@ func TestAnnounce_CloudEventEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	assert.Equal(t, "Migrate chart", m.Name)
-}
-
-func TestAnnounce_UpsertPreservesHistory(t *testing.T) {
-	ts := newTestServer(t)
-	// Seed an existing migration with a cancelled attempt.
-	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
-		Id:   "migrate-chart",
-		Name: "Old name",
-		CancelledAttempts: &[]api.CancelledAttempt{
-			{CandidateId: "billing-api"},
-		},
-	}))
-
-	envelope := map[string]any{
-		"data": api.MigrationAnnouncement{
-			Id:   "migrate-chart",
-			Name: "New name",
-		},
-	}
-
-	w := ts.do(http.MethodPost, "/registry/announce", envelope)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	m, _ := ts.store.Get(context.Background(), "migrate-chart")
-	assert.Equal(t, "New name", m.Name)
-	require.NotNil(t, m.CancelledAttempts)
-	assert.Len(t, *m.CancelledAttempts, 1, "cancelled attempts must be preserved on upsert")
 }
 
 // ─── GET /dapr/subscribe ──────────────────────────────────────────────────────

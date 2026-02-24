@@ -92,27 +92,6 @@ func (s *DaprMigrationStore) List(ctx context.Context) ([]api.Migration, error) 
 	return result, nil
 }
 
-// AppendCancelledAttempt records a cancelled run attempt on the migration.
-func (s *DaprMigrationStore) AppendCancelledAttempt(ctx context.Context, migrationID string, attempt api.CancelledAttempt) error {
-	m, err := s.Get(ctx, migrationID)
-	if err != nil {
-		return err
-	}
-	if m == nil {
-		return fmt.Errorf("migration %q not found", migrationID)
-	}
-	if m.CancelledAttempts == nil {
-		m.CancelledAttempts = &[]api.CancelledAttempt{}
-	}
-	*m.CancelledAttempts = append(*m.CancelledAttempts, attempt)
-
-	data, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("marshal migration: %w", err)
-	}
-	return s.client.SaveState(ctx, storeKey, keyPrefix+migrationID, data, nil)
-}
-
 // SetCandidateStatus updates the status of a specific candidate within a migration.
 func (s *DaprMigrationStore) SetCandidateStatus(
 	ctx context.Context,

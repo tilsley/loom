@@ -99,7 +99,7 @@ func main() {
 
 	bus := adapters.NewDaprBus(daprClient, "pubsub", "migration-steps")
 	store := adapters.NewDaprMigrationStore(daprClient)
-	dryRunner := adapters.NewDaprDryRunAdapter(daprClient, "app-chart-migrator")
+	dryRunner := adapters.NewDaprDryRunAdapter(daprClient)
 
 	// --- Temporal Worker ---
 

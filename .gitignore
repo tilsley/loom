@@ -5,6 +5,7 @@
 apps/server/bin/
 apps/console/.next/
 apps/console/node_modules/
+*.tsbuildinfo
 
 # Generated files (regenerate with: make generate)
 pkg/api/types.gen.go

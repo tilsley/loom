@@ -19,7 +19,6 @@ A migration has:
 - A human **name** and **description** (both required)
 - An ordered list of **steps** defining the work to be done
 - An optional list of **required inputs** — each has a `name` (metadata key merged into the candidate at start time, e.g. `"repoName"`) and a `label` (human-readable display label shown in the UI, e.g. `"Repository"`)
-- An optional list of **cancelled attempts** (audit log)
 
 A migration is not tied to a specific set of candidates — it is a reusable definition. Candidates
 are discovered separately (see Candidate).
@@ -66,22 +65,15 @@ even if absent from the new discovery list.
 ### Candidate Status
 
 Tracks where a candidate sits in the migration lifecycle. There is no `failed` status at the
-candidate level — if a step fails, the candidate is reset to `not_started` and can be
-previewed and executed again.
+candidate level. When a step fails, the workflow stays alive and the candidate remains `running`.
+The failed step is visible in the steps view (rendered in red). The operator can either **retry**
+(re-dispatches the step to the worker) or **cancel** (resets the candidate to `not_started`).
 
 | Status        | Meaning                                                    |
 |---------------|------------------------------------------------------------|
 | `not_started` | Discovered, not yet executed                               |
 | `running`     | The workflow is actively executing                         |
 | `completed`   | The workflow finished successfully                         |
-
-### Cancelled Attempts
-
-When a running candidate is cancelled, a `CancelledAttempt` record is appended to
-the migration. The candidate resets to `not_started`. Cancelled attempts are not surfaced on
-the candidate row — they are accessible via the migration detail (admin view).
-
-A `CancelledAttempt` has: `candidateId`, `cancelledAt`.
 
 ---
 
@@ -93,7 +85,8 @@ A `CancelledAttempt` has: `candidateId`, `cancelledAt`.
 | **Discover**  | Worker  | Scan a source of truth and submit a candidate list to the server  |
 | **Preview**   | Console | Navigate to the preview page; auto-calls dry-run (stateless)      |
 | **Start**     | Console | Start the Temporal workflow for a candidate; sets status to `running` |
-| **Cancel**    | Console | Stop a running workflow; resets candidate to `not_started` and records a `CancelledAttempt` |
+| **Cancel**    | Console | Stop a running workflow; resets candidate to `not_started` |
+| **Retry**     | Console | Re-dispatch a failed step to the worker; candidate stays `running` |
 | **Complete**  | Worker  | Signal a step as done (success or failure) via the event endpoint |
 
 ---
@@ -112,7 +105,6 @@ A `CancelledAttempt` has: `candidateId`, `cancelledAt`.
                                                   Start
                                                       │
                                                   [running] ──► Cancel ──► [not_started]
-                                                      │                   (+ CancelledAttempt)
                                                   Steps execute...
                                                       │
                                                   [completed]
@@ -125,7 +117,6 @@ A `CancelledAttempt` has: `candidateId`, `cancelledAt`.
 ```
 Migration  1 ──── * Step
 Migration  1 ──── * Candidate (via discovery, stored on migration object)
-Migration  1 ──── * CancelledAttempt (audit log)
 Candidate         carries: status (not_started | running | completed)
 ```
 

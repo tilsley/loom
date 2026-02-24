@@ -129,6 +129,35 @@ paths:
         "409":
           description: Candidate is not running
 
+  /migrations/{id}/candidates/{candidateId}/retry-step:
+    post:
+      summary: Re-dispatch a failed step for a running candidate
+      operationId: retryStep
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetryStepRequest"
+      responses:
+        "202":
+          description: Step retried
+        "404":
+          description: Migration or candidate not found
+        "409":
+          description: Candidate is not running
+
   /migrations/{id}/candidates/{candidateId}/steps:
     get:
       summary: Get step execution progress for a running or completed candidate
@@ -235,16 +264,6 @@ components:
     CandidateStatus:
       type: string
       enum: [not_started, running, completed]
-
-    CancelledAttempt:
-      type: object
-      required: [candidateId, cancelledAt]
-      properties:
-        candidateId:
-          type: string
-        cancelledAt:
-          type: string
-          format: date-time
 
     InputDefinition:
       type: object
@@ -361,11 +380,6 @@ components:
         createdAt:
           type: string
           format: date-time
-        cancelledAttempts:
-          type: array
-          items:
-            $ref: "#/components/schemas/CancelledAttempt"
-          description: Audit log of cancelled attempts, in chronological order.
 
     ListMigrationsResponse:
       type: object
@@ -377,6 +391,14 @@ components:
             $ref: "#/components/schemas/Migration"
 
     # --- Request / response types ---
+
+    RetryStepRequest:
+      type: object
+      required: [stepName]
+      properties:
+        stepName:
+          type: string
+          description: Name of the failed step to retry.
 
     StartRequest:
       type: object

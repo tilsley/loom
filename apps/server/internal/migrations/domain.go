@@ -56,6 +56,12 @@ func PROpenedEventName(stepName, candidateId string) string {
 	return fmt.Sprintf("pr-opened:%s:%s", stepName, candidateId)
 }
 
+// RetryStepEventName returns the deterministic signal name the workflow listens on
+// when waiting for an operator to retry a failed step.
+func RetryStepEventName(stepName, candidateId string) string {
+	return fmt.Sprintf("retry-step:%s:%s", stepName, candidateId)
+}
+
 const runIDSep = "__"
 
 // WorkflowID returns the deterministic Temporal workflow instance ID for a migration+candidate pair.
