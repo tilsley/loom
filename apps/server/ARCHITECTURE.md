@@ -2,14 +2,14 @@
 
 ```
 ┌─────────────────────────────────────────────┐
-│  handler/           inbound HTTP             │  UI + worker callbacks
+│  handler/           inbound HTTP             │  UI + migrator callbacks
 ├─────────────────────────────────────────────┤
 │  service.go         orchestration            │  use-case logic + guards
 ├─────────────────────────────────────────────┤
 │  execution/         Temporal workflow        │  step sequencing + signals
 ├─────────────────────────────────────────────┤
 │  store/             Redis                    │  migration + candidate state
-│  migrator/            outbound HTTP            │  step dispatch + dry-run
+│  migrator/          outbound HTTP             │  step dispatch + dry-run
 └─────────────────────────────────────────────┘
 ```
 
