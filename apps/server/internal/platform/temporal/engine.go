@@ -15,10 +15,7 @@ import (
 // Compile-time check: *Engine implements migrations.ExecutionEngine.
 var _ migrations.ExecutionEngine = (*Engine)(nil)
 
-const (
-	taskQueue    = "loom-migrations"
-	statusFailed = "FAILED"
-)
+const taskQueue = "loom-migrations"
 
 // Engine implements migrations.ExecutionEngine using the Temporal SDK client.
 type Engine struct {
@@ -112,18 +109,18 @@ func isNotFound(err error) bool {
 func mapTemporalStatus(s enumspb.WorkflowExecutionStatus) string {
 	switch s {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		return "RUNNING"
+		return migrations.RuntimeStatusRunning
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		return "COMPLETED"
+		return migrations.RuntimeStatusCompleted
 	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		return statusFailed
+		return migrations.RuntimeStatusFailed
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
-		return "UNKNOWN"
+		return migrations.RuntimeStatusUnknown
 	default:
-		return "UNKNOWN"
+		return migrations.RuntimeStatusUnknown
 	}
 }

@@ -86,7 +86,7 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 	// the run output's status field. This correctly handles terminated and
 	// cancelled runs, where ws.Output is nil and the output field would be empty.
 	status := api.CandidateStepsResponseStatusRunning
-	if ws.RuntimeStatus != "RUNNING" {
+	if ws.RuntimeStatus != RuntimeStatusRunning {
 		status = api.CandidateStepsResponseStatusCompleted
 	}
 
@@ -355,7 +355,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 	if candidate.Status != nil &&
 		(*candidate.Status == api.CandidateStatusRunning || *candidate.Status == api.CandidateStatusCompleted) {
 		ws, err := s.engine.GetStatus(ctx, runID)
-		if err == nil && (ws.RuntimeStatus == "RUNNING" || ws.RuntimeStatus == "COMPLETED") {
+		if err == nil && (ws.RuntimeStatus == RuntimeStatusRunning || ws.RuntimeStatus == RuntimeStatusCompleted) {
 			return "", CandidateAlreadyRunError{ID: candidateID, Status: string(*candidate.Status)}
 		}
 		// Run gone, failed, cancelled, or terminated — allow re-execution.

@@ -1,9 +1,6 @@
 package migrations
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // MigrationNotFoundError is returned when the requested migration does not exist in the store.
 type MigrationNotFoundError struct {
@@ -56,39 +53,4 @@ type RunNotFoundError struct {
 // Error implements the error interface.
 func (e RunNotFoundError) Error() string {
 	return fmt.Sprintf("run %q not found", e.InstanceID)
-}
-
-// RunStatus is the port-level representation returned by the ExecutionEngine.
-type RunStatus struct {
-	RuntimeStatus string
-	Output        []byte // Raw JSON of the run result (if finished)
-}
-
-// StepEventName returns the deterministic signal name the run listens on
-// for a given step+candidate combination. Workers receive this in DispatchStepRequest.EventName.
-func StepEventName(stepName, candidateId string) string {
-	return fmt.Sprintf("step-completed:%s:%s", stepName, candidateId)
-}
-
-// RetryStepEventName returns the deterministic signal name the run listens on
-// when waiting for an operator to retry a failed step.
-func RetryStepEventName(stepName, candidateId string) string {
-	return fmt.Sprintf("retry-step:%s:%s", stepName, candidateId)
-}
-
-const runIDSep = "__"
-
-// RunID returns the deterministic run instance ID for a migration+candidate pair.
-// Since each candidate runs at most once per migration, the ID is stable and recoverable.
-func RunID(migrationID, candidateID string) string {
-	return migrationID + runIDSep + candidateID
-}
-
-// ParseRunID splits a run ID back into its migrationID and candidateID components.
-func ParseRunID(runID string) (migrationID, candidateID string, err error) {
-	parts := strings.SplitN(runID, runIDSep, 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid run ID %q: expected format <migrationId>_<candidateId>", runID)
-	}
-	return parts[0], parts[1], nil
 }
