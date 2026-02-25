@@ -17,9 +17,10 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
-	"github.com/tilsley/loom/apps/server/internal/migrations/adapters"
-	handlers "github.com/tilsley/loom/apps/server/internal/migrations/api"
 	"github.com/tilsley/loom/apps/server/internal/migrations/execution"
+	"github.com/tilsley/loom/apps/server/internal/migrations/handler"
+	"github.com/tilsley/loom/apps/server/internal/migrations/store"
+	workeradapter "github.com/tilsley/loom/apps/server/internal/migrations/worker"
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
 	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
 	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
@@ -82,14 +83,14 @@ func main() {
 
 	// --- Adapters ---
 
-	store := adapters.NewRedisMigrationStore(rdb)
+	migrationStore := store.NewRedisMigrationStore(rdb)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	notifier := adapters.NewHTTPWorkerNotifier(httpClient)
-	dryRunner := adapters.NewHTTPDryRunAdapter(httpClient)
+	notifier := workeradapter.NewHTTPWorkerNotifier(httpClient)
+	dryRunner := workeradapter.NewHTTPDryRunAdapter(httpClient)
 
 	// --- Temporal Worker ---
 
-	activities := execution.NewActivities(notifier, store, slog)
+	activities := execution.NewActivities(notifier, migrationStore, slog)
 
 	workerOpts := worker.Options{}
 	if otelEnabled {
@@ -116,7 +117,7 @@ func main() {
 
 	// --- Service + HTTP ---
 
-	svc := migrations.NewService(engine, store, dryRunner)
+	svc := migrations.NewService(engine, migrationStore, dryRunner)
 
 	router := gin.New()
 
@@ -127,7 +128,7 @@ func main() {
 	}
 
 	router.Use(gin.Logger(), gin.Recovery(), otelgin.Middleware(os.Getenv("OTEL_SERVICE_NAME")), validator)
-	handlers.RegisterRoutes(router, svc, slog)
+	handler.RegisterRoutes(router, svc, slog)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -1,4 +1,4 @@
-package adapters
+package worker
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package handlers_test
+package handler_test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
-	handlers "github.com/tilsley/loom/apps/server/internal/migrations/api"
+	"github.com/tilsley/loom/apps/server/internal/migrations/handler"
 	"github.com/tilsley/loom/apps/server/internal/platform/validation"
 	"github.com/tilsley/loom/pkg/api"
 	"github.com/tilsley/loom/schemas"
@@ -153,7 +153,7 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	svc := migrations.NewService(ts.engine, ts.store, ts.dryRun)
 	r := gin.New()
-	handlers.RegisterRoutes(r, svc, slog.Default())
+	handler.RegisterRoutes(r, svc, slog.Default())
 	ts.router = r
 	return ts
 }
@@ -165,7 +165,7 @@ func newTestServerWithValidation(t *testing.T) *testServer {
 	require.NoError(t, err)
 	r := gin.New()
 	r.Use(mw)
-	handlers.RegisterRoutes(r, migrations.NewService(ts.engine, ts.store, ts.dryRun), slog.Default())
+	handler.RegisterRoutes(r, migrations.NewService(ts.engine, ts.store, ts.dryRun), slog.Default())
 	ts.router = r
 	return ts
 }

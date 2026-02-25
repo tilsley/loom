@@ -1,55 +1,64 @@
 # Server Architecture
 
-The server is organised into four layers. Each layer may only import inward — never outward.
-
 ```
 ┌─────────────────────────────────────────────┐
-│  HTTP layer         adapters/http.go         │  inbound requests
+│  handler/           inbound HTTP             │  UI + worker callbacks
 ├─────────────────────────────────────────────┤
-│  Service layer      migrations/service.go    │  use-case logic
+│  service.go         orchestration            │  use-case logic + guards
 ├─────────────────────────────────────────────┤
-│  Execution layer    migrations/execution/    │  Temporal workflow + activities
+│  execution/         Temporal workflow        │  step sequencing + signals
 ├─────────────────────────────────────────────┤
-│  Infrastructure     adapters/dapr*.go        │  Dapr pub/sub, state store, service invocation
+│  store/             Redis                    │  migration + candidate state
+│  worker/            outbound HTTP            │  step dispatch + dry-run
 └─────────────────────────────────────────────┘
 ```
 
-## Layers
+## Packages
 
-### HTTP (`internal/migrations/adapters/http.go`)
-Gin route handlers. Translates HTTP requests into service calls and maps domain errors to status codes. No business logic.
+### `handler/`
+Gin route handlers. Translates HTTP requests into service calls and maps domain errors to HTTP status codes. No business logic.
 
-### Service (`internal/migrations/`)
-The application's use-case orchestrator. Contains `service.go` (use cases), `ports.go` (interfaces), and `domain.go` (domain types and errors). Has no framework imports — depends only on the port interfaces defined in the same package.
+Inbound callers:
+- Console (UI) — migration management, candidate control, dry-run
+- Workers — announce registration, step completion callbacks
 
-The port interfaces are:
-- `WorkflowEngine` — start, query, cancel, and signal Temporal workflows
-- `MigrationStore` — persist and retrieve migration state
-- `WorkerNotifier` — dispatch step requests to external workers
-- `DryRunner` — invoke a worker synchronously for a dry run
+### `service.go` + `ports.go`
+The use-case orchestrator. Enforces business rules (e.g. guard against starting an already-running candidate), coordinates between the execution engine and the store. No framework imports — depends only on the port interfaces defined in `ports.go`.
 
-### Execution (`internal/migrations/execution/`)
-The Temporal workflow and its activities. This is the runtime execution engine — it sequences steps across candidates, handles signals, and runs saga compensation on failure. It is framework-coupled by design: Temporal is a core dependency, not a swappable adapter.
+Port interfaces:
+- `ExecutionEngine` — start, query, and cancel runs; raise signals
+- `MigrationStore` — persist and retrieve migration + candidate state
+- `WorkerNotifier` — dispatch step requests to workers
+- `DryRunner` — invoke a worker synchronously for a dry-run preview
+
+### `execution/`
+The Temporal workflow and its activities. Sequences steps across candidates, waits for step-completion signals, handles retries, and runs compensation on cancellation. Framework-coupled by design — Temporal is a core dependency here, not a swappable adapter.
 
 Activities use the same `WorkerNotifier` and `MigrationStore` port interfaces as the service layer.
 
-### Infrastructure (`internal/migrations/adapters/dapr*.go`, `internal/platform/temporal/`)
-Concrete implementations of the port interfaces:
-- `DaprBus` → `WorkerNotifier` (pub/sub step dispatch)
-- `DaprMigrationStore` → `MigrationStore` (state store)
-- `DaprDryRunAdapter` → `DryRunner` (service invocation)
-- `TemporalEngine` → `WorkflowEngine`
+### `store/`
+`RedisMigrationStore` — implements `MigrationStore` using go-redis. Keyed by migration ID; candidate state stored as part of the migration document.
+
+### `worker/`
+Outbound HTTP clients that implement the `WorkerNotifier` and `DryRunner` ports. POSTs directly to the worker's base URL (registered at announce time via `workerUrl`).
+
+## Supporting files
+
+- `errors.go` — sentinel error types returned by the service layer (`MigrationNotFoundError`, `CandidateNotFoundError`, etc.)
+- `run.go` — run identity helpers (`RunID`, `ParseRunID`), signal name helpers, `RunStatus` type and `RuntimeStatus` constants
+
+## Shared types (`pkg/api/`)
+Generated from `schemas/openapi.yaml` via oapi-codegen. All layers share these types — they are the wire contract between the server, workers, and the console.
 
 ## Import rules
 
-| Layer | May import |
+| Package | May import |
 |---|---|
-| HTTP | Service layer, `pkg/api` |
-| Service | `pkg/api`, port interfaces (same package) |
-| Execution | Service layer (ports + domain), `pkg/api` |
-| Infrastructure | `pkg/api`, external SDKs (Dapr, Temporal) |
+| `handler/` | `service.go` (via interface), `pkg/api`, domain errors |
+| `service.go` | `pkg/api`, port interfaces (`ports.go`), `errors.go`, `run.go` |
+| `execution/` | port interfaces, `pkg/api`, `run.go` |
+| `store/` | `pkg/api`, go-redis |
+| `worker/` | `pkg/api` |
+| `platform/temporal/` | port interfaces (`RunStatus`, `RunNotFoundError`), Temporal SDK |
 
-No layer imports above itself. The service layer has no knowledge of Gin, Dapr, or Temporal.
-
-## Shared types (`pkg/api/`)
-Generated from `schemas/openapi.yaml` via oapi-codegen. All layers share these types — they are the data contracts between the server, workers, and the console.
+No package imports above itself. The service layer has no knowledge of Gin, Redis, or Temporal.
