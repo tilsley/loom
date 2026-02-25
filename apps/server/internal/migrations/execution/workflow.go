@@ -28,8 +28,8 @@ const (
 // MigrationOrchestrator is the Temporal workflow that sequences a full migration.
 //
 // For each step in the manifest it iterates candidate repos sequentially:
-//  1. Dispatches the step to an external worker via the DispatchStep activity.
-//  2. Waits for a "step-completed" signal from the worker.
+//  1. Dispatches the step to a migrator via the DispatchStep activity.
+//  2. Waits for a "step-completed" signal from the migrator.
 //  3. Records the result and advances to the next candidate/step.
 //
 // A query handler ("progress") exposes accumulated results in real-time.
@@ -133,8 +133,8 @@ func processStep(
 			Type:        step.Type,
 			CallbackId:  callbackID,
 			EventName:   stepCompletedSignal,
-			WorkerApp:   step.WorkerApp,
-			WorkerUrl:   manifest.WorkerUrl,
+			MigratorApp: step.MigratorApp,
+			MigratorUrl:  manifest.MigratorUrl,
 		}
 		if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
 			return false, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
@@ -175,7 +175,7 @@ func processStep(
 // workflow is cancelled. Returns false if the workflow was cancelled before
 // a signal arrived (no result is appended in that case).
 //
-// It derives the step status from the event: workers may include a "phase"
+// It derives the step status from the event: migrators may include a "phase"
 // key in metadata (e.g. "merged") to communicate a richer terminal state;
 // otherwise status is "completed" or "failed" based on event.Success.
 // The "phase" key is stripped from the stored metadata since it is now

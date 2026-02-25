@@ -21,7 +21,7 @@ func TestStartRun_Success(t *testing.T) {
 	ts := newTestServer(t)
 	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
 		Id:         "mig-abc",
-		Steps:      []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps:      []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 		Candidates: []api.Candidate{{Id: "billing-api"}},
 	}))
 
@@ -35,7 +35,7 @@ func TestStartRun_WithInputs(t *testing.T) {
 	ts := newTestServer(t)
 	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
 		Id:         "mig-abc",
-		Steps:      []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps:      []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 		Candidates: []api.Candidate{{Id: "billing-api"}},
 	}))
 
@@ -73,7 +73,7 @@ func TestStartRun_AlreadyRunning_Returns409(t *testing.T) {
 	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
 		Id:         "mig-abc",
 		Candidates: []api.Candidate{{Id: "billing-api", Status: &running}},
-		Steps:      []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps:      []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 	}))
 
 	w := ts.do(http.MethodPost, "/migrations/mig-abc/candidates/billing-api/start", nil)

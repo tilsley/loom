@@ -1,4 +1,4 @@
-package worker
+package migrator
 
 import (
 	"bytes"
@@ -25,10 +25,10 @@ func NewHTTPDryRunAdapter(client *http.Client) *HTTPDryRunAdapter {
 	return &HTTPDryRunAdapter{client: client}
 }
 
-// DryRun POSTs the request to {workerUrl}/dry-run and returns the result.
-func (d *HTTPDryRunAdapter) DryRun(ctx context.Context, workerUrl string, req api.DryRunRequest) (*api.DryRunResult, error) {
-	if workerUrl == "" {
-		return nil, fmt.Errorf("no worker URL configured for migration %q", req.MigrationId)
+// DryRun POSTs the request to {migratorUrl}/dry-run and returns the result.
+func (d *HTTPDryRunAdapter) DryRun(ctx context.Context, migratorUrl string, req api.DryRunRequest) (*api.DryRunResult, error) {
+	if migratorUrl == "" {
+		return nil, fmt.Errorf("no migrator URL configured for migration %q", req.MigrationId)
 	}
 
 	body, err := json.Marshal(req)
@@ -36,7 +36,7 @@ func (d *HTTPDryRunAdapter) DryRun(ctx context.Context, workerUrl string, req ap
 		return nil, fmt.Errorf("marshal dry-run request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, workerUrl+"/dry-run", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, migratorUrl+"/dry-run", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create dry-run request: %w", err)
 	}

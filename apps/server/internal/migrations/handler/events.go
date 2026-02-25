@@ -27,7 +27,7 @@ func (h *Handler) Event(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"status": "event raised"})
 }
 
-// Announce handles POST /registry/announce — workers POST a MigrationAnnouncement directly.
+// Announce handles POST /registry/announce — migrators POST a MigrationAnnouncement directly.
 func (h *Handler) Announce(c *gin.Context) {
 	var announcement api.MigrationAnnouncement
 	if err := c.ShouldBindJSON(&announcement); err != nil {
@@ -42,6 +42,6 @@ func (h *Handler) Announce(c *gin.Context) {
 		return
 	}
 
-	h.log.Info("migration announced", "id", m.Id, "name", m.Name, "workerUrl", announcement.WorkerUrl)
+	h.log.Info("migration announced", "id", m.Id, "name", m.Name, "migratorUrl", announcement.MigratorUrl)
 	c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 }

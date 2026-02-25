@@ -31,7 +31,7 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 
 	for _, stepDef := range req.Steps {
 		// Skip steps handled by other worker apps.
-		if stepDef.WorkerApp != "app-chart-migrator" {
+		if stepDef.MigratorApp != "app-chart-migrator" {
 			stepResults = append(stepResults, api.StepDryRunResult{
 				StepName: stepDef.Name,
 				Skipped:  true,

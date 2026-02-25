@@ -103,7 +103,7 @@ func (s *Service) HandleEvent(ctx context.Context, instanceID string, event api.
 	return nil
 }
 
-// Announce upserts a migration from a worker announcement (pub/sub discovery).
+// Announce upserts a migration from a migrator announcement (pub/sub discovery).
 // The worker owns the ID (deterministic slug). Existing state and createdAt are preserved.
 func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (*api.Migration, error) {
 	existing, err := s.store.Get(ctx, ann.Id)
@@ -117,7 +117,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		existing.Description = ann.Description
 		existing.RequiredInputs = ann.RequiredInputs
 		existing.Steps = ann.Steps
-		existing.WorkerUrl = ann.WorkerUrl
+		existing.MigratorUrl = ann.MigratorUrl
 		if err := s.store.Save(ctx, *existing); err != nil {
 			return nil, fmt.Errorf("save migration: %w", err)
 		}
@@ -132,7 +132,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		Candidates:     ann.Candidates,
 		Steps:          ann.Steps,
 		CreatedAt:      time.Now().UTC(),
-		WorkerUrl:      ann.WorkerUrl,
+		MigratorUrl:      ann.MigratorUrl,
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -302,7 +302,7 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 		Candidate:   candidate,
 		Steps:       m.Steps,
 	}
-	result, err := s.dryRunner.DryRun(ctx, m.WorkerUrl, req)
+	result, err := s.dryRunner.DryRun(ctx, m.MigratorUrl, req)
 	status := "ok"
 	if err != nil {
 		status = "error"
@@ -375,7 +375,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		MigrationId: migrationID,
 		Candidates:  []api.Candidate{candidate},
 		Steps:       m.Steps,
-		WorkerUrl:   m.WorkerUrl,
+		MigratorUrl:   m.MigratorUrl,
 	}
 
 	if _, err := s.engine.StartRun(ctx, "MigrationOrchestrator", runID, manifest); err != nil {

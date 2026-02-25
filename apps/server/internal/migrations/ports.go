@@ -6,9 +6,9 @@ import (
 	"github.com/tilsley/loom/pkg/api"
 )
 
-// WorkerNotifier dispatches step requests to external worker applications.
+// MigratorNotifier dispatches step requests to external migrators.
 // Implementations live in the adapters layer (e.g. Dapr pub/sub, HTTP).
-type WorkerNotifier interface {
+type MigratorNotifier interface {
 	Dispatch(ctx context.Context, req api.DispatchStepRequest) error
 }
 
@@ -22,7 +22,7 @@ type ExecutionEngine interface {
 
 // DryRunner simulates a full migration run and returns per-step file diffs.
 type DryRunner interface {
-	DryRun(ctx context.Context, workerUrl string, req api.DryRunRequest) (*api.DryRunResult, error)
+	DryRun(ctx context.Context, migratorUrl string, req api.DryRunRequest) (*api.DryRunResult, error)
 }
 
 // MigrationStore persists migration definitions.

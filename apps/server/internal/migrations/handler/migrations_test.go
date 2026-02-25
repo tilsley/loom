@@ -142,7 +142,7 @@ func TestDryRun_Success(t *testing.T) {
 	ts := newTestServer(t)
 	require.NoError(t, ts.store.Save(context.Background(), api.Migration{
 		Id:    "mig-abc",
-		Steps: []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps: []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 	}))
 	ts.dryRun.result = &api.DryRunResult{
 		Steps: []api.StepDryRunResult{{StepName: "update-chart", Skipped: false}},

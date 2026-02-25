@@ -53,7 +53,7 @@ func TestMigrationOrchestrator_SingleStep_Success(t *testing.T) {
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
 		Candidates:  []api.Candidate{{Id: "billing-api"}},
-		Steps:       []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps:       []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 	}
 
 	env.ExecuteWorkflow(execution.MigrationOrchestrator, manifest)
@@ -84,8 +84,8 @@ func TestMigrationOrchestrator_MultiStep_Success(t *testing.T) {
 		MigrationId: "mig-abc",
 		Candidates:  []api.Candidate{{Id: "billing-api"}},
 		Steps: []api.StepDefinition{
-			{Name: "update-chart", WorkerApp: "app-chart-migrator"},
-			{Name: "open-pr", WorkerApp: "app-chart-migrator"},
+			{Name: "update-chart", MigratorApp: "app-chart-migrator"},
+			{Name: "open-pr", MigratorApp: "app-chart-migrator"},
 		},
 	}
 
@@ -115,7 +115,7 @@ func TestMigrationOrchestrator_MultiCandidate_Success(t *testing.T) {
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
 		Candidates:  []api.Candidate{{Id: "billing-api"}, {Id: "payments-svc"}},
-		Steps:       []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps:       []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 	}
 
 	env.ExecuteWorkflow(execution.MigrationOrchestrator, manifest)
@@ -178,7 +178,7 @@ func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 	manifest := api.MigrationManifest{
 		MigrationId: "mig-abc",
 		Candidates:  []api.Candidate{{Id: "billing-api"}},
-		Steps:       []api.StepDefinition{{Name: "update-chart", WorkerApp: "app-chart-migrator"}},
+		Steps:       []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
 	}
 
 	env.ExecuteWorkflow(execution.MigrationOrchestrator, manifest)
@@ -215,7 +215,7 @@ func TestMigrationOrchestrator_ManualReviewStep_DispatchedToWorker(t *testing.T)
 		Steps: []api.StepDefinition{
 			{
 				Name:      "review",
-				WorkerApp: "app-chart-migrator",
+				MigratorApp: "app-chart-migrator",
 				Config:    &map[string]string{"type": "manual-review", "instructions": "approve the PR"},
 			},
 		},

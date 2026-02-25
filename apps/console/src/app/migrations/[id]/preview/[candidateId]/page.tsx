@@ -260,7 +260,7 @@ export default function PreviewPage() {
                       <span className="text-base font-medium font-mono text-zinc-100">{step.name}</span>
                     </div>
                     <span className="text-xs font-mono text-zinc-500 bg-zinc-800/60 px-2 py-0.5 rounded shrink-0">
-                      {step.workerApp}
+                      {step.migratorApp}
                     </span>
                   </div>
 

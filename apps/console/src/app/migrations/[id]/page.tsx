@@ -213,7 +213,7 @@ export default function MigrationDetail() {
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="font-medium text-sm text-zinc-200">{step.name}</span>
                         <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded shrink-0">
-                          {step.workerApp}
+                          {step.migratorApp}
                         </span>
                       </div>
                       {Boolean(step.description) && (

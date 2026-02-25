@@ -211,7 +211,7 @@ paths:
 
   /event/{id}:
     post:
-      summary: Worker callback to resume a paused workflow step
+      summary: Migrator callback to resume a paused run step
       operationId: raiseEvent
       parameters:
         - name: id
@@ -235,7 +235,7 @@ paths:
 
   /event/{id}/pr-opened:
     post:
-      summary: Worker notifies that a PR has been opened for a step; signals the workflow so the PR URL is immediately visible
+      summary: Migrator notifies that a PR has been opened for a step; signals the workflow so the PR URL is immediately visible
       operationId: notifyPROpened
       parameters:
         - name: id
@@ -278,16 +278,16 @@ components:
 
     StepDefinition:
       type: object
-      required: [name, workerApp]
+      required: [name, migratorApp]
       properties:
         name:
           type: string
           description: Unique name for this step within the migration.
         description:
           type: string
-        workerApp:
+        migratorApp:
           type: string
-          description: App-id of the worker that handles this step (matches the id the worker announces).
+          description: App-id of the migrator that handles this step (matches the id the migrator announces).
         type:
           type: string
           description: Optional step type identifier (e.g. "manual-review"). Used by the UI to render step-type-specific controls.
@@ -295,7 +295,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Arbitrary key-value config forwarded to the worker.
+          description: Arbitrary key-value config forwarded to the migrator.
 
     FileRef:
       type: object
@@ -357,16 +357,16 @@ components:
 
     Migration:
       type: object
-      required: [id, name, description, candidates, steps, createdAt, workerUrl]
+      required: [id, name, description, candidates, steps, createdAt, migratorUrl]
       properties:
         id:
           type: string
-          description: Deterministic slug owned by the worker (e.g. "app-chart-migration").
+          description: Deterministic slug owned by the migrator (e.g. "app-chart-migration").
         name:
           type: string
         description:
           type: string
-        workerUrl:
+        migratorUrl:
           type: string
           description: Base URL the server uses to dispatch steps and invoke dry-run (e.g. http://app-chart-migrator:3001).
         requiredInputs:
@@ -378,7 +378,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Candidate"
-          description: Targets discovered by the worker; each carries its own migration status.
+          description: Targets discovered by the migrator; each carries its own migration status.
         steps:
           type: array
           items:
@@ -440,14 +440,14 @@ components:
 
     MigrationAnnouncement:
       type: object
-      required: [id, name, description, candidates, steps, workerUrl]
+      required: [id, name, description, candidates, steps, migratorUrl]
       description: >
-        POSTed by workers directly to /registry/announce on startup.
-        Loom upserts the migration (idempotent by id) and registers the worker URL.
+        POSTed by migrators directly to /registry/announce on startup.
+        Loom upserts the migration (idempotent by id) and registers the migrator URL.
       properties:
         id:
           type: string
-          description: Deterministic slug owned by the worker (e.g. "app-chart-migration").
+          description: Deterministic slug owned by the migrator (e.g. "app-chart-migration").
         name:
           type: string
         description:
@@ -464,20 +464,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StepDefinition"
-        workerUrl:
+        migratorUrl:
           type: string
           description: Base URL the server uses to dispatch steps and invoke dry-run (e.g. http://app-chart-migrator:3001).
 
     MigrationManifest:
       type: object
-      required: [migrationId, candidates, steps, workerUrl]
+      required: [migrationId, candidates, steps, migratorUrl]
       description: Internal payload for the Temporal workflow.
       properties:
         migrationId:
           type: string
-        workerUrl:
+        migratorUrl:
           type: string
-          description: Base URL the server uses to dispatch steps to the worker.
+          description: Base URL the server uses to dispatch steps to the migrator.
         candidates:
           type: array
           items:
@@ -489,8 +489,8 @@ components:
 
     DispatchStepRequest:
       type: object
-      required: [migrationId, stepName, candidate, callbackId, eventName, workerApp, workerUrl]
-      description: Posted directly to a worker's /dispatch-step endpoint by the server.
+      required: [migrationId, stepName, candidate, callbackId, eventName, migratorApp, migratorUrl]
+      description: Posted directly to a migrator's /dispatch-step endpoint by the server.
       properties:
         migrationId:
           type: string
@@ -504,19 +504,19 @@ components:
             type: string
         callbackId:
           type: string
-          description: Workflow instance ID — workers POST back to /event/{callbackId}.
+          description: Workflow instance ID — migrators POST back to /event/{callbackId}.
         eventName:
           type: string
           description: Exact event name the workflow is waiting on.
-        workerApp:
+        migratorApp:
           type: string
-          description: App-id of the worker handling this step (e.g. app-chart-migrator).
-        workerUrl:
+          description: App-id of the migrator handling this step (e.g. app-chart-migrator).
+        migratorUrl:
           type: string
-          description: Base URL of the worker (e.g. http://app-chart-migrator:3001). Used by the notifier to POST the request.
+          description: Base URL of the migrator (e.g. http://app-chart-migrator:3001). Used by the notifier to POST the request.
         type:
           type: string
-          description: Step type identifier forwarded from StepDefinition.type (e.g. "manual-review"). Used by the worker to route to the correct handler.
+          description: Step type identifier forwarded from StepDefinition.type (e.g. "manual-review"). Used by the migrator to route to the correct handler.
 
     StepCompletedEvent:
       type: object
@@ -585,7 +585,7 @@ components:
           type: boolean
           description: >
             True if this step was not executed (e.g. manual-review step
-            or step type not registered on this worker).
+            or step type not registered on this migrator).
         error:
           type: string
           description: Error message if the step handler failed.
@@ -615,8 +615,8 @@ components:
       type: object
       required: [migrationId, candidate, steps]
       description: >
-        Payload the server sends to a worker via Dapr service invocation
-        to execute a dry run. Contains all steps; the worker skips steps
+        Payload the server sends to a migrator
+        to execute a dry run. Contains all steps; the migrator skips steps
         that don't belong to it.
       properties:
         migrationId:

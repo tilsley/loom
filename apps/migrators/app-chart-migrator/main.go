@@ -129,7 +129,7 @@ func main() {
 		discoveryRunner.Run(ctx)
 	}()
 
-	log.Info("worker starting", "port", port, "gitopsRepo", gitopsRepo, "envs", envs, "workerUrl", workerURL)
+	log.Info("worker starting", "port", port, "gitopsRepo", gitopsRepo, "envs", envs, "migratorUrl", workerURL)
 	if err := r.Run(":" + port); err != nil {
 		log.Error("server failed", "error", err)
 		os.Exit(1)
@@ -144,13 +144,13 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 		api.StepDefinition{
 			Name:        "disable-base-resource-prune",
 			Description: strPtr("Add Prune=false sync option to base/common non-Argo resources"),
-			WorkerApp:   "app-chart-migrator",
+			MigratorApp:   "app-chart-migrator",
 			Type:        strPtr("disable-base-resource-prune"),
 		},
 		api.StepDefinition{
 			Name:        "generate-app-chart",
 			Description: strPtr("Generate app-specific Helm chart with per-env values"),
-			WorkerApp:   "app-chart-migrator",
+			MigratorApp:   "app-chart-migrator",
 			Type:        strPtr("generate-app-chart"),
 		},
 	)
@@ -161,21 +161,21 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 			api.StepDefinition{
 				Name:        "disable-sync-prune-" + env,
 				Description: strPtr("Disable sync pruning for " + env),
-				WorkerApp:   "app-chart-migrator",
+				MigratorApp:   "app-chart-migrator",
 				Type:        strPtr("disable-sync-prune"),
 				Config:      &map[string]string{"env": env},
 			},
 			api.StepDefinition{
 				Name:        "swap-chart-" + env,
 				Description: strPtr("Swap to OCI app chart for " + env),
-				WorkerApp:   "app-chart-migrator",
+				MigratorApp:   "app-chart-migrator",
 				Type:        strPtr("swap-chart"),
 				Config:      &map[string]string{"env": env},
 			},
 			api.StepDefinition{
 				Name:        "review-swap-chart-" + env,
 				Description: strPtr("Manual review of ArgoCD after chart swap for " + env),
-				WorkerApp:   "app-chart-migrator",
+				MigratorApp:   "app-chart-migrator",
 				Type:        strPtr("manual-review"),
 				Config: &map[string]string{
 					"instructions": "1. Open the ArgoCD UI\n2. Find the application in the " + env + " environment\n3. Verify app health is Healthy\n4. Verify sync status is Synced\n5. Check no resources are OutOfSync or orphaned\n6. Confirm pods are running with expected image",
@@ -184,7 +184,7 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 			api.StepDefinition{
 				Name:        "enable-sync-prune-" + env,
 				Description: strPtr("Re-enable sync pruning for " + env),
-				WorkerApp:   "app-chart-migrator",
+				MigratorApp:   "app-chart-migrator",
 				Type:        strPtr("enable-sync-prune"),
 				Config:      &map[string]string{"env": env},
 			},
@@ -195,13 +195,13 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 		api.StepDefinition{
 			Name:        "cleanup-common",
 			Description: strPtr("Remove old helm values from base application"),
-			WorkerApp:   "app-chart-migrator",
+			MigratorApp:   "app-chart-migrator",
 			Type:        strPtr("cleanup-common"),
 		},
 		api.StepDefinition{
 			Name:        "update-deploy-workflow",
 			Description: strPtr("Update CI workflow for app chart deployment"),
-			WorkerApp:   "app-chart-migrator",
+			MigratorApp:   "app-chart-migrator",
 			Type:        strPtr("update-deploy-workflow"),
 		},
 	)
@@ -213,7 +213,7 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository"}},
 		Candidates:     []api.Candidate{},
 		Steps:          stepDefs,
-		WorkerUrl:      workerURL,
+		MigratorUrl:      workerURL,
 	}
 }
 

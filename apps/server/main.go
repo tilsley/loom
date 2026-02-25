@@ -20,7 +20,7 @@ import (
 	"github.com/tilsley/loom/apps/server/internal/migrations/execution"
 	"github.com/tilsley/loom/apps/server/internal/migrations/handler"
 	"github.com/tilsley/loom/apps/server/internal/migrations/store"
-	workeradapter "github.com/tilsley/loom/apps/server/internal/migrations/worker"
+	"github.com/tilsley/loom/apps/server/internal/migrations/migrator"
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
 	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
 	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
@@ -85,8 +85,8 @@ func main() {
 
 	migrationStore := store.NewRedisMigrationStore(rdb)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	notifier := workeradapter.NewHTTPWorkerNotifier(httpClient)
-	dryRunner := workeradapter.NewHTTPDryRunAdapter(httpClient)
+	notifier := migrator.NewHTTPMigratorNotifier(httpClient)
+	dryRunner := migrator.NewHTTPDryRunAdapter(httpClient)
 
 	// --- Temporal Worker ---
 

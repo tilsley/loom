@@ -25,19 +25,19 @@ type UpdateCandidateStatusInput struct {
 // Activities groups Temporal activity methods. The struct holds dependencies
 // injected at startup (idiomatic Temporal pattern).
 type Activities struct {
-	notifier migrations.WorkerNotifier
+	notifier migrations.MigratorNotifier
 	store    migrations.MigrationStore
 	log      *slog.Logger
 }
 
 // NewActivities creates a new Activities instance with the given dependencies.
-func NewActivities(notifier migrations.WorkerNotifier, store migrations.MigrationStore, log *slog.Logger) *Activities {
+func NewActivities(notifier migrations.MigratorNotifier, store migrations.MigrationStore, log *slog.Logger) *Activities {
 	return &Activities{notifier: notifier, store: store, log: log}
 }
 
-// DispatchStep publishes a step request to the external worker via WorkerNotifier.
+// DispatchStep dispatches a step request to the migrator via MigratorNotifier.
 func (a *Activities) DispatchStep(ctx context.Context, req api.DispatchStepRequest) error {
-	a.log.Info("DispatchStep activity called", "step", req.StepName, "candidate", req.Candidate.Id, "workerUrl", req.WorkerUrl)
+	a.log.Info("DispatchStep activity called", "step", req.StepName, "candidate", req.Candidate.Id, "migratorUrl", req.MigratorUrl)
 
 	ctx, span := otel.Tracer(instrName).Start(ctx, "DispatchStep",
 		trace.WithAttributes(

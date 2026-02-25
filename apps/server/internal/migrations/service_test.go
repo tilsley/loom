@@ -214,7 +214,7 @@ func TestService_Announce(t *testing.T) {
 		m, err := svc.Announce(ctx, api.MigrationAnnouncement{
 			Id:    "app-chart-migration",
 			Name:  "App Chart Migration",
-			Steps: []api.StepDefinition{{Name: "step-1", WorkerApp: "app"}},
+			Steps: []api.StepDefinition{{Name: "step-1", MigratorApp: "app"}},
 		})
 
 		require.NoError(t, err)
@@ -668,7 +668,7 @@ func TestService_DryRun(t *testing.T) {
 		store := newMemStore()
 		_ = store.Save(ctx, api.Migration{
 			Id:    "m1",
-			Steps: []api.StepDefinition{{Name: "step-1", WorkerApp: "app"}},
+			Steps: []api.StepDefinition{{Name: "step-1", MigratorApp: "app"}},
 		})
 		dr := &stubDryRunner{
 			result: &api.DryRunResult{Steps: []api.StepDryRunResult{{StepName: "step-1"}}},
