@@ -20,7 +20,7 @@ const instrName = "github.com/tilsley/loom"
 // Service is the application-level use-case orchestrator for migrations.
 // It depends only on port interfaces — no framework imports.
 type Service struct {
-	engine    WorkflowEngine
+	engine    ExecutionEngine
 	store     MigrationStore
 	dryRunner DryRunner
 
@@ -32,7 +32,7 @@ type Service struct {
 }
 
 // NewService creates a new Service.
-func NewService(engine WorkflowEngine, store MigrationStore, dryRunner DryRunner) *Service {
+func NewService(engine ExecutionEngine, store MigrationStore, dryRunner DryRunner) *Service {
 	m := otel.Meter(instrName)
 
 	runsStarted, _ := m.Int64Counter("loom.runs.started",
@@ -55,17 +55,17 @@ func NewService(engine WorkflowEngine, store MigrationStore, dryRunner DryRunner
 	}
 }
 
-// GetCandidateSteps returns the step execution progress for a candidate's workflow.
-// Returns nil (no error) when the workflow does not exist.
+// GetCandidateSteps returns the step execution progress for a candidate's run.
+// Returns nil (no error) when the run does not exist.
 func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateID string) (*api.CandidateStepsResponse, error) {
-	workflowID := WorkflowID(migrationID, candidateID)
-	ws, err := s.engine.GetStatus(ctx, workflowID)
+	runID := RunID(migrationID, candidateID)
+	ws, err := s.engine.GetStatus(ctx, runID)
 	if err != nil {
-		var notFound WorkflowNotFoundError
+		var notFound RunNotFoundError
 		if errors.As(err, &notFound) {
 			return nil, nil //nolint:nilnil
 		}
-		return nil, fmt.Errorf("get workflow status: %w", err)
+		return nil, fmt.Errorf("get run status: %w", err)
 	}
 
 	var out struct {
@@ -73,7 +73,7 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 	}
 	if len(ws.Output) > 0 {
 		if err := json.Unmarshal(ws.Output, &out); err != nil {
-			return nil, fmt.Errorf("parse workflow output: %w", err)
+			return nil, fmt.Errorf("parse run output: %w", err)
 		}
 	}
 
@@ -83,8 +83,8 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 	}
 
 	// Derive response status from the engine's runtime status rather than parsing
-	// the workflow output's status field. This correctly handles terminated and
-	// cancelled workflows, where ws.Output is nil and the output field would be empty.
+	// the run output's status field. This correctly handles terminated and
+	// cancelled runs, where ws.Output is nil and the output field would be empty.
 	status := api.CandidateStepsResponseStatusRunning
 	if ws.RuntimeStatus != "RUNNING" {
 		status = api.CandidateStepsResponseStatusCompleted
@@ -93,7 +93,7 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 	return &api.CandidateStepsResponse{Status: status, Steps: steps}, nil
 }
 
-// HandleEvent raises a StepCompleted signal into the running workflow,
+// HandleEvent raises a StepCompleted signal into the active run,
 // unblocking the signal wait for the matching step+candidate.
 func (s *Service) HandleEvent(ctx context.Context, instanceID string, event api.StepCompletedEvent) error {
 	eventName := StepEventName(event.StepName, event.CandidateId)
@@ -176,7 +176,7 @@ func (s *Service) SubmitCandidates(ctx context.Context, migrationID string, req 
 }
 
 // GetCandidates returns the candidate list for a migration with their current status.
-// Any candidate whose stored status is "running" but whose workflow no longer exists in
+// Any candidate whose stored status is "running" but whose run no longer exists in
 // the engine (e.g. after a Temporal restart) is automatically reset to "not_started".
 func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.Candidate, error) {
 	candidates, err := s.store.GetCandidates(ctx, migrationID)
@@ -188,11 +188,11 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 		if c.Status == nil || *c.Status != api.CandidateStatusRunning {
 			continue
 		}
-		workflowID := WorkflowID(migrationID, c.Id)
-		if _, err := s.engine.GetStatus(ctx, workflowID); err != nil {
-			var notFound WorkflowNotFoundError
+		runID := RunID(migrationID, c.Id)
+		if _, err := s.engine.GetStatus(ctx, runID); err != nil {
+			var notFound RunNotFoundError
 			if errors.As(err, &notFound) {
-				// Stale workflow — reset to not_started so the Preview button becomes active again.
+				// Stale run — reset to not_started so the Preview button becomes active again.
 				_ = s.store.SetCandidateStatus(ctx, migrationID, c.Id, api.CandidateStatusNotStarted)
 				notStarted := api.CandidateStatusNotStarted
 				candidates[i].Status = &notStarted
@@ -203,7 +203,7 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 	return candidates, nil
 }
 
-// RetryStep raises a retry-step signal into a running workflow, re-dispatching the
+// RetryStep raises a retry-step signal into the active run, re-dispatching the
 // named step to the worker. Returns CandidateNotRunningError if the candidate is not running.
 func (s *Service) RetryStep(ctx context.Context, migrationID, candidateID, stepName string) error {
 	m, err := s.store.Get(ctx, migrationID)
@@ -228,15 +228,15 @@ func (s *Service) RetryStep(ctx context.Context, migrationID, candidateID, stepN
 		return CandidateNotFoundError{MigrationID: migrationID, CandidateID: candidateID}
 	}
 
-	workflowID := WorkflowID(migrationID, candidateID)
+	runID := RunID(migrationID, candidateID)
 	eventName := RetryStepEventName(stepName, candidateID)
-	if err := s.engine.RaiseEvent(ctx, workflowID, eventName, nil); err != nil {
+	if err := s.engine.RaiseEvent(ctx, runID, eventName, nil); err != nil {
 		return fmt.Errorf("raise retry event: %w", err)
 	}
 	return nil
 }
 
-// Cancel stops a running workflow and resets the candidate to not_started so it can
+// Cancel stops the active run and resets the candidate to not_started so it can
 // be previewed and started again.
 func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) error {
 	m, err := s.store.Get(ctx, migrationID)
@@ -261,12 +261,12 @@ func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) e
 		return CandidateNotFoundError{MigrationID: migrationID, CandidateID: candidateID}
 	}
 
-	workflowID := WorkflowID(migrationID, candidateID)
+	runID := RunID(migrationID, candidateID)
 
-	if err := s.engine.CancelWorkflow(ctx, workflowID); err != nil {
-		var notFound WorkflowNotFoundError
+	if err := s.engine.CancelRun(ctx, runID); err != nil {
+		var notFound RunNotFoundError
 		if !errors.As(err, &notFound) {
-			return fmt.Errorf("cancel workflow: %w", err)
+			return fmt.Errorf("cancel run: %w", err)
 		}
 	}
 
@@ -313,7 +313,7 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 }
 
 // Start atomically looks up the candidate, merges any operator-supplied inputs,
-// and starts the Temporal workflow for the given migration+candidate pair.
+// and starts a Run for the given migration+candidate pair.
 func (s *Service) Start(ctx context.Context, migrationID, candidateID string, inputs map[string]string) (string, error) {
 	ctx, span := otel.Tracer(instrName).Start(ctx, "Service.Start",
 		trace.WithAttributes(
@@ -346,19 +346,19 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		return "", CandidateNotFoundError{MigrationID: migrationID, CandidateID: candidateID}
 	}
 
-	workflowID := WorkflowID(migrationID, candidateID)
+	runID := RunID(migrationID, candidateID)
 
-	// Guard: block if candidate is already running or completed AND the workflow
-	// is still running or successfully completed. If the workflow has failed,
+	// Guard: block if candidate is already running or completed AND the run
+	// is still running or successfully completed. If the run has failed,
 	// been cancelled, or terminated, allow re-execution even if Redis still
 	// shows the old status (handles stale state after crash/cancel).
 	if candidate.Status != nil &&
 		(*candidate.Status == api.CandidateStatusRunning || *candidate.Status == api.CandidateStatusCompleted) {
-		ws, err := s.engine.GetStatus(ctx, workflowID)
+		ws, err := s.engine.GetStatus(ctx, runID)
 		if err == nil && (ws.RuntimeStatus == "RUNNING" || ws.RuntimeStatus == "COMPLETED") {
 			return "", CandidateAlreadyRunError{ID: candidateID, Status: string(*candidate.Status)}
 		}
-		// Workflow gone, failed, cancelled, or terminated — allow re-execution.
+		// Run gone, failed, cancelled, or terminated — allow re-execution.
 	}
 
 	// Merge operator-supplied inputs into candidate metadata.
@@ -378,9 +378,9 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		WorkerUrl:   m.WorkerUrl,
 	}
 
-	if _, err := s.engine.StartWorkflow(ctx, "MigrationOrchestrator", workflowID, manifest); err != nil {
+	if _, err := s.engine.StartRun(ctx, "MigrationOrchestrator", runID, manifest); err != nil {
 		span.RecordError(err)
-		return "", fmt.Errorf("start workflow: %w", err)
+		return "", fmt.Errorf("start run: %w", err)
 	}
 
 	if err := s.store.SetCandidateStatus(ctx, migrationID, candidateID, api.CandidateStatusRunning); err != nil {
@@ -390,5 +390,5 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 
 	s.runsStarted.Add(ctx, 1,
 		metric.WithAttributes(attribute.String("migration_id", migrationID)))
-	return workflowID, nil
+	return runID, nil
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // StartRun handles POST /migrations/:id/candidates/:candidateId/start —
-// starts the migration workflow for the given candidate.
+// starts a run for the given candidate.
 func (h *Handler) StartRun(c *gin.Context) {
 	id := c.Param("id")
 	candidateID := c.Param("candidateId")
@@ -59,7 +59,7 @@ func (h *Handler) StartRun(c *gin.Context) {
 }
 
 // CancelRun handles POST /migrations/:id/candidates/:candidateId/cancel —
-// cancels the running workflow, records the attempt, and resets the candidate to not_started.
+// cancels the active run and resets the candidate to not_started.
 func (h *Handler) CancelRun(c *gin.Context) {
 	id := c.Param("id")
 	candidateID := c.Param("candidateId")
@@ -91,7 +91,7 @@ func (h *Handler) CancelRun(c *gin.Context) {
 }
 
 // RetryStep handles POST /migrations/:id/candidates/:candidateId/retry-step —
-// raises a retry-step signal into the running workflow, re-dispatching the named step.
+// raises a retry-step signal into the active run, re-dispatching the named step.
 func (h *Handler) RetryStep(c *gin.Context) {
 	id := c.Param("id")
 	candidateID := c.Param("candidateId")
@@ -135,7 +135,7 @@ func (h *Handler) GetCandidateSteps(c *gin.Context) {
 		return
 	}
 	if resp == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no active or completed workflow found for this candidate"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "no active or completed run found for this candidate"})
 		return
 	}
 

@@ -47,31 +47,30 @@ func (e CandidateNotRunningError) Error() string {
 	return fmt.Sprintf("candidate %q is not running", e.ID)
 }
 
-// WorkflowNotFoundError is returned by the WorkflowEngine when the workflow instance
+// RunNotFoundError is returned by the ExecutionEngine when the run instance
 // does not exist — typically after the engine is restarted in development.
-type WorkflowNotFoundError struct {
+type RunNotFoundError struct {
 	InstanceID string
 }
 
 // Error implements the error interface.
-func (e WorkflowNotFoundError) Error() string {
-	return fmt.Sprintf("workflow %q not found", e.InstanceID)
+func (e RunNotFoundError) Error() string {
+	return fmt.Sprintf("run %q not found", e.InstanceID)
 }
 
-// WorkflowStatus is the port-level representation returned by the WorkflowEngine.
-type WorkflowStatus struct {
+// RunStatus is the port-level representation returned by the ExecutionEngine.
+type RunStatus struct {
 	RuntimeStatus string
-	Output        []byte // Raw JSON of the workflow result (if finished)
+	Output        []byte // Raw JSON of the run result (if finished)
 }
 
-// StepEventName returns the deterministic event name the workflow waits on
-// for a given step+candidate combination. Workers receive this in DispatchStepRequest.EventName
-// and the workflow listens for it via WaitForExternalEvent.
+// StepEventName returns the deterministic signal name the run listens on
+// for a given step+candidate combination. Workers receive this in DispatchStepRequest.EventName.
 func StepEventName(stepName, candidateId string) string {
 	return fmt.Sprintf("step-completed:%s:%s", stepName, candidateId)
 }
 
-// RetryStepEventName returns the deterministic signal name the workflow listens on
+// RetryStepEventName returns the deterministic signal name the run listens on
 // when waiting for an operator to retry a failed step.
 func RetryStepEventName(stepName, candidateId string) string {
 	return fmt.Sprintf("retry-step:%s:%s", stepName, candidateId)
@@ -79,17 +78,17 @@ func RetryStepEventName(stepName, candidateId string) string {
 
 const runIDSep = "__"
 
-// WorkflowID returns the deterministic Temporal workflow instance ID for a migration+candidate pair.
+// RunID returns the deterministic run instance ID for a migration+candidate pair.
 // Since each candidate runs at most once per migration, the ID is stable and recoverable.
-func WorkflowID(migrationID, candidateID string) string {
+func RunID(migrationID, candidateID string) string {
 	return migrationID + runIDSep + candidateID
 }
 
-// ParseWorkflowID splits a workflow ID back into its migrationID and candidateID components.
-func ParseWorkflowID(workflowID string) (migrationID, candidateID string, err error) {
-	parts := strings.SplitN(workflowID, runIDSep, 2)
+// ParseRunID splits a run ID back into its migrationID and candidateID components.
+func ParseRunID(runID string) (migrationID, candidateID string, err error) {
+	parts := strings.SplitN(runID, runIDSep, 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid workflow ID %q: expected format <migrationId>_<candidateId>", workflowID)
+		return "", "", fmt.Errorf("invalid run ID %q: expected format <migrationId>_<candidateId>", runID)
 	}
 	return parts[0], parts[1], nil
 }

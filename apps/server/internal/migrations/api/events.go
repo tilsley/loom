@@ -8,7 +8,7 @@ import (
 	"github.com/tilsley/loom/pkg/api"
 )
 
-// Event handles POST /event/:id — worker callback endpoint to resume a paused workflow step.
+// Event handles POST /event/:id — worker callback that unblocks a waiting step in an active run.
 func (h *Handler) Event(c *gin.Context) {
 	id := c.Param("id")
 

@@ -86,7 +86,7 @@ export default function CandidateStepsPage() {
   }, [stepsData]);
 
   // Temporal workflow ID used for event callbacks — derived from migration + candidate IDs
-  const workflowId = `${id}__${candidateId}`;
+  const runId = `${id}__${candidateId}`;
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -193,7 +193,7 @@ export default function CandidateStepsPage() {
                   stepInstructions={stepInstructions}
                   onComplete={(stepName, candidateId, success) => {
                     void (async () => {
-                      await completeStep(workflowId, stepName, candidateId, success);
+                      await completeStep(runId, stepName, candidateId, success);
                       void poll();
                     })();
                   }}

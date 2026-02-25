@@ -12,12 +12,12 @@ type WorkerNotifier interface {
 	Dispatch(ctx context.Context, req api.DispatchStepRequest) error
 }
 
-// WorkflowEngine abstracts the durable workflow runtime.
-type WorkflowEngine interface {
-	StartWorkflow(ctx context.Context, workflowName, instanceID string, input any) (string, error)
-	GetStatus(ctx context.Context, instanceID string) (*WorkflowStatus, error)
+// ExecutionEngine abstracts the durable execution runtime.
+type ExecutionEngine interface {
+	StartRun(ctx context.Context, runType, instanceID string, input any) (string, error)
+	GetStatus(ctx context.Context, instanceID string) (*RunStatus, error)
 	RaiseEvent(ctx context.Context, instanceID, eventName string, payload any) error
-	CancelWorkflow(ctx context.Context, instanceID string) error
+	CancelRun(ctx context.Context, instanceID string) error
 }
 
 // DryRunner simulates a full migration run and returns per-step file diffs.
