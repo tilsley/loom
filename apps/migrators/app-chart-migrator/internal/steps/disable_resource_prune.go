@@ -45,7 +45,7 @@ func (h *DisableResourcePrune) Execute(
 			Repo:   cfg.GitopsRepo,
 			Title:  fmt.Sprintf("[%s] Disable resource pruning for %s", req.MigrationId, app),
 			Body:   fmt.Sprintf("No base resources found for `%s` — nothing to patch.", app),
-			Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+			Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 			Files:  map[string]string{},
 		}, nil
 	}
@@ -80,7 +80,7 @@ func (h *DisableResourcePrune) Execute(
 			"Add `Prune=false` sync option to base resources for `%s`.\n\nThis prevents ArgoCD from deleting them during the chart swap.",
 			app,
 		),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files:  prFiles,
 	}, nil
 }

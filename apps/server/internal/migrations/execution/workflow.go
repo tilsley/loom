@@ -37,6 +37,8 @@ func MigrationOrchestrator(
 	ctx workflow.Context,
 	manifest api.MigrationManifest,
 ) (MigrationResult, error) {
+	workflow.GetLogger(ctx).Info("MigrationOrchestrator started", "migrationId", manifest.MigrationId, "steps", len(manifest.Steps), "candidates", len(manifest.Candidates))
+
 	results := make([]api.StepResult, 0, len(manifest.Steps)*len(manifest.Candidates))
 
 	if err := workflow.SetQueryHandler(ctx, "progress", func() (MigrationResult, error) {
@@ -57,8 +59,17 @@ func MigrationOrchestrator(
 	var failed bool
 	defer func() {
 		if failed {
+			// Use a disconnected context so the cleanup activity can run even if the
+			// workflow context has been cancelled (e.g. operator hit Cancel).
+			// Without this, ExecuteActivity on a cancelled ctx returns immediately
+			// without scheduling, leaving the workflow stuck in RUNNING state forever.
+			cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+			cleanupActCtx := workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+				TaskQueue:           workflow.GetInfo(ctx).TaskQueueName,
+				StartToCloseTimeout: 30 * time.Second,
+			})
 			// No saga compensation — PRs cannot be automatically undone.
-			runResetCandidate(actCtx, ctx, manifest)
+			runResetCandidate(cleanupActCtx, cleanupCtx, manifest)
 		}
 	}()
 
@@ -106,11 +117,20 @@ func processStep(
 	retryCh := workflow.GetSignalChannel(ctx, migrations.RetryStepEventName(step.Name, candidate.Id))
 
 	for {
+		// Mark as in-progress before dispatching so the progress query
+		// reflects the current step immediately — not only after it completes.
+		upsertResult(results, api.StepResult{
+			StepName:  step.Name,
+			Candidate: candidate,
+			Status:    api.InProgress,
+		})
+
 		req := api.DispatchStepRequest{
 			MigrationId: manifest.MigrationId,
 			StepName:    step.Name,
 			Candidate:   candidate,
 			Config:      step.Config,
+			Type:        step.Type,
 			CallbackId:  callbackID,
 			EventName:   stepCompletedSignal,
 			WorkerApp:   step.WorkerApp,
@@ -120,37 +140,95 @@ func processStep(
 			return false, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
 		}
 
-		awaitStepCompletion(ctx, stepCompletedCh, candidate, results)
+		// Keep receiving signals until the step reaches a terminal state.
+		// "open" (PR created, awaiting merge) and "awaiting_review" (manual review)
+		// are intermediate — keep waiting for the final signal.
+		// awaitStepCompletion returns false if the workflow was cancelled mid-wait,
+		// in which case it does NOT append to results (safe to return immediately).
+		// When it returns true it has always appended, so results is non-empty.
+		for {
+			if !awaitStepCompletion(ctx, stepCompletedCh, candidate, results) {
+				return false, nil // cancelled while waiting for step signal
+			}
+			last := (*results)[len(*results)-1]
+			if last.Status != api.Open && last.Status != api.AwaitingReview {
+				break
+			}
+		}
 
 		last := (*results)[len(*results)-1]
-		if last.Success {
+		if last.Status == api.Completed || last.Status == api.Merged {
 			return true, nil
 		}
 
-		removeResult(results, step.Name, candidate.Id)
-
+		// Leave the failed result visible in the query while waiting for retry/cancel
+		// so the UI can show the failed state and retry button.
 		if !awaitRetryOrCancel(ctx, retryCh) {
 			return false, nil // operator cancelled while waiting for retry
 		}
-		// retry signal received: loop back and re-dispatch the step
+		// Retry signal received: clear the failed result before re-dispatching.
+		removeResult(results, step.Name, candidate.Id)
 	}
 }
 
-// awaitStepCompletion blocks until a step-completed signal arrives.
+// awaitStepCompletion blocks until a step-completed signal arrives or the
+// workflow is cancelled. Returns false if the workflow was cancelled before
+// a signal arrived (no result is appended in that case).
+//
+// It derives the step status from the event: workers may include a "phase"
+// key in metadata (e.g. "merged") to communicate a richer terminal state;
+// otherwise status is "completed" or "failed" based on event.Success.
+// The "phase" key is stripped from the stored metadata since it is now
+// captured in the first-class Status field.
 func awaitStepCompletion(
 	ctx workflow.Context,
 	stepCompletedCh workflow.ReceiveChannel,
 	candidate api.Candidate,
 	results *[]api.StepResult,
-) {
+) bool {
 	var event api.StepCompletedEvent
-	stepCompletedCh.Receive(ctx, &event)
+	var received bool
+	sel := workflow.NewSelector(ctx)
+	sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
+		c.Receive(ctx, &event)
+		received = true
+	})
+	sel.AddReceive(ctx.Done(), func(_ workflow.ReceiveChannel, _ bool) {})
+	sel.Select(ctx)
+	if !received {
+		return false
+	}
+
+	status := api.StepResultStatus("completed")
+	if !event.Success {
+		status = "failed"
+	} else if event.Metadata != nil {
+		if phase, ok := (*event.Metadata)["phase"]; ok && phase != "" {
+			status = api.StepResultStatus(phase)
+		}
+	}
+
+	// Strip "phase" from metadata — it's now captured in Status.
+	var metadata *map[string]string
+	if event.Metadata != nil {
+		cleaned := make(map[string]string)
+		for k, v := range *event.Metadata {
+			if k != "phase" {
+				cleaned[k] = v
+			}
+		}
+		if len(cleaned) > 0 {
+			metadata = &cleaned
+		}
+	}
+
 	upsertResult(results, api.StepResult{
 		StepName:  event.StepName,
 		Candidate: candidate,
-		Success:   event.Success,
-		Metadata:  event.Metadata,
+		Status:    status,
+		Metadata:  metadata,
 	})
+	return true
 }
 
 // awaitRetryOrCancel blocks until either a retry-step signal or workflow cancellation.
@@ -179,6 +257,12 @@ func runUpdateCandidateStatus(actCtx, ctx workflow.Context, manifest api.Migrati
 		CandidateID: manifest.Candidates[0].Id,
 		Status:      status,
 	}
+	// Temporal retries this activity with exponential backoff for up to the
+	// StartToCloseTimeout (24h), so transient Redis failures self-heal.
+	// If retries are exhausted (Redis down for >24h), we log and move on rather
+	// than failing the workflow — the migration did complete, and propagating
+	// this error would record it as failed in Temporal history, which is wrong.
+	// The cost is a stale candidate status in Redis until the next run.
 	if err := workflow.ExecuteActivity(actCtx, "UpdateCandidateStatus", input).Get(ctx, nil); err != nil {
 		workflow.GetLogger(ctx).Warn("failed to update candidate status", "error", err, "status", status)
 	}

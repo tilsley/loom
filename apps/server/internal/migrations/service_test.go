@@ -425,7 +425,7 @@ func TestService_GetCandidateSteps(t *testing.T) {
 	t.Run("returns completed steps when workflow output is present", func(t *testing.T) {
 		output, _ := json.Marshal(map[string]interface{}{
 			"status":  "completed",
-			"results": []api.StepResult{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Success: true}},
+			"results": []api.StepResult{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Status: api.Completed}},
 		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.WorkflowStatus, error) {

@@ -37,6 +37,8 @@ func NewActivities(notifier migrations.WorkerNotifier, store migrations.Migratio
 
 // DispatchStep publishes a step request to the external worker via WorkerNotifier.
 func (a *Activities) DispatchStep(ctx context.Context, req api.DispatchStepRequest) error {
+	a.log.Info("DispatchStep activity called", "step", req.StepName, "candidate", req.Candidate.Id, "workerUrl", req.WorkerUrl)
+
 	ctx, span := otel.Tracer(instrName).Start(ctx, "DispatchStep",
 		trace.WithAttributes(
 			attribute.String("step.name", req.StepName),

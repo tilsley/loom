@@ -514,6 +514,9 @@ components:
         workerUrl:
           type: string
           description: Base URL of the worker (e.g. http://app-chart-migrator:3001). Used by the notifier to POST the request.
+        type:
+          type: string
+          description: Step type identifier forwarded from StepDefinition.type (e.g. "manual-review"). Used by the worker to route to the correct handler.
 
     StepCompletedEvent:
       type: object
@@ -534,14 +537,16 @@ components:
 
     StepResult:
       type: object
-      required: [stepName, candidate, success]
+      required: [stepName, candidate, status]
       properties:
         stepName:
           type: string
         candidate:
           $ref: "#/components/schemas/Candidate"
-        success:
-          type: boolean
+        status:
+          type: string
+          enum: [in_progress, awaiting_review, open, completed, merged, failed]
+          description: Lifecycle state of the step.
         metadata:
           type: object
           additionalProperties:

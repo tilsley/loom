@@ -13,13 +13,15 @@ type Handler interface {
 }
 
 // Result describes the PR to create after a step handler completes.
+// For manual-review steps (Owner == ""), Instructions is surfaced in the UI.
 type Result struct {
-	Owner  string
-	Repo   string
-	Title  string
-	Body   string
-	Branch string
-	Files  map[string]string // path → new content
+	Owner        string
+	Repo         string
+	Title        string
+	Body         string
+	Branch       string
+	Files        map[string]string // path → new content
+	Instructions string            // optional; shown in awaiting_review UI panel
 }
 
 // appName returns the logical name for a candidate. Uses candidate.Id directly,

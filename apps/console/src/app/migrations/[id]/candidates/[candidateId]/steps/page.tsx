@@ -66,13 +66,22 @@ export default function CandidateStepsPage() {
     );
   }, [migration]);
 
+  const stepInstructions = useMemo(() => {
+    if (!migration) return new Map<string, string>();
+    return new Map(
+      migration.steps
+        .filter((s) => s.config?.instructions)
+        .map((s) => [s.name, s.config?.instructions ?? ""]),
+    );
+  }, [migration]);
+
   const stats = useMemo(() => {
     if (!stepsData) return null;
     const results = stepsData.steps;
-    const completed = results.filter((r) => r.success && r.metadata?.phase !== "in_progress").length;
-    const failed = results.filter((r) => !r.success).length;
+    const completed = results.filter((r) => r.status === "completed" || r.status === "merged").length;
+    const failed = results.filter((r) => r.status === "failed").length;
     const prs = results.filter((r) => r.metadata?.prUrl).length;
-    const merged = results.filter((r) => r.metadata?.phase === "merged").length;
+    const merged = results.filter((r) => r.status === "merged").length;
     return { total: results.length, completed, failed, prs, merged };
   }, [stepsData]);
 
@@ -181,6 +190,7 @@ export default function CandidateStepsPage() {
                 <StepTimeline
                   results={stepsData.steps}
                   stepDescriptions={stepDescriptions}
+                  stepInstructions={stepInstructions}
                   onComplete={(stepName, candidateId, success) => {
                     void (async () => {
                       await completeStep(workflowId, stepName, candidateId, success);

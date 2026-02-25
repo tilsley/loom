@@ -89,16 +89,31 @@ func (a *Adapter) CreatePR(ctx context.Context, owner, repo string, req gitrepo.
 		return nil, fmt.Errorf("create commit: %w", err)
 	}
 
-	// 5. Create branch pointing at the new commit.
-	_, _, err = a.gh.Git.CreateRef(ctx, owner, repo, gogithub.CreateRef{
-		Ref: "refs/heads/" + req.Head,
-		SHA: commit.GetSHA(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create branch %s: %w", req.Head, err)
+	// 5. Create branch pointing at the new commit, or update it if it already exists.
+	// Updating in place preserves the existing PR number and review history.
+	ref := "refs/heads/" + req.Head
+	_, resp, getErr := a.gh.Git.GetRef(ctx, owner, repo, ref)
+	branchExists := getErr == nil
+	if getErr != nil && (resp == nil || resp.StatusCode != http.StatusNotFound) {
+		return nil, fmt.Errorf("check branch %s: %w", req.Head, getErr)
+	}
+	if branchExists {
+		if _, _, err = a.gh.Git.UpdateRef(ctx, owner, repo, ref, gogithub.UpdateRef{
+			SHA:   commit.GetSHA(),
+			Force: gogithub.Ptr(true),
+		}); err != nil {
+			return nil, fmt.Errorf("update branch %s: %w", req.Head, err)
+		}
+	} else {
+		if _, _, err = a.gh.Git.CreateRef(ctx, owner, repo, gogithub.CreateRef{
+			Ref: ref,
+			SHA: commit.GetSHA(),
+		}); err != nil {
+			return nil, fmt.Errorf("create branch %s: %w", req.Head, err)
+		}
 	}
 
-	// 6. Open the pull request.
+	// 6. Open the pull request, or return the existing open one if it's already there.
 	pr, _, err := a.gh.PullRequests.Create(ctx, owner, repo, &gogithub.NewPullRequest{
 		Title: gogithub.Ptr(req.Title),
 		Body:  gogithub.Ptr(req.Body),
@@ -106,6 +121,14 @@ func (a *Adapter) CreatePR(ctx context.Context, owner, repo string, req gitrepo.
 		Base:  gogithub.Ptr(req.Base),
 	})
 	if err != nil {
+		// PR already exists for this branch — find and return it.
+		existing, lookupErr := a.findOpenPR(ctx, owner, repo, req.Head)
+		if lookupErr != nil {
+			return nil, fmt.Errorf("create pull request: %w (lookup existing PR: %v)", err, lookupErr)
+		}
+		if existing != nil {
+			return existing, nil
+		}
 		return nil, fmt.Errorf("create pull request: %w", err)
 	}
 
@@ -114,6 +137,26 @@ func (a *Adapter) CreatePR(ctx context.Context, owner, repo string, req gitrepo.
 		HTMLURL: pr.GetHTMLURL(),
 	}, nil
 }
+
+// findOpenPR looks for an open pull request with the given head branch.
+// Returns nil (no error) when no matching PR is found.
+func (a *Adapter) findOpenPR(ctx context.Context, owner, repo, head string) (*gitrepo.PullRequest, error) {
+	prs, _, err := a.gh.PullRequests.List(ctx, owner, repo, &gogithub.PullRequestListOptions{
+		Head:  owner + ":" + head,
+		State: "open",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list PRs for branch %s: %w", head, err)
+	}
+	if len(prs) == 0 {
+		return nil, nil //nolint:nilnil
+	}
+	return &gitrepo.PullRequest{
+		Number:  prs[0].GetNumber(),
+		HTMLURL: prs[0].GetHTMLURL(),
+	}, nil
+}
+
 
 // ReadAll downloads the repository tarball in one shot and returns every file
 // path mapped to its content. Used by discovery to avoid N+1 API calls.

@@ -5,6 +5,7 @@ var registry = map[string]Handler{
 	"generate-app-chart":          &GenerateAppChart{},
 	"disable-sync-prune":          &DisableSyncPrune{},
 	"swap-chart":                  &SwapChart{},
+	"manual-review":               &ManualReview{},
 	"enable-sync-prune":           &EnableSyncPrune{},
 	"cleanup-common":              &CleanupCommon{},
 	"update-deploy-workflow":      &UpdateDeployWorkflow{},

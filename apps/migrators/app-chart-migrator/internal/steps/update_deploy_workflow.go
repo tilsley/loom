@@ -62,7 +62,7 @@ jobs:
 			"Add `publish-chart` job to CI workflow for `%s`. Charts are published to `oci://ghcr.io/acme` on merge to main.",
 			app,
 		),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files: map[string]string{
 			".github/workflows/ci.yaml": updatedCI,
 		},

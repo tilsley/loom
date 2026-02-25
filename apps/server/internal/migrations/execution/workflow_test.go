@@ -67,7 +67,7 @@ func TestMigrationOrchestrator_SingleStep_Success(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	require.Equal(t, "update-chart", result.Results[0].StepName)
 	require.Equal(t, "billing-api", result.Results[0].Candidate.Id)
-	require.True(t, result.Results[0].Success)
+	require.Equal(t, api.Completed, result.Results[0].Status)
 }
 
 func TestMigrationOrchestrator_MultiStep_Success(t *testing.T) {
@@ -190,7 +190,7 @@ func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, "completed", result.Status)
 	require.Len(t, result.Results, 1)
-	require.True(t, result.Results[0].Success)
+	require.Equal(t, api.Completed, result.Results[0].Status)
 }
 
 // ─── Manual review step ───────────────────────────────────────────────────────
@@ -230,6 +230,6 @@ func TestMigrationOrchestrator_ManualReviewStep_DispatchedToWorker(t *testing.T)
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, "completed", result.Status)
 	require.Len(t, result.Results, 1)
-	require.True(t, result.Results[0].Success)
+	require.Equal(t, api.Completed, result.Results[0].Status)
 }
 

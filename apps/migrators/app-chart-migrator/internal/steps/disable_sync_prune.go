@@ -50,7 +50,7 @@ func (h *DisableSyncPrune) Execute(
 		Repo:   cfg.GitopsRepo,
 		Title:  fmt.Sprintf("[%s] Disable sync pruning for %s (%s)", req.MigrationId, app, env),
 		Body:   fmt.Sprintf("Set `syncPolicy.automated.prune: false` on the `%s` Argo Application in `%s`.", app, env),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files:  map[string]string{path: out},
 	}, nil
 }

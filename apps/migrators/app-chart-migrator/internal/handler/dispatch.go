@@ -46,12 +46,23 @@ func (d *Dispatch) Handle(c *gin.Context) {
 
 	d.log.Info("received dispatch", "step", req.StepName, "target", req.Candidate.Id, "callbackId", req.CallbackId)
 
-	// Notify Loom that work has started (console shows spinner).
-	d.sendProgress(c.Request.Context(), req, map[string]string{"phase": "in_progress"})
-
-	// Route to step handler if config["type"] is present.
+	// Route to the registered step handler (by req.Type).
 	result, handled, err := d.routeToHandler(c.Request.Context(), req)
 	if err != nil {
+		// Signal the workflow that this step failed so it can surface in the UI.
+		_ = d.loom.SendCallback(c.Request.Context(), req.CallbackId, api.StepCompletedEvent{
+			StepName:    req.StepName,
+			CandidateId: req.Candidate.Id,
+			Success:     false,
+		})
+		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
+		return
+	}
+
+	// Handler acknowledged the step but requires no PR (e.g. manual-review).
+	// Signal "awaiting_review" so the UI shows the Approve/Reject buttons.
+	if handled && result.Owner == "" {
+		d.loom.NotifyAwaitingReview(c.Request.Context(), req.CallbackId, req.StepName, req.Candidate.Id, result.Instructions)
 		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 		return
 	}
@@ -67,7 +78,7 @@ func (d *Dispatch) Handle(c *gin.Context) {
 		files = result.Files
 	}
 
-	// Fallback to generic behavior if no handler matched
+	// Fallback to generic behavior if no handler matched.
 	if owner == "" {
 		repoName := req.Candidate.Id
 		if req.Candidate.Metadata != nil {
@@ -84,10 +95,10 @@ func (d *Dispatch) Handle(c *gin.Context) {
 		owner, repo = parts[0], parts[1]
 		title = fmt.Sprintf("[%s] %s — %s", req.MigrationId, req.StepName, req.Candidate.Id)
 		body = fmt.Sprintf("Automated migration step `%s` for candidate `%s`.", req.StepName, req.Candidate.Id)
-		branch = fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName)
+		branch = fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id)
 	}
 
-	// Create PR on GitHub
+	// Create PR on GitHub.
 	pr, err := d.gr.CreatePR(c.Request.Context(), owner, repo, gitrepo.CreatePRRequest{
 		Title: title,
 		Body:  body,
@@ -97,6 +108,11 @@ func (d *Dispatch) Handle(c *gin.Context) {
 	})
 	if err != nil {
 		d.log.Error("failed to create PR", "error", err, "target", req.Candidate.Id)
+		_ = d.loom.SendCallback(c.Request.Context(), req.CallbackId, api.StepCompletedEvent{
+			StepName:    req.StepName,
+			CandidateId: req.Candidate.Id,
+			Success:     false,
+		})
 		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 		return
 	}
@@ -113,49 +129,28 @@ func (d *Dispatch) Handle(c *gin.Context) {
 		PRURL:       pr.HTMLURL,
 	})
 
-	// Notify Loom that a PR is open and awaiting review.
-	d.sendProgress(c.Request.Context(), req, map[string]string{
-		"phase": "open",
-		"prUrl": pr.HTMLURL,
-	})
+	// Notify the workflow that the PR is open so the UI can show the link
+	// and the "Mark as merged" button while waiting for the webhook.
+	d.loom.NotifyPROpened(c.Request.Context(), req.CallbackId, req.StepName, req.Candidate.Id, pr.HTMLURL)
 
 	c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 }
 
-// routeToHandler looks up the registered step handler for req.Config["type"] and executes it.
+// routeToHandler looks up the registered step handler for req.Type and executes it.
 // Returns handled=false when no handler is registered for the step type.
 func (d *Dispatch) routeToHandler(ctx context.Context, req api.DispatchStepRequest) (*steps.Result, bool, error) {
-	if req.Config == nil {
+	if req.Type == nil {
 		return nil, false, nil
 	}
-	stepType, ok := (*req.Config)["type"]
-	if !ok {
-		return nil, false, nil
-	}
-	h, found := steps.Lookup(stepType)
+	h, found := steps.Lookup(*req.Type)
 	if !found {
 		return nil, false, nil
 	}
-	d.log.Info("executing step handler", "type", stepType, "target", req.Candidate.Id)
+	d.log.Info("executing step handler", "type", *req.Type, "target", req.Candidate.Id)
 	result, err := h.Execute(ctx, d.gr, d.stepCfg, req)
 	if err != nil {
-		d.log.Error("step handler failed", "error", err, "type", stepType)
+		d.log.Error("step handler failed", "error", err, "type", *req.Type)
 		return nil, false, err
 	}
 	return result, true, nil
-}
-
-// sendProgress sends an intermediate progress update to Loom's pr-opened endpoint.
-func (d *Dispatch) sendProgress(ctx context.Context, req api.DispatchStepRequest, meta map[string]string) {
-	event := api.StepCompletedEvent{
-		StepName:    req.StepName,
-		CandidateId: req.Candidate.Id,
-		Success:     true,
-		Metadata:    &meta,
-	}
-	if err := d.loom.SendProgress(ctx, req.CallbackId, event); err != nil {
-		d.log.Error("failed to send progress", "error", err, "phase", meta["phase"])
-		return
-	}
-	d.log.Info("progress sent", "phase", meta["phase"], "step", req.StepName, "target", req.Candidate.Id)
 }

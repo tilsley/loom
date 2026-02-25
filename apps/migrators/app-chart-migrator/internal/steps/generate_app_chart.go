@@ -95,7 +95,7 @@ jobs:
 			"Create app-specific Helm chart `charts/%s/` with per-env values and OCI publish workflow.",
 			app,
 		),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files:  files,
 	}, nil
 }

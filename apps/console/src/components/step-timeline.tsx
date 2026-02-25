@@ -8,26 +8,19 @@ import { Button, buttonVariants } from "@/components/ui";
 type Phase = "in_progress" | "open" | "merged" | "failed" | "completed" | "awaiting_review";
 
 function getPhase(r: StepResult): Phase {
-  if (!r.success) return "failed";
-  const phase = r.metadata?.phase;
-  if (
-    phase === "in_progress" ||
-    phase === "open" ||
-    phase === "merged" ||
-    phase === "awaiting_review"
-  )
-    return phase;
-  return "completed";
+  return r.status as Phase;
 }
 
 export function StepTimeline({
   results,
   stepDescriptions,
+  stepInstructions,
   onComplete,
   onRetry,
 }: {
   results: StepResult[];
   stepDescriptions?: Map<string, string>;
+  stepInstructions?: Map<string, string>;
   onComplete?: (stepName: string, candidateId: string, success: boolean) => void;
   onRetry?: (stepName: string, candidateId: string) => void;
 }) {
@@ -81,6 +74,7 @@ export function StepTimeline({
       {results.map((r, i) => {
         const phase = getPhase(r);
         const description = stepDescriptions?.get(r.stepName);
+        const instructions = stepInstructions?.get(r.stepName);
         const isLast = i === results.length - 1;
         const isActive = phase === "open" || phase === "in_progress" || phase === "awaiting_review";
 
@@ -168,13 +162,13 @@ export function StepTimeline({
               {/* Awaiting review: instructions + actions — full width below header row */}
               {phase === "awaiting_review" ? (
                 <div className="mt-3 space-y-3">
-                  {r.metadata?.instructions ? (
+                  {instructions ? (
                     <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
                       <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
                         Instructions
                       </div>
                       <ul className="space-y-1">
-                        {r.metadata.instructions.split("\n").map((line, j) => (
+                        {instructions.split("\n").map((line, j) => (
                           <li key={j} className="text-sm text-blue-200/80 font-mono">
                             {line}
                           </li>
@@ -340,10 +334,10 @@ function ReviewActions({ onComplete }: { onComplete: (success: boolean) => void 
   return (
     <div className="flex items-center gap-2">
       <Button size="sm" variant="success" disabled={pending} onClick={() => handle(true)}>
-        {pending ? "Sending..." : "Approve"}
+        {pending ? "Sending..." : "Mark as done"}
       </Button>
       <Button size="sm" variant="danger" disabled={pending} onClick={() => handle(false)}>
-        Reject
+        Mark as failed
       </Button>
     </div>
   );

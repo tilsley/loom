@@ -69,7 +69,7 @@ func (h *SwapChart) Execute(
 			env,
 			app,
 		),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files:  map[string]string{path: out},
 	}, nil
 }

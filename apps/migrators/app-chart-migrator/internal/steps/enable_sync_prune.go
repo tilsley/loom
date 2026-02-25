@@ -53,7 +53,7 @@ func (h *EnableSyncPrune) Execute(
 			app,
 			env,
 		),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files:  map[string]string{path: out},
 	}, nil
 }

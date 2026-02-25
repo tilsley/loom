@@ -126,7 +126,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	router.Use(gin.Recovery(), otelgin.Middleware(os.Getenv("OTEL_SERVICE_NAME")), validator)
+	router.Use(gin.Logger(), gin.Recovery(), otelgin.Middleware(os.Getenv("OTEL_SERVICE_NAME")), validator)
 	handlers.RegisterRoutes(router, svc, slog)
 
 	port := os.Getenv("PORT")

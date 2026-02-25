@@ -30,7 +30,7 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 	overlay := make(map[string]string)
 
 	for _, stepDef := range req.Steps {
-		// Skip steps handled by other worker apps (e.g. manual-review on "loom").
+		// Skip steps handled by other worker apps.
 		if stepDef.WorkerApp != "app-chart-migrator" {
 			stepResults = append(stepResults, api.StepDryRunResult{
 				StepName: stepDef.Name,
@@ -39,8 +39,8 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 			continue
 		}
 
-		// Skip steps with no type config.
-		if stepDef.Config == nil {
+		// Skip steps with no type.
+		if stepDef.Type == nil {
 			stepResults = append(stepResults, api.StepDryRunResult{
 				StepName: stepDef.Name,
 				Skipped:  true,
@@ -48,16 +48,7 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 			continue
 		}
 
-		stepType, ok := (*stepDef.Config)["type"]
-		if !ok {
-			stepResults = append(stepResults, api.StepDryRunResult{
-				StepName: stepDef.Name,
-				Skipped:  true,
-			})
-			continue
-		}
-
-		h, found := steps.Lookup(stepType)
+		h, found := steps.Lookup(*stepDef.Type)
 		if !found {
 			stepResults = append(stepResults, api.StepDryRunResult{
 				StepName: stepDef.Name,
@@ -73,6 +64,7 @@ func (r *Runner) Run(ctx context.Context, req api.DryRunRequest) (*api.DryRunRes
 			StepName:    stepDef.Name,
 			Candidate:   req.Candidate,
 			Config:      stepDef.Config,
+			Type:        stepDef.Type,
 			CallbackId:  "dry-run",
 			EventName:   "dry-run",
 		}

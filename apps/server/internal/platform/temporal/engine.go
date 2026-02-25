@@ -92,6 +92,9 @@ func (e *Engine) RaiseEvent(ctx context.Context, instanceID, eventName string, p
 }
 
 // CancelWorkflow requests graceful cancellation of a running workflow.
+// The workflow's ctx.Done() channel becomes readable, allowing any blocking
+// Selector (including awaitStepCompletion and awaitRetryOrCancel) to unblock
+// and return, after which the workflow completes in a Cancelled terminal state.
 func (e *Engine) CancelWorkflow(ctx context.Context, instanceID string) error {
 	if err := e.c.CancelWorkflow(ctx, instanceID, ""); err != nil {
 		return fmt.Errorf("cancel workflow %q: %w", instanceID, err)

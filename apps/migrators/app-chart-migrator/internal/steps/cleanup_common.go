@@ -58,7 +58,7 @@ func (h *CleanupCommon) Execute(
 			"Remove old `helm.values` from all env Application manifests for `%s`. Values are now in the app chart.",
 			app,
 		),
-		Branch: fmt.Sprintf("loom/%s/%s", req.MigrationId, req.StepName),
+		Branch: fmt.Sprintf("loom/%s/%s--%s", req.MigrationId, req.StepName, req.Candidate.Id),
 		Files:  prFiles,
 	}, nil
 }

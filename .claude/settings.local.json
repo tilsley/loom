@@ -57,7 +57,11 @@
       "Bash(GONOSUMDB=\"*\" GOFLAGS=\"-mod=mod\" go get:*)",
       "Bash(NODE_OPTIONS='--trace-deprecation' timeout 10 bun run:*)",
       "Bash(NODE_OPTIONS='--trace-deprecation' gtimeout 10:*)",
-      "Bash(pgrep:*)"
+      "Bash(pgrep:*)",
+      "Bash(tail:*)",
+      "Bash(echo redis-cli not available or key not found:*)",
+      "Bash(temporal workflow:*)",
+      "Bash(redis-cli:*)"
     ]
   }
 }

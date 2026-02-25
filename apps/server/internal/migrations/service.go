@@ -69,11 +69,12 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 	}
 
 	var out struct {
-		Status  string           `json:"status"`
 		Results []api.StepResult `json:"results"`
 	}
 	if len(ws.Output) > 0 {
-		_ = json.Unmarshal(ws.Output, &out)
+		if err := json.Unmarshal(ws.Output, &out); err != nil {
+			return nil, fmt.Errorf("parse workflow output: %w", err)
+		}
 	}
 
 	steps := out.Results
@@ -81,8 +82,11 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 		steps = []api.StepResult{}
 	}
 
+	// Derive response status from the engine's runtime status rather than parsing
+	// the workflow output's status field. This correctly handles terminated and
+	// cancelled workflows, where ws.Output is nil and the output field would be empty.
 	status := api.CandidateStepsResponseStatusRunning
-	if out.Status == "completed" || out.Status == "failed" {
+	if ws.RuntimeStatus != "RUNNING" {
 		status = api.CandidateStepsResponseStatusCompleted
 	}
 
@@ -344,13 +348,17 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 
 	workflowID := WorkflowID(migrationID, candidateID)
 
-	// Guard: block if candidate is already running or completed.
+	// Guard: block if candidate is already running or completed AND the workflow
+	// is still running or successfully completed. If the workflow has failed,
+	// been cancelled, or terminated, allow re-execution even if Redis still
+	// shows the old status (handles stale state after crash/cancel).
 	if candidate.Status != nil &&
 		(*candidate.Status == api.CandidateStatusRunning || *candidate.Status == api.CandidateStatusCompleted) {
-		if _, err := s.engine.GetStatus(ctx, workflowID); err == nil {
+		ws, err := s.engine.GetStatus(ctx, workflowID)
+		if err == nil && (ws.RuntimeStatus == "RUNNING" || ws.RuntimeStatus == "COMPLETED") {
 			return "", CandidateAlreadyRunError{ID: candidateID, Status: string(*candidate.Status)}
 		}
-		// Workflow gone — fall through to allow re-execution.
+		// Workflow gone, failed, cancelled, or terminated — allow re-execution.
 	}
 
 	// Merge operator-supplied inputs into candidate metadata.
