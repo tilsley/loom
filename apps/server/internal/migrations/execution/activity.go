@@ -54,24 +54,6 @@ func (a *Activities) DispatchStep(ctx context.Context, req api.DispatchStepReque
 	return nil
 }
 
-// ResetCandidateInput is the input for the ResetCandidate activity.
-type ResetCandidateInput struct {
-	MigrationID string `json:"migrationId"`
-	CandidateID string `json:"candidateId"`
-}
-
-// ResetCandidate returns the candidate to not_started state.
-func (a *Activities) ResetCandidate(ctx context.Context, input ResetCandidateInput) error {
-	if err := a.store.SetCandidateStatus(ctx, input.MigrationID, input.CandidateID, api.CandidateStatusNotStarted); err != nil {
-		return fmt.Errorf("reset candidate: %w", err)
-	}
-	a.log.Info("reset candidate to not_started",
-		"migrationId", input.MigrationID,
-		"candidate", input.CandidateID,
-	)
-	return nil
-}
-
 // UpdateCandidateStatus updates the candidate status in the migration store.
 func (a *Activities) UpdateCandidateStatus(ctx context.Context, input UpdateCandidateStatusInput) error {
 	ctx, span := otel.Tracer(instrName).Start(ctx, "UpdateCandidateStatus",

@@ -159,3 +159,12 @@
 aside::-webkit-scrollbar {
   width: 4px;
 }
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.2, 0, 0, 1);
+}

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations"
+	"github.com/tilsley/loom/pkg/api"
 )
 
 // Compile-time check: *Engine implements migrations.ExecutionEngine.
@@ -62,9 +63,9 @@ func (e *Engine) GetStatus(ctx context.Context, instanceID string) (*migrations.
 	if status == "RUNNING" {
 		val, err := e.c.QueryWorkflow(ctx, instanceID, "", "progress")
 		if err == nil {
-			var results json.RawMessage
-			if err := val.Get(&results); err == nil {
-				ws.Output = results
+			var raw json.RawMessage
+			if err := val.Get(&raw); err == nil {
+				ws.Steps = parseStepResults(raw)
 			}
 		}
 		return ws, nil
@@ -72,9 +73,9 @@ func (e *Engine) GetStatus(ctx context.Context, instanceID string) (*migrations.
 
 	// For completed/failed workflows, get the final result.
 	run := e.c.GetWorkflow(ctx, instanceID, "")
-	var result json.RawMessage
-	if err := run.Get(ctx, &result); err == nil {
-		ws.Output = result
+	var raw json.RawMessage
+	if err := run.Get(ctx, &raw); err == nil {
+		ws.Steps = parseStepResults(raw)
 	}
 
 	return ws, nil
@@ -104,6 +105,19 @@ func (e *Engine) CancelRun(ctx context.Context, instanceID string) error {
 func isNotFound(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist")
+}
+
+// parseStepResults extracts the step results array from a MigrationOrchestrator
+// result or progress-query payload. Returns nil on any parse failure so callers
+// get an empty slice rather than an error.
+func parseStepResults(raw json.RawMessage) []api.StepResult {
+	var out struct {
+		Results []api.StepResult `json:"results"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out.Results
 }
 
 func mapTemporalStatus(s enumspb.WorkflowExecutionStatus) string {

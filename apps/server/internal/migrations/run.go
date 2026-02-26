@@ -3,6 +3,8 @@ package migrations
 import (
 	"fmt"
 	"strings"
+
+	"github.com/tilsley/loom/pkg/api"
 )
 
 // RuntimeStatus values returned by the ExecutionEngine.
@@ -16,7 +18,7 @@ const (
 // RunStatus is the port-level representation returned by the ExecutionEngine.
 type RunStatus struct {
 	RuntimeStatus string
-	Output        []byte // Raw JSON of the run result (if finished)
+	Steps         []api.StepResult // Step results from the run; populated for both running and completed runs.
 }
 
 const runIDSep = "__"

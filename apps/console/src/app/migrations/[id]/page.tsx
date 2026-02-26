@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   getMigration,
@@ -14,20 +14,39 @@ import {
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { Button, Input, Skeleton } from "@/components/ui";
+import { PreviewPanel } from "@/components/preview-panel";
+import { Button, Skeleton } from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [migration, setMigration] = useState<Migration | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
-  const [previewInputs, setPreviewInputs] = useState<Record<string, string>>({});
   const [cancelCandidate, setCancelCandidate] = useState<Candidate | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  // URL-persisted filter state
+  const search = searchParams.get("q") ?? "";
+  const filter = searchParams.get("status") ?? "all";
+  const groupBy = searchParams.get("groupBy") ?? null;
+
+  function updateParam(key: string, value: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!value || value === "all") {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
+    const qs = params.toString();
+    router.replace(`${pathname}${qs ? "?" + qs : ""}`, { scroll: false });
+  }
 
   const fetchMigration = useCallback(async () => {
     try {
@@ -47,32 +66,24 @@ export default function MigrationDetail() {
     }
   }, [id]);
 
-  // Initial load + 5s polling for both migration metadata and candidates
+  // Dynamic polling: 2s when any candidate is running, 5s otherwise
+  const hasRunning = candidates.some((c) => c.status === "running");
+
   useEffect(() => {
     void fetchMigration();
     void fetchCandidates();
     const interval = setInterval(() => {
       void fetchMigration();
       void fetchCandidates();
-    }, 5000);
+    }, hasRunning ? 2000 : 5000);
     return () => clearInterval(interval);
-  }, [fetchMigration, fetchCandidates]);
+  }, [fetchMigration, fetchCandidates, hasRunning]);
 
   const kindPlural = (candidates[0]?.kind ?? "candidate") + "s";
   const kindPluralCap = kindPlural.charAt(0).toUpperCase() + kindPlural.slice(1);
 
   function handlePreview(candidate: Candidate) {
-    const required = migration?.requiredInputs ?? [];
-    if (required.length > 0) {
-      const prefilled: Record<string, string> = {};
-      for (const inp of required) {
-        prefilled[inp.name] = candidate.metadata?.[inp.name] ?? "";
-      }
-      setPreviewInputs(prefilled);
-      setPreviewCandidate(candidate);
-    } else {
-      router.push(ROUTES.preview(id, candidate.id));
-    }
+    setPreviewCandidate(candidate);
   }
 
   function handleCancel(candidate: Candidate) {
@@ -94,82 +105,6 @@ export default function MigrationDetail() {
       setCancelling(false);
     }
   }
-
-  const requiredInputs = migration?.requiredInputs ?? [];
-  const previewModal = previewCandidate && migration
-    ? createPortal(
-        <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
-          onClick={() => setPreviewCandidate(null)}
-        >
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div
-              className="relative w-full max-w-md bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-zinc-100">Preview inputs</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5 font-mono">{previewCandidate.id}</p>
-                </div>
-                <button
-                  onClick={() => setPreviewCandidate(null)}
-                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-5 py-4 space-y-4">
-                {requiredInputs.map((inp) => (
-                  <div key={inp.name}>
-                    <label className="block text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">
-                      {inp.label}
-                    </label>
-                    <Input
-                      type="text"
-                      value={previewInputs[inp.name] ?? ""}
-                      onChange={(e) => setPreviewInputs((v) => ({ ...v, [inp.name]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && requiredInputs.every((i) => previewInputs[i.name]?.trim())) {
-                          const params = new URLSearchParams(previewInputs);
-                          router.push(ROUTES.preview(id, previewCandidate.id) + "?" + params.toString());
-                          setPreviewCandidate(null);
-                        }
-                      }}
-                      placeholder={inp.label}
-                      className="font-mono"
-                      autoFocus={requiredInputs[0]?.name === inp.name}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-zinc-800">
-                <button
-                  onClick={() => setPreviewCandidate(null)}
-                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    const params = new URLSearchParams(previewInputs);
-                    router.push(ROUTES.preview(id, previewCandidate.id) + "?" + params.toString());
-                    setPreviewCandidate(null);
-                  }}
-                  disabled={requiredInputs.some((inp) => !previewInputs[inp.name]?.trim())}
-                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Preview
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null;
 
   const stepsModal = stepsOpen && migration
     ? createPortal(
@@ -321,9 +256,19 @@ export default function MigrationDetail() {
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-      {previewModal}
       {stepsModal}
       {cancelModal}
+
+      {/* Preview panel — slide-in from right */}
+      {previewCandidate ? (
+        <PreviewPanel
+          migrationId={id}
+          migration={migration}
+          candidate={previewCandidate}
+          onClose={() => setPreviewCandidate(null)}
+        />
+      ) : null}
+
       {/* Breadcrumb */}
       <Link
         href={ROUTES.migrations}
@@ -377,6 +322,12 @@ export default function MigrationDetail() {
           onPreview={handlePreview}
           onCancel={handleCancel}
           runningCandidate={null}
+          search={search}
+          filter={filter}
+          groupBy={groupBy}
+          onSearchChange={(v) => updateParam("q", v || null)}
+          onFilterChange={(v) => updateParam("status", v === "all" ? null : v)}
+          onGroupByChange={(v) => updateParam("groupBy", v)}
         />
       </section>
     </div>

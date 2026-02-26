@@ -5,11 +5,13 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   getCandidateSteps,
+  getCandidates,
   getMigration,
   completeStep,
   retryStep,
   type CandidateStepsResponse,
   type Migration,
+  type Candidate,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
 import { StepTimeline } from "@/components/step-timeline";
@@ -19,6 +21,7 @@ export default function CandidateStepsPage() {
   const { id, candidateId } = useParams<{ id: string; candidateId: string }>();
   const [stepsData, setStepsData] = useState<CandidateStepsResponse | null>(null);
   const [migration, setMigration] = useState<Migration | null>(null);
+  const [allCandidates, setAllCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -59,6 +62,11 @@ export default function CandidateStepsPage() {
     getMigration(id).then(setMigration).catch(() => {});
   }, [id]);
 
+  // Fetch all candidates for prev/next navigation
+  useEffect(() => {
+    getCandidates(id).then(setAllCandidates).catch(() => {});
+  }, [id]);
+
   const stepDescriptions = useMemo(() => {
     if (!migration) return new Map<string, string>();
     return new Map(
@@ -84,6 +92,13 @@ export default function CandidateStepsPage() {
     const merged = results.filter((r) => r.status === "merged").length;
     return { total: results.length, completed, failed, prs, merged };
   }, [stepsData]);
+
+  // Prev/next candidate navigation
+  const currentIndex = allCandidates.findIndex((c) => c.id === candidateId);
+  const prevCandidate = currentIndex > 0 ? allCandidates[currentIndex - 1] : null;
+  const nextCandidate = currentIndex >= 0 && currentIndex < allCandidates.length - 1
+    ? allCandidates[currentIndex + 1]
+    : null;
 
   // Temporal workflow ID used for event callbacks — derived from migration + candidate IDs
   const runId = `${id}__${candidateId}`;
@@ -143,6 +158,51 @@ export default function CandidateStepsPage() {
               </>
             ) : null}
           </div>
+
+          {/* Prev/next candidate navigation */}
+          {allCandidates.length > 1 ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                {prevCandidate ? (
+                  <Link
+                    href={ROUTES.candidateSteps(id, prevCandidate.id)}
+                    className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2.5 py-1.5 rounded-md border border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-800/30"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="font-mono truncate max-w-[160px]">{prevCandidate.id}</span>
+                  </Link>
+                ) : (
+                  <span className="px-2.5 py-1.5 text-xs text-zinc-700 border border-zinc-800/40 rounded-md">
+                    First candidate
+                  </span>
+                )}
+              </div>
+
+              <span className="text-xs text-zinc-600 font-mono tabular-nums">
+                {currentIndex + 1} / {allCandidates.length}
+              </span>
+
+              <div className="flex items-center gap-1">
+                {nextCandidate ? (
+                  <Link
+                    href={ROUTES.candidateSteps(id, nextCandidate.id)}
+                    className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2.5 py-1.5 rounded-md border border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-800/30"
+                  >
+                    <span className="font-mono truncate max-w-[160px]">{nextCandidate.id}</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </Link>
+                ) : (
+                  <span className="px-2.5 py-1.5 text-xs text-zinc-700 border border-zinc-800/40 rounded-md">
+                    Last candidate
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           {error ? (
             <div className="bg-red-500/8 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">

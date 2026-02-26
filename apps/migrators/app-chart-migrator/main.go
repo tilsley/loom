@@ -139,19 +139,28 @@ func main() {
 func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
 	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
-	stepDefs := make([]api.StepDefinition, 0, 2+4*len(envs)+2)
+	stepDefs := make([]api.StepDefinition, 0, 3+4*len(envs)+2)
 	stepDefs = append(stepDefs,
 		api.StepDefinition{
 			Name:        "disable-base-resource-prune",
 			Description: strPtr("Add Prune=false sync option to base/common non-Argo resources"),
-			MigratorApp:   "app-chart-migrator",
+			MigratorApp: "app-chart-migrator",
 			Type:        strPtr("disable-base-resource-prune"),
 		},
 		api.StepDefinition{
 			Name:        "generate-app-chart",
 			Description: strPtr("Generate app-specific Helm chart with per-env values"),
-			MigratorApp:   "app-chart-migrator",
+			MigratorApp: "app-chart-migrator",
 			Type:        strPtr("generate-app-chart"),
+		},
+		api.StepDefinition{
+			Name:        "verify-ecr-publish",
+			Description: strPtr("Confirm app chart has been published to ECR"),
+			MigratorApp: "app-chart-migrator",
+			Type:        strPtr("manual-review"),
+			Config: &map[string]string{
+				"instructions": "1. Open ECR in the AWS console\n2. Find the repository for this application\n3. Confirm the new chart version has been published successfully\n4. Verify the image digest and tags look correct",
+			},
 		},
 	)
 

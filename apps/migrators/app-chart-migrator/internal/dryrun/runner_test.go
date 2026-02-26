@@ -35,7 +35,7 @@ func TestRunner_SkipsNilType(t *testing.T) {
 		MigrationId: "mig",
 		Candidate:   api.Candidate{Id: "app"},
 		Steps: []api.StepDefinition{
-			{Name: "no-type", WorkerApp: "app-chart-migrator"},
+			{Name: "no-type", MigratorApp: "app-chart-migrator"},
 		},
 	}
 
@@ -53,7 +53,7 @@ func TestRunner_SkipsUnknownType(t *testing.T) {
 		MigrationId: "mig",
 		Candidate:   api.Candidate{Id: "app"},
 		Steps: []api.StepDefinition{
-			{Name: "unknown", WorkerApp: "app-chart-migrator", Type: strPtr("not-a-real-step")},
+			{Name: "unknown", MigratorApp: "app-chart-migrator", Type: strPtr("not-a-real-step")},
 		},
 	}
 
@@ -71,7 +71,7 @@ func TestRunner_SkipsOtherWorkerApp(t *testing.T) {
 		MigrationId: "mig",
 		Candidate:   api.Candidate{Id: "app"},
 		Steps: []api.StepDefinition{
-			{Name: "other-worker-step", WorkerApp: "some-other-worker", Type: strPtr("disable-base-resource-prune")},
+			{Name: "other-worker-step", MigratorApp: "some-other-worker", Type: strPtr("disable-base-resource-prune")},
 		},
 	}
 
@@ -92,7 +92,7 @@ func TestRunner_ManualReview_NoFiles(t *testing.T) {
 		Steps: []api.StepDefinition{
 			{
 				Name:      "review-dev",
-				WorkerApp: "app-chart-migrator",
+				MigratorApp: "app-chart-migrator",
 				Type:      strPtr("manual-review"),
 				Config:    &map[string]string{"instructions": "check ArgoCD"},
 			},
@@ -129,7 +129,7 @@ func TestRunner_ExecutesStep_ProducesDiff(t *testing.T) {
 		MigrationId: "mig",
 		Candidate:   candidate,
 		Steps: []api.StepDefinition{
-			{Name: "disable-base-resource-prune", WorkerApp: "app-chart-migrator", Type: strPtr("disable-base-resource-prune")},
+			{Name: "disable-base-resource-prune", MigratorApp: "app-chart-migrator", Type: strPtr("disable-base-resource-prune")},
 		},
 	}
 
@@ -170,8 +170,8 @@ func TestRunner_StackedDiffs(t *testing.T) {
 		MigrationId: "mig",
 		Candidate:   candidate,
 		Steps: []api.StepDefinition{
-			{Name: "step-1", WorkerApp: "app-chart-migrator", Type: strPtr("disable-base-resource-prune")},
-			{Name: "step-2", WorkerApp: "app-chart-migrator", Type: strPtr("disable-base-resource-prune")},
+			{Name: "step-1", MigratorApp: "app-chart-migrator", Type: strPtr("disable-base-resource-prune")},
+			{Name: "step-2", MigratorApp: "app-chart-migrator", Type: strPtr("disable-base-resource-prune")},
 		},
 	}
 

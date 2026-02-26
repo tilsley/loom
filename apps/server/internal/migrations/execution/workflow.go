@@ -20,9 +20,9 @@ type MigrationResult struct {
 }
 
 const (
-	statusRunning   = "running"
-	statusCompleted = "completed"
-	statusFailed    = "failed"
+	resultRunning   = "running"
+	resultCompleted = "completed"
+	resultFailed    = "failed"
 )
 
 // MigrationOrchestrator is the Temporal workflow that sequences a full migration.
@@ -44,7 +44,7 @@ func MigrationOrchestrator(
 	if err := workflow.SetQueryHandler(ctx, "progress", func() (MigrationResult, error) {
 		return MigrationResult{
 			MigrationId: manifest.MigrationId,
-			Status:      statusRunning,
+			Status:      resultRunning,
 			Results:     results,
 		}, nil
 	}); err != nil {
@@ -84,18 +84,18 @@ func MigrationOrchestrator(
 				failed = true
 				return MigrationResult{
 					MigrationId: manifest.MigrationId,
-					Status:      statusFailed,
+					Status:      resultFailed,
 					Results:     results,
 				}, nil
 			}
 		}
 	}
 
-	runUpdateCandidateStatus(actCtx, ctx, manifest, statusCompleted)
+	runUpdateCandidateStatus(actCtx, ctx, manifest, resultCompleted)
 
 	return MigrationResult{
 		MigrationId: manifest.MigrationId,
-		Status:      statusCompleted,
+		Status:      resultCompleted,
 		Results:     results,
 	}, nil
 }
@@ -202,31 +202,15 @@ func awaitStepCompletion(
 	status := api.StepResultStatus("completed")
 	if !event.Success {
 		status = "failed"
-	} else if event.Metadata != nil {
-		if phase, ok := (*event.Metadata)["phase"]; ok && phase != "" {
-			status = api.StepResultStatus(phase)
-		}
-	}
-
-	// Strip "phase" from metadata — it's now captured in Status.
-	var metadata *map[string]string
-	if event.Metadata != nil {
-		cleaned := make(map[string]string)
-		for k, v := range *event.Metadata {
-			if k != "phase" {
-				cleaned[k] = v
-			}
-		}
-		if len(cleaned) > 0 {
-			metadata = &cleaned
-		}
+	} else if event.Phase != nil && *event.Phase != "" {
+		status = api.StepResultStatus(*event.Phase)
 	}
 
 	upsertResult(results, api.StepResult{
 		StepName:  event.StepName,
 		Candidate: candidate,
 		Status:    status,
-		Metadata:  metadata,
+		Metadata:  event.Metadata,
 	})
 	return true
 }
@@ -268,17 +252,18 @@ func runUpdateCandidateStatus(actCtx, ctx workflow.Context, manifest api.Migrati
 	}
 }
 
-// runResetCandidate returns the candidate to not_started via the ResetCandidate activity.
+// runResetCandidate returns the candidate to not_started via the UpdateCandidateStatus activity.
 // Called from a deferred function when the workflow fails or is cancelled mid-run.
 func runResetCandidate(actCtx, ctx workflow.Context, manifest api.MigrationManifest) {
 	if len(manifest.Candidates) == 0 {
 		return
 	}
-	input := ResetCandidateInput{
+	input := UpdateCandidateStatusInput{
 		MigrationID: manifest.MigrationId,
 		CandidateID: manifest.Candidates[0].Id,
+		Status:      string(api.CandidateStatusNotStarted),
 	}
-	if err := workflow.ExecuteActivity(actCtx, "ResetCandidate", input).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(actCtx, "UpdateCandidateStatus", input).Get(ctx, nil); err != nil {
 		workflow.GetLogger(ctx).Warn("failed to reset candidate", "error", err)
 	}
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Migration, Candidate } from "@/lib/api";
 import { StatusFilter } from "./status-filter";
 import { CandidateRow } from "./candidate-row";
@@ -13,16 +13,36 @@ interface CandidateTableProps {
   onPreview: (candidate: Candidate) => void;
   onCancel?: (candidate: Candidate) => void;
   runningCandidate: string | null;
+  // Controlled filter state — synced to URL by the parent
+  search: string;
+  filter: string;
+  groupBy: string | null;
+  onSearchChange: (v: string) => void;
+  onFilterChange: (v: string) => void;
+  onGroupByChange: (v: string | null) => void;
 }
 
-export function CandidateTable({ migration, onPreview, onCancel, runningCandidate }: CandidateTableProps) {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+export function CandidateTable({
+  migration,
+  onPreview,
+  onCancel,
+  runningCandidate,
+  search,
+  filter,
+  groupBy,
+  onSearchChange,
+  onFilterChange,
+  onGroupByChange,
+}: CandidateTableProps) {
   const kind = migration.candidates[0]?.kind ?? "candidate";
   const kindPlural = kind + "s";
   const kindCap = kind.charAt(0).toUpperCase() + kind.slice(1);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [groupBy, setGroupBy] = useState<string | null>(null);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, filter]);
 
   const counts = useMemo(() => {
     const c = { running: 0, completed: 0, not_started: 0 };
@@ -111,10 +131,7 @@ export function CandidateTable({ migration, onPreview, onCancel, runningCandidat
           <Input
             type="text"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setVisibleCount(PAGE_SIZE);
-            }}
+            onChange={(e) => onSearchChange(e.target.value)}
             placeholder={`Search ${kindPlural}...`}
             className="pl-9 py-1.5 font-mono"
           />
@@ -126,10 +143,7 @@ export function CandidateTable({ migration, onPreview, onCancel, runningCandidat
         <StatusFilter
           counts={counts}
           active={filter}
-          onChange={(f) => {
-            setFilter(f);
-            setVisibleCount(PAGE_SIZE);
-          }}
+          onChange={(f) => onFilterChange(f)}
         />
 
         {groupKeys.length > 0 && (
@@ -140,7 +154,7 @@ export function CandidateTable({ migration, onPreview, onCancel, runningCandidat
               return (
                 <button
                   key={key}
-                  onClick={() => setGroupBy(isActive ? null : key)}
+                  onClick={() => onGroupByChange(isActive ? null : key)}
                   className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-1 rounded-full border transition-all ${
                     isActive
                       ? "bg-teal-500/10 text-teal-400 border-teal-500/30"

@@ -61,7 +61,8 @@
       "Bash(tail:*)",
       "Bash(echo redis-cli not available or key not found:*)",
       "Bash(temporal workflow:*)",
-      "Bash(redis-cli:*)"
+      "Bash(redis-cli:*)",
+      "WebFetch(domain:mikhail.io)"
     ]
   }
 }

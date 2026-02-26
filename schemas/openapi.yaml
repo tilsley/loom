@@ -529,6 +529,9 @@ components:
           description: ID of the candidate this event is for.
         success:
           type: boolean
+        phase:
+          type: string
+          description: Optional phase override for the step status (e.g. "open", "awaiting_review", "merged"). Takes precedence over the default success/failed status derived from the success field.
         metadata:
           type: object
           additionalProperties:

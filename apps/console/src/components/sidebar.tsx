@@ -120,7 +120,7 @@ export function Sidebar() {
                 {item.href === ROUTES.migrations && migrations.length > 0 && (
                   <ul className="mt-1 ml-4 space-y-0.5">
                     {visibleMigrations.map((m) => {
-                      const mActive = pathname === ROUTES.migrationDetail(m.id);
+                      const mActive = pathname.startsWith(ROUTES.migrationDetail(m.id));
                       return (
                         <li key={m.id}>
                           <Link
@@ -139,7 +139,14 @@ export function Sidebar() {
                       );
                     })}
                     {hiddenCount > 0 && (
-                      <li className="px-2.5 py-1 text-xs text-zinc-600">+{hiddenCount} more</li>
+                      <li>
+                        <Link
+                          href={ROUTES.migrations}
+                          className="block px-2.5 py-1 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                        >
+                          +{hiddenCount} more →
+                        </Link>
+                      </li>
                     )}
                   </ul>
                 )}

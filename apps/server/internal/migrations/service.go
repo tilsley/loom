@@ -2,7 +2,6 @@ package migrations
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -68,16 +67,7 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 		return nil, fmt.Errorf("get run status: %w", err)
 	}
 
-	var out struct {
-		Results []api.StepResult `json:"results"`
-	}
-	if len(ws.Output) > 0 {
-		if err := json.Unmarshal(ws.Output, &out); err != nil {
-			return nil, fmt.Errorf("parse run output: %w", err)
-		}
-	}
-
-	steps := out.Results
+	steps := ws.Steps
 	if steps == nil {
 		steps = []api.StepResult{}
 	}

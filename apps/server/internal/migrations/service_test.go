@@ -423,13 +423,12 @@ func TestService_GetCandidateSteps(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns completed steps when run output is present", func(t *testing.T) {
-		output, _ := json.Marshal(map[string]interface{}{
-			"status":  "completed",
-			"results": []api.StepResult{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Status: api.Completed}},
-		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.RunStatus, error) {
-				return &migrations.RunStatus{RuntimeStatus: "COMPLETED", Output: output}, nil
+				return &migrations.RunStatus{
+					RuntimeStatus: "COMPLETED",
+					Steps:         []api.StepResult{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Status: api.Completed}},
+				}, nil
 			},
 		}
 		svc := newSvc(newMemStore(), engine, &stubDryRunner{})

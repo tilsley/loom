@@ -32,11 +32,13 @@ func (c *Client) SendCallback(ctx context.Context, callbackID string, event api.
 // transitioning its visible status to "open" while it awaits merge.
 // The workflow continues waiting for a subsequent step-completed signal.
 func (c *Client) NotifyPROpened(ctx context.Context, callbackID, stepName, candidateID, prURL string) {
+	phase := "open"
 	event := api.StepCompletedEvent{
 		StepName:    stepName,
 		CandidateId: candidateID,
 		Success:     true,
-		Metadata:    &map[string]string{"phase": "open", "prUrl": prURL},
+		Phase:       &phase,
+		Metadata:    &map[string]string{"prUrl": prURL},
 	}
 	if err := c.SendCallback(ctx, callbackID, event); err != nil {
 		c.Log.Warn("failed to notify PR opened", "error", err, "callbackId", callbackID)
@@ -48,15 +50,15 @@ func (c *Client) NotifyPROpened(ctx context.Context, callbackID, stepName, candi
 // An optional instructions string is surfaced in the UI review panel.
 // The workflow continues waiting for a subsequent approve/reject signal.
 func (c *Client) NotifyAwaitingReview(ctx context.Context, callbackID, stepName, candidateID, instructions string) {
-	meta := map[string]string{"phase": "awaiting_review"}
-	if instructions != "" {
-		meta["instructions"] = instructions
-	}
+	phase := "awaiting_review"
 	event := api.StepCompletedEvent{
 		StepName:    stepName,
 		CandidateId: candidateID,
 		Success:     true,
-		Metadata:    &meta,
+		Phase:       &phase,
+	}
+	if instructions != "" {
+		event.Metadata = &map[string]string{"instructions": instructions}
 	}
 	if err := c.SendCallback(ctx, callbackID, event); err != nil {
 		c.Log.Warn("failed to notify awaiting review", "error", err, "callbackId", callbackID)

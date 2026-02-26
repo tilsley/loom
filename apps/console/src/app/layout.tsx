@@ -3,6 +3,7 @@ import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { Sidebar } from "@/components/sidebar";
+import { CommandPalette } from "@/components/command-palette";
 import { Toaster, ErrorBoundary } from "@/components/ui";
 
 const sans = Instrument_Sans({
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <ErrorBoundary>{children}</ErrorBoundary>
             </main>
           </div>
+          <CommandPalette />
         </ThemeProvider>
         <Toaster />
       </body>
