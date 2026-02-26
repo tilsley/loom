@@ -45,6 +45,8 @@ The operator starts a candidate. The server validates, sets the candidate to `ru
 
 The workflow sequences each step in turn: it dispatches outbound to the migrator, then blocks waiting for a completion signal sent via the migrator's callback to `POST /event/:id`. Steps can go through intermediate states (`open`, `awaiting_review`) before reaching a terminal state (`completed`, `merged`, `failed`).
 
+The `StepCompletedEvent` has a first-class `phase` field for intermediate statuses (e.g. `"open"`, `"awaiting_review"`, `"merged"`). When present it overrides the default `completed`/`failed` status derived from the `success` boolean. Arbitrary data (e.g. `prUrl`) stays in `metadata`.
+
 ```mermaid
 sequenceDiagram
     participant Con as Console
@@ -145,7 +147,7 @@ sequenceDiagram
     Note over E: cancellation delivered to MigrationOrchestrator
     Note over E: deferred cleanup runs (disconnected context)
 
-    E->>St: ResetCandidate activity → SetCandidateStatus(not_started)
+    E->>St: UpdateCandidateStatus activity → SetCandidateStatus(not_started)
     St-->>E: ok
     Note over E: workflow terminated
 ```
