@@ -9,7 +9,7 @@ export function DashboardStats({ migrations }: DashboardStatsProps) {
   let completedCandidates = 0;
 
   for (const m of migrations) {
-    for (const c of m.candidates) {
+    for (const c of (m.candidates ?? [])) {
       if (c.status === "running") activeCandidates++;
       else if (c.status === "completed") completedCandidates++;
     }

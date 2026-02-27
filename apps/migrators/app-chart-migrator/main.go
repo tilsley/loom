@@ -30,8 +30,8 @@ func main() {
 
 	githubURL := envOr("GITHUB_API_URL", "http://localhost:9090")
 	loomURL := envOr("LOOM_URL", "http://localhost:8080")
-	workerURL := envOr("WORKER_URL", "http://localhost:3001")
-	port := envOr("PORT", "3001")
+	workerURL := envOr("WORKER_URL", "http://localhost:8082")
+	port := envOr("PORT", "8082")
 
 	// Parse gitops repo from env
 	gitopsRepo := envOr("GITOPS_REPO", "tilsley/gitops")
@@ -114,6 +114,8 @@ func main() {
 		Reader:      ghAdapter,
 		GitopsOwner: gitopsOwner,
 		GitopsRepo:  gitopsRepoName,
+		Envs:        envs,
+		StepBuilder: buildStepDefs,
 		Log:         log,
 	}
 	discoveryRunner := &discovery.Runner{
@@ -136,11 +138,14 @@ func main() {
 	}
 }
 
-func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
-	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
-
-	stepDefs := make([]api.StepDefinition, 0, 3+4*len(envs)+2)
-	stepDefs = append(stepDefs,
+// buildStepDefs returns the ordered step definitions for the given environments.
+// The returned list is the full step sequence for a candidate that exists in
+// exactly those environments. buildAnnouncement calls this with all envs to
+// produce the migration-level template; the discoverer calls it per-candidate
+// with only the envs the candidate was actually found in.
+func buildStepDefs(envs []string) []api.StepDefinition {
+	defs := make([]api.StepDefinition, 0, 3+4*len(envs)+2)
+	defs = append(defs,
 		api.StepDefinition{
 			Name:        "disable-base-resource-prune",
 			Description: strPtr("Add Prune=false sync option to base/common non-Argo resources"),
@@ -164,27 +169,26 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 		},
 	)
 
-	// Per-env steps: disable-sync-prune → swap-chart → review → enable-sync-prune
 	for _, env := range envs {
-		stepDefs = append(stepDefs,
+		defs = append(defs,
 			api.StepDefinition{
 				Name:        "disable-sync-prune-" + env,
 				Description: strPtr("Disable sync pruning for " + env),
-				MigratorApp:   "app-chart-migrator",
+				MigratorApp: "app-chart-migrator",
 				Type:        strPtr("disable-sync-prune"),
 				Config:      &map[string]string{"env": env},
 			},
 			api.StepDefinition{
 				Name:        "swap-chart-" + env,
 				Description: strPtr("Swap to OCI app chart for " + env),
-				MigratorApp:   "app-chart-migrator",
+				MigratorApp: "app-chart-migrator",
 				Type:        strPtr("swap-chart"),
 				Config:      &map[string]string{"env": env},
 			},
 			api.StepDefinition{
 				Name:        "review-swap-chart-" + env,
 				Description: strPtr("Manual review of ArgoCD after chart swap for " + env),
-				MigratorApp:   "app-chart-migrator",
+				MigratorApp: "app-chart-migrator",
 				Type:        strPtr("manual-review"),
 				Config: &map[string]string{
 					"instructions": "1. Open the ArgoCD UI\n2. Find the application in the " + env + " environment\n3. Verify app health is Healthy\n4. Verify sync status is Synced\n5. Check no resources are OutOfSync or orphaned\n6. Confirm pods are running with expected image",
@@ -193,27 +197,32 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 			api.StepDefinition{
 				Name:        "enable-sync-prune-" + env,
 				Description: strPtr("Re-enable sync pruning for " + env),
-				MigratorApp:   "app-chart-migrator",
+				MigratorApp: "app-chart-migrator",
 				Type:        strPtr("enable-sync-prune"),
 				Config:      &map[string]string{"env": env},
 			},
 		)
 	}
 
-	stepDefs = append(stepDefs,
+	defs = append(defs,
 		api.StepDefinition{
 			Name:        "cleanup-common",
 			Description: strPtr("Remove old helm values from base application"),
-			MigratorApp:   "app-chart-migrator",
+			MigratorApp: "app-chart-migrator",
 			Type:        strPtr("cleanup-common"),
 		},
 		api.StepDefinition{
 			Name:        "update-deploy-workflow",
 			Description: strPtr("Update CI workflow for app chart deployment"),
-			MigratorApp:   "app-chart-migrator",
+			MigratorApp: "app-chart-migrator",
 			Type:        strPtr("update-deploy-workflow"),
 		},
 	)
+	return defs
+}
+
+func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
+	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
 	return api.MigrationAnnouncement{
 		Id:             "app-chart-migration",
@@ -221,8 +230,8 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 		Description:    desc,
 		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository"}},
 		Candidates:     []api.Candidate{},
-		Steps:          stepDefs,
-		MigratorUrl:      workerURL,
+		Steps:          buildStepDefs(envs),
+		MigratorUrl:    workerURL,
 	}
 }
 

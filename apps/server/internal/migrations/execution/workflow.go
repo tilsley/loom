@@ -16,7 +16,7 @@ import (
 type MigrationResult struct {
 	MigrationId string           `json:"migrationId"`
 	Status      string           `json:"status"`
-	Results     []api.StepResult `json:"results"`
+	Results     []api.StepState `json:"results"`
 }
 
 const (
@@ -39,7 +39,7 @@ func MigrationOrchestrator(
 ) (MigrationResult, error) {
 	workflow.GetLogger(ctx).Info("MigrationOrchestrator started", "migrationId", manifest.MigrationId, "steps", len(manifest.Steps), "candidates", len(manifest.Candidates))
 
-	results := make([]api.StepResult, 0, len(manifest.Steps)*len(manifest.Candidates))
+	results := make([]api.StepState, 0, len(manifest.Steps)*len(manifest.Candidates))
 
 	if err := workflow.SetQueryHandler(ctx, "progress", func() (MigrationResult, error) {
 		return MigrationResult{
@@ -108,7 +108,7 @@ func processStep(
 	manifest api.MigrationManifest,
 	step api.StepDefinition,
 	candidate api.Candidate,
-	results *[]api.StepResult,
+	results *[]api.StepState,
 ) (bool, error) {
 	callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	stepCompletedSignal := migrations.StepEventName(step.Name, candidate.Id)
@@ -119,10 +119,10 @@ func processStep(
 	for {
 		// Mark as in-progress before dispatching so the progress query
 		// reflects the current step immediately — not only after it completes.
-		upsertResult(results, api.StepResult{
+		upsertResult(results, api.StepState{
 			StepName:  step.Name,
 			Candidate: candidate,
-			Status:    api.InProgress,
+			Status:    api.StepStateStatusInProgress,
 		})
 
 		req := api.DispatchStepRequest{
@@ -141,8 +141,7 @@ func processStep(
 		}
 
 		// Keep receiving signals until the step reaches a terminal state.
-		// "open" (PR created, awaiting merge) and "awaiting_review" (manual review)
-		// are intermediate — keep waiting for the final signal.
+		// "pending" is intermediate — keep waiting for the final signal.
 		// awaitStepCompletion returns false if the workflow was cancelled mid-wait,
 		// in which case it does NOT append to results (safe to return immediately).
 		// When it returns true it has always appended, so results is non-empty.
@@ -151,13 +150,13 @@ func processStep(
 				return false, nil // cancelled while waiting for step signal
 			}
 			last := (*results)[len(*results)-1]
-			if last.Status != api.Open && last.Status != api.AwaitingReview {
+			if last.Status != api.StepStateStatusPending {
 				break
 			}
 		}
 
 		last := (*results)[len(*results)-1]
-		if last.Status == api.Completed || last.Status == api.Merged {
+		if last.Status == api.StepStateStatusSucceeded || last.Status == api.StepStateStatusMerged {
 			return true, nil
 		}
 
@@ -174,19 +173,13 @@ func processStep(
 // awaitStepCompletion blocks until a step-completed signal arrives or the
 // workflow is cancelled. Returns false if the workflow was cancelled before
 // a signal arrived (no result is appended in that case).
-//
-// It derives the step status from the event: migrators may include a "phase"
-// key in metadata (e.g. "merged") to communicate a richer terminal state;
-// otherwise status is "completed" or "failed" based on event.Success.
-// The "phase" key is stripped from the stored metadata since it is now
-// captured in the first-class Status field.
 func awaitStepCompletion(
 	ctx workflow.Context,
 	stepCompletedCh workflow.ReceiveChannel,
 	candidate api.Candidate,
-	results *[]api.StepResult,
+	results *[]api.StepState,
 ) bool {
-	var event api.StepCompletedEvent
+	var event api.StepStatusEvent
 	var received bool
 	sel := workflow.NewSelector(ctx)
 	sel.AddReceive(stepCompletedCh, func(c workflow.ReceiveChannel, _ bool) {
@@ -199,17 +192,10 @@ func awaitStepCompletion(
 		return false
 	}
 
-	status := api.StepResultStatus("completed")
-	if !event.Success {
-		status = "failed"
-	} else if event.Phase != nil && *event.Phase != "" {
-		status = api.StepResultStatus(*event.Phase)
-	}
-
-	upsertResult(results, api.StepResult{
+	upsertResult(results, api.StepState{
 		StepName:  event.StepName,
 		Candidate: candidate,
-		Status:    status,
+		Status:    api.StepStateStatus(event.Status),
 		Metadata:  event.Metadata,
 	})
 	return true
@@ -269,7 +255,7 @@ func runResetCandidate(actCtx, ctx workflow.Context, manifest api.MigrationManif
 }
 
 // upsertResult updates an existing entry for the same step+candidate, or appends a new one.
-func upsertResult(results *[]api.StepResult, r api.StepResult) {
+func upsertResult(results *[]api.StepState, r api.StepState) {
 	for i, existing := range *results {
 		if existing.StepName == r.StepName && existing.Candidate.Id == r.Candidate.Id {
 			(*results)[i] = r
@@ -280,7 +266,7 @@ func upsertResult(results *[]api.StepResult, r api.StepResult) {
 }
 
 // removeResult removes the entry for the given step+candidate from results (inverse of upsertResult).
-func removeResult(results *[]api.StepResult, stepName, candidateId string) {
+func removeResult(results *[]api.StepState, stepName, candidateId string) {
 	for i, r := range *results {
 		if r.StepName == stepName && r.Candidate.Id == candidateId {
 			*results = append((*results)[:i], (*results)[i+1:]...)

@@ -1,36 +1,41 @@
 # server
 
-The Loom orchestration server. It is the central coordinator for all migration runs.
+The Loom orchestration server. It is the central control plane that connects the console, migrators, and Temporal.
 
-## What it does
+## Responsibilities
 
-- Runs a **Temporal workflow** (`MigrationOrchestrator`) that sequences migration steps across target repos, one step at a time, waiting for each to complete before moving to the next
-- Exposes a **REST API** for the console to register migrations, start runs, and query progress
-- Receives **worker announcements** via Dapr pub/sub (`migration-registry` topic) and saves migration definitions to its state store — workers self-register on startup
-- Dispatches step work to the migration worker via Dapr pub/sub (`migration-steps` topic)
-- Receives **callbacks** from the worker when a PR is opened (`POST /event/:id/pr-opened`) and when a step completes (`POST /event/:id`), which signal the waiting workflow to advance
-- Implements a **saga**: if any step fails, completed steps are compensated in reverse order
+**1. Migration registry** — receives `POST /registry/announce` from migrators on startup, persists migration definitions and candidate lists in Redis, serves them to the console.
 
-## Key concepts
+**2. Workflow lifecycle** — starts, cancels, and signals Temporal workflows on behalf of the console; queries workflow state and translates step progress back to the API.
 
-The server has **no knowledge of what individual steps do**. It only knows the step names and sequence declared by the worker. All migration domain logic lives in the worker.
+**3. Event relay** — receives step callbacks from migrators (`POST /event/:id`) and forwards them as Temporal signals into the waiting workflow.
+
+**4. Console API** — serves everything the UI needs: migration listing, candidate management, step progress, dry-run previews.
+
+The server has **no knowledge of what individual steps do**. It knows that a migration has steps and that they are executed by a named migrator at a given URL — nothing more.
 
 ## API
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/migrations` | List registered migrations |
-| `POST` | `/migrations` | Register a migration manually |
-| `GET` | `/migrations/:id` | Get a specific migration |
-| `DELETE` | `/migrations/:id` | Delete a migration |
-| `POST` | `/migrations/:id/run` | Start a run for one target repo |
-| `POST` | `/event/:id` | Worker callback: step completed |
-| `POST` | `/event/:id/pr-opened` | Worker callback: PR is open |
-| `POST` | `/registry/announce` | Dapr delivers worker announcements here |
+| `GET` | `/migrations/:id` | Get a migration |
+| `POST` | `/migrations/:id/candidates` | Submit discovered candidates |
+| `GET` | `/migrations/:id/candidates` | List candidates |
+| `POST` | `/migrations/:id/candidates/:cid/start` | Start a run for a candidate |
+| `POST` | `/migrations/:id/candidates/:cid/cancel` | Cancel a running candidate |
+| `POST` | `/migrations/:id/candidates/:cid/retry-step` | Retry a failed step |
+| `GET` | `/migrations/:id/candidates/:cid/steps` | Get step progress |
+| `POST` | `/migrations/:id/dry-run` | Dry-run preview |
+| `POST` | `/event/:id` | Migrator callback: step update or completion |
+| `POST` | `/registry/announce` | Migrator self-registration on startup |
 
 ## Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TEMPORAL_HOSTPORT` | `localhost:7233` | Temporal server address |
+| `REDIS_ADDR` | `localhost:6379` | Redis address |
+| `REDIS_PASSWORD` | _(empty)_ | Redis password |
 | `PORT` | `8080` | HTTP listen port |
+| `OTEL_ENABLED` | `false` | Enable OpenTelemetry tracing and metrics |

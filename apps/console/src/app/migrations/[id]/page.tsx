@@ -60,7 +60,7 @@ export default function MigrationDetail() {
   const fetchCandidates = useCallback(async () => {
     try {
       const data = await getCandidates(id);
-      setCandidates(data);
+      setCandidates(data ?? []);
     } catch {
       // Silently ignore — migration may not have candidates yet
     }

@@ -25,7 +25,7 @@ export default function Dashboard() {
     }[] = [];
 
     for (const m of migrations) {
-      for (const t of m.candidates) {
+      for (const t of (m.candidates ?? [])) {
         if (t.id.toLowerCase().includes(q)) {
           hits.push({
             migration: m,

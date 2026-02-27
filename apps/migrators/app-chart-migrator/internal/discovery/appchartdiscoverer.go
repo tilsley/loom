@@ -69,10 +69,17 @@ type fileEntry struct {
 //  4. Group matching files by their app.kubernetes.io/instance label —
 //     each unique label becomes one candidate.
 //  5. Emit a Candidate per group with gitops + app-repo file groups.
+//
+// Envs is the ordered list of all configured environments (e.g. ["dev","staging","prod"]).
+// StepBuilder, if set, is called with the subset of Envs the candidate was found in,
+// returning the tailored step list stored on the candidate. This lets each candidate
+// carry only the steps that apply to it rather than the full migration template.
 type AppChartDiscoverer struct {
 	Reader      gitrepo.RepoReader
 	GitopsOwner string
 	GitopsRepo  string
+	Envs        []string
+	StepBuilder func(envs []string) []api.StepDefinition
 	Log         *slog.Logger
 }
 
@@ -227,6 +234,22 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 
 		appRepo := instance
 
+		// Compute the ordered list of envs this candidate was actually found in,
+		// preserving the configured order so steps are always sequenced correctly.
+		var candidateEnvs []string
+		for _, env := range d.Envs {
+			if _, ok := meta[instance].envs[env]; ok {
+				candidateEnvs = append(candidateEnvs, env)
+			}
+		}
+
+		// Build per-candidate steps if a builder is configured.
+		var candidateSteps *[]api.StepDefinition
+		if d.StepBuilder != nil {
+			built := d.StepBuilder(candidateEnvs)
+			candidateSteps = &built
+		}
+
 		candidates = append(candidates, api.Candidate{
 			Id:   instance,
 			Kind: "application",
@@ -234,6 +257,7 @@ func (d *AppChartDiscoverer) Discover(ctx context.Context) ([]api.Candidate, err
 				"repoName": appRepo,
 			},
 			Files: &fileGroups,
+			Steps: candidateSteps,
 		})
 	}
 

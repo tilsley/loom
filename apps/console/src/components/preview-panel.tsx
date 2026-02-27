@@ -25,7 +25,10 @@ interface PreviewPanelProps {
 
 export function PreviewPanel({ migrationId, migration, candidate, onClose }: PreviewPanelProps) {
   const router = useRouter();
-  const requiredInputs = migration.requiredInputs ?? [];
+  const requiredInputs = useMemo(
+    () => migration.requiredInputs ?? [],
+    [migration.requiredInputs],
+  );
 
   const [inputs, setInputs] = useState<Record<string, string>>(() => {
     const prefilled: Record<string, string> = {};
@@ -39,6 +42,8 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
+  // When required inputs exist, dry run must be explicitly triggered by the user
+  const [dryRunEnabled, setDryRunEnabled] = useState(requiredInputs.length === 0);
 
   const lastDryRunInputs = useRef<string>("");
 
@@ -68,9 +73,10 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
   );
 
   useEffect(() => {
+    if (!dryRunEnabled) return;
     if (requiredInputs.length > 0 && !allInputsFilled) return;
     triggerDryRun(candidateWithInputs);
-  }, [candidateWithInputs, requiredInputs.length, allInputsFilled, triggerDryRun]);
+  }, [dryRunEnabled, candidateWithInputs, requiredInputs.length, allInputsFilled, triggerDryRun]);
 
   async function handleStart() {
     setExecuting(true);
@@ -89,7 +95,7 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
     }
   }
 
-  const steps = migration.steps ?? [];
+  const steps = (candidate.steps?.length ? candidate.steps : migration.steps) ?? [];
 
   const dryRunByStep = useMemo(() => {
     if (!dryRunResult) return new Map<string, DryRunResult["steps"][number]>();
@@ -131,8 +137,10 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
                   Simulating…
                 </span>
               ) : null}
-              {requiredInputs.length > 0 && !allInputsFilled ? (
-                <span className="text-xs text-zinc-600 italic">Fill inputs to preview</span>
+              {requiredInputs.length > 0 && !dryRunEnabled ? (
+                <span className="text-xs text-zinc-600 italic">
+                  {allInputsFilled ? "Click \"Run preview\" to simulate" : "Fill inputs to preview"}
+                </span>
               ) : null}
             </div>
           </div>
@@ -175,6 +183,18 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
                     />
                   </div>
                 ))}
+                <div className="flex justify-end pt-1">
+                  <button
+                    onClick={() => {
+                      lastDryRunInputs.current = "";
+                      setDryRunEnabled(true);
+                    }}
+                    disabled={!allInputsFilled}
+                    className="text-xs font-medium px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 border border-zinc-700 hover:border-zinc-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Run preview
+                  </button>
+                </div>
               </div>
             </section>
           ) : null}

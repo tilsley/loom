@@ -40,7 +40,7 @@ export default function PreviewPage() {
     Promise.all([getMigration(id), getCandidates(id)])
       .then(([mig, candidates]) => {
         setMigration(mig);
-        const found = candidates.find((c) => c.id === candidateId);
+        const found = (candidates ?? []).find((c) => c.id === candidateId);
         if (!found) {
           setLoadError(`Candidate "${candidateId}" not found`);
           return;
@@ -50,6 +50,7 @@ export default function PreviewPage() {
           kind: found.kind,
           metadata: found.metadata,
           files: found.files,
+          steps: found.steps,
         };
         setCandidate(c);
 
@@ -124,7 +125,10 @@ export default function PreviewPage() {
     }
   }
 
-  const steps = migration?.steps ?? [];
+  // Use the candidate's own step list if present — it was computed at discovery
+  // time and contains only the steps applicable to this specific candidate.
+  // Fall back to the migration-level template for display if not set.
+  const steps = (candidate?.steps?.length ? candidate.steps : migration?.steps) ?? [];
 
   const dryRunByStep = useMemo(() => {
     if (!dryRunResult) return new Map<string, DryRunResult["steps"][number]>();

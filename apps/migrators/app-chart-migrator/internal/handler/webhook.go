@@ -61,15 +61,14 @@ func (w *Webhook) Handle(c *gin.Context) {
 	w.log.Info("PR merged, sending callback", "target", cb.CandidateId, "step", cb.StepName, "pr", cb.PRURL)
 
 	meta := map[string]string{
-		"phase":     "merged",
 		"prUrl":     cb.PRURL,
 		"commitSha": fmt.Sprintf("sha-merged-%s-%d", cb.StepName, payload.PullRequest.Number),
 	}
 
-	event := api.StepCompletedEvent{
+	event := api.StepStatusEvent{
 		StepName:    cb.StepName,
 		CandidateId: cb.CandidateId,
-		Success:     true,
+		Status:      api.StepStatusEventStatusMerged,
 		Metadata:    &meta,
 	}
 

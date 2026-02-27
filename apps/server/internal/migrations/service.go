@@ -69,7 +69,7 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 
 	steps := ws.Steps
 	if steps == nil {
-		steps = []api.StepResult{}
+		steps = []api.StepState{}
 	}
 
 	// Derive response status from the engine's runtime status rather than parsing
@@ -85,7 +85,7 @@ func (s *Service) GetCandidateSteps(ctx context.Context, migrationID, candidateI
 
 // HandleEvent raises a StepCompleted signal into the active run,
 // unblocking the signal wait for the matching step+candidate.
-func (s *Service) HandleEvent(ctx context.Context, instanceID string, event api.StepCompletedEvent) error {
+func (s *Service) HandleEvent(ctx context.Context, instanceID string, event api.StepStatusEvent) error {
 	eventName := StepEventName(event.StepName, event.CandidateId)
 	if err := s.engine.RaiseEvent(ctx, instanceID, eventName, event); err != nil {
 		return fmt.Errorf("raise event %q: %w", eventName, err)
@@ -287,10 +287,15 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 		return nil, MigrationNotFoundError{ID: migrationID}
 	}
 
+	steps := m.Steps
+	if candidate.Steps != nil && len(*candidate.Steps) > 0 {
+		steps = *candidate.Steps
+	}
+
 	req := api.DryRunRequest{
 		MigrationId: migrationID,
 		Candidate:   candidate,
-		Steps:       m.Steps,
+		Steps:       steps,
 	}
 	result, err := s.dryRunner.DryRun(ctx, m.MigratorUrl, req)
 	status := "ok"
@@ -361,10 +366,15 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		}
 	}
 
+	manifestSteps := m.Steps
+	if candidate.Steps != nil && len(*candidate.Steps) > 0 {
+		manifestSteps = *candidate.Steps
+	}
+
 	manifest := api.MigrationManifest{
 		MigrationId: migrationID,
 		Candidates:  []api.Candidate{candidate},
-		Steps:       m.Steps,
+		Steps:       manifestSteps,
 		MigratorUrl:   m.MigratorUrl,
 	}
 

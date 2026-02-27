@@ -8,7 +8,7 @@ interface ActiveRunsProps {
 
 export function ActiveRuns({ migrations }: ActiveRunsProps) {
   const active = migrations.filter((m) =>
-    m.candidates.some((c) => c.status === "running"),
+    (m.candidates ?? []).some((c) => c.status === "running"),
   );
 
   return (
@@ -22,7 +22,7 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
         ) : (
           <div className="space-y-4">
             {active.map((m) => {
-              const runningCount = m.candidates.filter((c) => c.status === "running").length;
+              const runningCount = (m.candidates ?? []).filter((c) => c.status === "running").length;
 
               return (
                 <div key={m.id}>
@@ -34,10 +34,10 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
                       {m.name}
                     </Link>
                     <span className="text-xs font-mono text-zinc-500 shrink-0 ml-2">
-                      {runningCount}/{m.candidates.length} running
+                      {runningCount}/{(m.candidates ?? []).length} running
                     </span>
                   </div>
-                  <ProgressBar candidates={m.candidates} />
+                  <ProgressBar candidates={m.candidates ?? []} />
                 </div>
               );
             })}

@@ -10,12 +10,13 @@ function timeAgo(date: string): string {
 }
 
 export function MigrationCard({ migration }: { migration: Migration }) {
-  const kindPlural = (migration.candidates[0]?.kind ?? "candidate") + "s";
-  const runCount = migration.candidates.filter(
+  const candidates = migration.candidates ?? [];
+  const kindPlural = (candidates[0]?.kind ?? "candidate") + "s";
+  const runCount = candidates.filter(
     (c) => c.status === "running" || c.status === "completed",
   ).length;
   const hasRuns = runCount > 0;
-  const doneCount = migration.candidates.filter((c) => c.status === "completed").length;
+  const doneCount = candidates.filter((c) => c.status === "completed").length;
 
   return (
     <Link
@@ -43,7 +44,7 @@ export function MigrationCard({ migration }: { migration: Migration }) {
 
         {/* Bottom row: stats */}
         <div className="flex items-center gap-3 mt-3">
-          <Stat label={kindPlural} value={migration.candidates.length} />
+          <Stat label={kindPlural} value={candidates.length} />
           <StatDivider />
           <Stat label="steps" value={migration.steps.length} />
           <StatDivider />

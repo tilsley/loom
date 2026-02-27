@@ -34,7 +34,7 @@ export function CandidateTable({
   onFilterChange,
   onGroupByChange,
 }: CandidateTableProps) {
-  const kind = migration.candidates[0]?.kind ?? "candidate";
+  const kind = (migration.candidates ?? [])[0]?.kind ?? "candidate";
   const kindPlural = kind + "s";
   const kindCap = kind.charAt(0).toUpperCase() + kind.slice(1);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -46,7 +46,7 @@ export function CandidateTable({
 
   const counts = useMemo(() => {
     const c = { running: 0, completed: 0, not_started: 0 };
-    for (const t of migration.candidates) {
+    for (const t of (migration.candidates ?? [])) {
       if (t.status === "completed") c.completed++;
       else if (t.status === "running") c.running++;
       else c.not_started++;
@@ -57,7 +57,7 @@ export function CandidateTable({
   // Derive groupable keys from metadata across all candidates
   const groupKeys = useMemo(() => {
     const keys = new Set<string>();
-    for (const c of migration.candidates) {
+    for (const c of (migration.candidates ?? [])) {
       if (!c.metadata) continue;
       for (const k of Object.keys(c.metadata)) {
         keys.add(k);
@@ -67,7 +67,7 @@ export function CandidateTable({
   }, [migration.candidates]);
 
   const filtered = useMemo(() => {
-    let candidates = migration.candidates;
+    let candidates = migration.candidates ?? [];
 
     if (search.trim()) {
       const q = search.toLowerCase();

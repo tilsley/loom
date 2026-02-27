@@ -1,6 +1,6 @@
 import type { components } from "./api.gen";
 
-export type StepResult = components["schemas"]["StepResult"];
+export type StepState = components["schemas"]["StepState"];
 export type Migration = components["schemas"]["Migration"];
 export type Candidate = components["schemas"]["Candidate"];
 export type CandidateStatus = components["schemas"]["CandidateStatus"];
@@ -33,12 +33,12 @@ export async function completeStep(
   runId: string,
   stepName: string,
   candidateId: string,
-  success: boolean,
+  status: string,
 ): Promise<void> {
   const res = await fetch(`${BASE}/event/${runId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stepName, candidateId, success }),
+    body: JSON.stringify({ stepName, candidateId, status }),
   });
   if (!res.ok) throw new Error(await res.text());
 }

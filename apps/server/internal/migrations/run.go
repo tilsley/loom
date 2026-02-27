@@ -18,7 +18,7 @@ const (
 // RunStatus is the port-level representation returned by the ExecutionEngine.
 type RunStatus struct {
 	RuntimeStatus string
-	Steps         []api.StepResult // Step results from the run; populated for both running and completed runs.
+	Steps         []api.StepState // Step results from the run; populated for both running and completed runs.
 }
 
 const runIDSep = "__"

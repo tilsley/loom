@@ -67,6 +67,7 @@ mock-github:
 	go run ./apps/mock-github
 
 migrator:
+	@lsof -ti :8082 | xargs kill -9 2>/dev/null || true
 	cd apps/migrators/app-chart-migrator && go run .
 
 reset:
@@ -100,6 +101,7 @@ console-install:
 	cd $(CONSOLE_DIR) && bun install
 
 console-dev: generate-ts
+	@lsof -ti :3000 | xargs kill -9 2>/dev/null || true
 	cd $(CONSOLE_DIR) && bun run dev
 
 console-build: generate-ts

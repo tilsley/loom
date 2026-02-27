@@ -38,9 +38,9 @@ The server has no knowledge of what any migration actually does. It knows that a
 
 **The registration pattern** binds them together:
 
-- Workers announce their migration definition to the server on startup via Dapr pub/sub (`/registry/announce`). The announcement includes the migration ID, name, description, ordered step list, and required inputs.
+- Workers announce their migration definition to the server on startup via `POST /registry/announce`. The announcement includes the migration ID, name, description, ordered step list, required inputs, and the worker's base URL (`migratorUrl`).
 - Workers submit discovered candidates to the server via `POST /migrations/{id}/candidates`. The server stores candidates but treats metadata as an opaque key/value map — it never interprets it.
-- The server dispatches step execution to the correct worker via pub/sub (worker app is named per-step in the migration definition). Workers signal completion back via `POST /event/{id}`.
+- The server dispatches step execution to the worker via direct HTTP (`POST {migratorUrl}/dispatch-step`). Workers signal completion back via `POST /event/{id}`.
 
 This means: **adding a new migration type requires only a new worker app**. The server, console, and all operational tooling work without modification.
 
@@ -52,7 +52,7 @@ This means: **adding a new migration type requires only a new worker app**. The 
 
 - New migration types are self-contained. A team writes a worker, deploys it, and it appears in the console on next startup — no server or console changes required.
 - The management layer (state, sequencing, UI) is tested and hardened once. Workers only need to implement discovery, dry-run, and step execution.
-- Workers can be written in any language that can speak HTTP and Dapr pub/sub. The contract is defined by `schemas/openapi.yaml`.
+- Workers can be written in any language that can speak HTTP. The contract is defined by `schemas/openapi.yaml`.
 - Migrations are observable and operable through a single console regardless of type — no per-migration dashboards.
 - The server's Temporal-backed workflow engine handles retry, cancel, and progress tracking durably. Workers don't need to implement any of this.
 

@@ -427,7 +427,7 @@ func TestService_GetCandidateSteps(t *testing.T) {
 			getStatusFn: func(_ context.Context, _ string) (*migrations.RunStatus, error) {
 				return &migrations.RunStatus{
 					RuntimeStatus: "COMPLETED",
-					Steps:         []api.StepResult{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Status: api.Completed}},
+					Steps:         []api.StepState{{StepName: "step-1", Candidate: api.Candidate{Id: "repo-a"}, Status: api.StepStateStatusSucceeded}},
 				}, nil
 			},
 		}
@@ -890,7 +890,7 @@ func TestService_HandleEvent(t *testing.T) {
 		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 		candidate := api.Candidate{Id: "repo-a"}
 
-		err := svc.HandleEvent(ctx, "run-123", api.StepCompletedEvent{StepName: "step-1", CandidateId: candidate.Id})
+		err := svc.HandleEvent(ctx, "run-123", api.StepStatusEvent{StepName: "step-1", CandidateId: candidate.Id})
 		require.NoError(t, err)
 		assert.Equal(t, migrations.StepEventName("step-1", candidate.Id), raisedEvent)
 	})
@@ -903,7 +903,7 @@ func TestService_HandleEvent(t *testing.T) {
 		}
 		svc := newSvc(newMemStore(), engine, &stubDryRunner{})
 
-		err := svc.HandleEvent(ctx, "run-123", api.StepCompletedEvent{})
+		err := svc.HandleEvent(ctx, "run-123", api.StepStatusEvent{})
 		require.ErrorContains(t, err, "signal failed")
 	})
 }

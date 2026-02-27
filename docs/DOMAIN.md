@@ -98,7 +98,7 @@ Two representations:
 | Type | Purpose |
 |---|---|
 | `StepDefinition` | The plan — name, type, migrator app, config |
-| `StepResult` | The outcome — status, metadata, PR URL |
+| `StepState` | The outcome — status, metadata |
 
 A Step has a **type** that determines which handler the Migrator routes to
 (e.g. `disable-base-resource-prune`, `manual-review`). The server treats all
@@ -107,10 +107,14 @@ step types uniformly — type routing is the Migrator's responsibility.
 Step statuses progress through:
 
 ```
-in_progress → open → merged
-           → awaiting_review → completed
+in_progress → pending → succeeded
+                      → merged
            → failed → (retry) → ...
 ```
+
+`pending` is the only intermediate status — the Migrator sends it to update
+visible state (e.g. a PR URL in metadata) while the workflow keeps waiting.
+`merged` and `succeeded` are both terminal success states.
 
 ---
 
@@ -124,7 +128,7 @@ Migrator (external service)
                             │
                             └── Run (one per candidate)
                                   ├── input: MigrationManifest (snapshot of spec + candidate)
-                                  └── output: StepResults (one per step)
+                                  └── output: StepStates (one per step)
                                         │
                                         └── dispatched to ──► Migrator (executes each step)
 ```

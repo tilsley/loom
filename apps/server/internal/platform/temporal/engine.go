@@ -110,9 +110,9 @@ func isNotFound(err error) bool {
 // parseStepResults extracts the step results array from a MigrationOrchestrator
 // result or progress-query payload. Returns nil on any parse failure so callers
 // get an empty slice rather than an error.
-func parseStepResults(raw json.RawMessage) []api.StepResult {
+func parseStepResults(raw json.RawMessage) []api.StepState {
 	var out struct {
-		Results []api.StepResult `json:"results"`
+		Results []api.StepState `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil

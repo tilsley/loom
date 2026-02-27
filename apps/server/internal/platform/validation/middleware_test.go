@@ -75,7 +75,7 @@ func TestSubmitCandidates_EmptyCandidatesArray_Passes(t *testing.T) {
 
 func TestRaiseEvent_MissingRequiredFields_Returns400(t *testing.T) {
 	r := newRouter(t)
-	// stepName, candidateId, and success are all required
+	// stepName, candidateId, and status are all required
 	w := do(r, http.MethodPost, "/event/wf-123", `{"stepName":"deploy"}`)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
@@ -83,7 +83,7 @@ func TestRaiseEvent_MissingRequiredFields_Returns400(t *testing.T) {
 func TestRaiseEvent_ValidPayload_Passes(t *testing.T) {
 	r := newRouter(t)
 	w := do(r, http.MethodPost, "/event/wf-123",
-		`{"stepName":"deploy","candidateId":"billing-api","success":true}`)
+		`{"stepName":"deploy","candidateId":"billing-api","status":"pending"}`)
 	assert.Equal(t, http.StatusAccepted, w.Code)
 }
 

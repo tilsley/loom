@@ -1,6 +1,6 @@
 # ADR-0002: Replace Dapr with direct HTTP and go-redis
 
-**Status:** Proposed
+**Status:** Accepted
 
 ---
 
@@ -24,7 +24,7 @@ Remove Dapr from the server and all worker apps. Replace each concern directly:
 Swap `DaprMigrationStore` for a Redis adapter that uses `go-redis` directly. The `MigrationStore` interface is unchanged.
 
 **Step dispatch → direct HTTP**
-Workers register their base URL in the `MigrationAnnouncement` payload (new `workerUrl` field). The server maintains an in-memory `workerApp → URL` map, populated as workers announce. For each step dispatch the server makes a plain `net/http` POST to the stored URL. Swap `DaprBus` for an HTTP adapter implementing the `WorkerNotifier` interface.
+Workers register their base URL in the `MigrationAnnouncement` payload (`migratorUrl` field). The URL is stored as part of the `Migration` document in Redis and threaded through to every `DispatchStepRequest` — no separate in-memory registry is needed. For each step dispatch the server makes a plain `net/http` POST to that URL. Swap `DaprBus` for `HTTPMigratorNotifier` implementing the `MigratorNotifier` interface.
 
 **Dry-run → direct HTTP**
 Same `workerUrl` map. Swap `DaprDryRunAdapter` for an HTTP adapter implementing `DryRunner`. This is functionally identical to what Dapr service invocation does — it was already a direct HTTP call with a proxy in the middle.
@@ -49,7 +49,7 @@ Same `workerUrl` map. Swap `DaprDryRunAdapter` for an HTTP adapter implementing 
 
 - Workers must now include `workerUrl` in their announcement. This is a one-line addition to the announcement handler and a small schema change.
 - The server needs to be able to reach workers over HTTP. This was already true: dry-run uses Dapr service invocation, which is HTTP under the hood. Workers were already required to be network-reachable. No new network requirement is introduced.
-- If the server restarts before a worker re-announces, the `workerApp → URL` map is empty and dispatch will fail until workers reconnect. This is the same behaviour as today — if Dapr's placement service restarts, pub/sub is also broken. Workers should announce with a short retry loop on startup regardless.
+- If a worker re-announces with a changed URL, the server picks it up immediately on the next dispatch (URL is read from the stored `Migration` document). No in-memory state to go stale.
 
 **No effect on rollback capability.** Rollbacks are managed by Temporal workflow activities, not by Dapr. See `docs/architecture-review.md`.
 

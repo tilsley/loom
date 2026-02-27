@@ -29,10 +29,10 @@ func dummyMigrator(env *testsuite.TestWorkflowEnvironment, acts *execution.Activ
 		Run(func(args mock.Arguments) {
 			req := args.Get(1).(api.DispatchStepRequest)
 			env.RegisterDelayedCallback(func() {
-				env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
+				env.SignalWorkflow(req.EventName, api.StepStatusEvent{
 					StepName:    req.StepName,
 					CandidateId: req.Candidate.Id,
-					Success:     true,
+					Status:      api.StepStatusEventStatusSucceeded,
 				})
 			}, time.Millisecond)
 		})
@@ -67,7 +67,7 @@ func TestMigrationOrchestrator_SingleStep_Success(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	require.Equal(t, "update-chart", result.Results[0].StepName)
 	require.Equal(t, "billing-api", result.Results[0].Candidate.Id)
-	require.Equal(t, api.Completed, result.Results[0].Status)
+	require.Equal(t, api.StepStateStatusSucceeded, result.Results[0].Status)
 }
 
 func TestMigrationOrchestrator_MultiStep_Success(t *testing.T) {
@@ -150,10 +150,10 @@ func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 			req := args.Get(1).(api.DispatchStepRequest)
 			env.RegisterDelayedCallback(func() {
 				if !retrySent {
-					env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
+					env.SignalWorkflow(req.EventName, api.StepStatusEvent{
 						StepName:    req.StepName,
 						CandidateId: req.Candidate.Id,
-						Success:     false,
+						Status:      api.StepStatusEventStatusFailed,
 					})
 					// After the workflow receives the failure and starts waiting, send retry.
 					env.RegisterDelayedCallback(func() {
@@ -164,10 +164,10 @@ func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 						)
 					}, time.Millisecond)
 				} else {
-					env.SignalWorkflow(req.EventName, api.StepCompletedEvent{
+					env.SignalWorkflow(req.EventName, api.StepStatusEvent{
 						StepName:    req.StepName,
 						CandidateId: req.Candidate.Id,
-						Success:     true,
+						Status:      api.StepStatusEventStatusSucceeded,
 					})
 				}
 			}, time.Millisecond)
@@ -190,7 +190,7 @@ func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, "completed", result.Status)
 	require.Len(t, result.Results, 1)
-	require.Equal(t, api.Completed, result.Results[0].Status)
+	require.Equal(t, api.StepStateStatusSucceeded, result.Results[0].Status)
 }
 
 // ─── Manual review step ───────────────────────────────────────────────────────
@@ -230,6 +230,6 @@ func TestMigrationOrchestrator_ManualReviewStep_DispatchedToWorker(t *testing.T)
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, "completed", result.Status)
 	require.Len(t, result.Results, 1)
-	require.Equal(t, api.Completed, result.Results[0].Status)
+	require.Equal(t, api.StepStateStatusSucceeded, result.Results[0].Status)
 }
 

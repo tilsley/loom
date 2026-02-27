@@ -23,10 +23,10 @@ func TestEvent_RaisesSignal(t *testing.T) {
 		return nil
 	}
 
-	w := ts.do(http.MethodPost, "/event/run-123", api.StepCompletedEvent{
+	w := ts.do(http.MethodPost, "/event/run-123", api.StepStatusEvent{
 		StepName:    "update-chart",
 		CandidateId: "billing-api",
-		Success:     true,
+		Status:      api.StepStatusEventStatusSucceeded,
 	})
 
 	require.Equal(t, http.StatusAccepted, w.Code)

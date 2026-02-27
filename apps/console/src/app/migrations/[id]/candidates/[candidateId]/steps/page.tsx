@@ -64,7 +64,7 @@ export default function CandidateStepsPage() {
 
   // Fetch all candidates for prev/next navigation
   useEffect(() => {
-    getCandidates(id).then(setAllCandidates).catch(() => {});
+    getCandidates(id).then((d) => setAllCandidates(d ?? [])).catch(() => {});
   }, [id]);
 
   const stepDescriptions = useMemo(() => {
@@ -74,19 +74,10 @@ export default function CandidateStepsPage() {
     );
   }, [migration]);
 
-  const stepInstructions = useMemo(() => {
-    if (!migration) return new Map<string, string>();
-    return new Map(
-      migration.steps
-        .filter((s) => s.config?.instructions)
-        .map((s) => [s.name, s.config?.instructions ?? ""]),
-    );
-  }, [migration]);
-
   const stats = useMemo(() => {
     if (!stepsData) return null;
     const results = stepsData.steps;
-    const completed = results.filter((r) => r.status === "completed" || r.status === "merged").length;
+    const completed = results.filter((r) => r.status === "succeeded" || r.status === "merged").length;
     const failed = results.filter((r) => r.status === "failed").length;
     const prs = results.filter((r) => r.metadata?.prUrl).length;
     const merged = results.filter((r) => r.status === "merged").length;
@@ -250,10 +241,9 @@ export default function CandidateStepsPage() {
                 <StepTimeline
                   results={stepsData.steps}
                   stepDescriptions={stepDescriptions}
-                  stepInstructions={stepInstructions}
-                  onComplete={(stepName, candidateId, success) => {
+                  onComplete={(stepName, candidateId, status) => {
                     void (async () => {
-                      await completeStep(runId, stepName, candidateId, success);
+                      await completeStep(runId, stepName, candidateId, status);
                       void poll();
                     })();
                   }}

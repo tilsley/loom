@@ -50,19 +50,19 @@ func (d *Dispatch) Handle(c *gin.Context) {
 	result, handled, err := d.routeToHandler(c.Request.Context(), req)
 	if err != nil {
 		// Signal the workflow that this step failed so it can surface in the UI.
-		_ = d.loom.SendCallback(c.Request.Context(), req.CallbackId, api.StepCompletedEvent{
+		_ = d.loom.SendCallback(c.Request.Context(), req.CallbackId, api.StepStatusEvent{
 			StepName:    req.StepName,
 			CandidateId: req.Candidate.Id,
-			Success:     false,
+			Status:      api.StepStatusEventStatusFailed,
 		})
 		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 		return
 	}
 
 	// Handler acknowledged the step but requires no PR (e.g. manual-review).
-	// Signal "awaiting_review" so the UI shows the Approve/Reject buttons.
+	// Signal "pending" with instructions so the UI shows the Approve/Reject buttons.
 	if handled && result.Owner == "" {
-		d.loom.NotifyAwaitingReview(c.Request.Context(), req.CallbackId, req.StepName, req.Candidate.Id, result.Instructions)
+		d.loom.SendUpdate(c.Request.Context(), req.CallbackId, req.StepName, req.Candidate.Id, map[string]string{"instructions": result.Instructions})
 		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 		return
 	}
@@ -108,10 +108,10 @@ func (d *Dispatch) Handle(c *gin.Context) {
 	})
 	if err != nil {
 		d.log.Error("failed to create PR", "error", err, "target", req.Candidate.Id)
-		_ = d.loom.SendCallback(c.Request.Context(), req.CallbackId, api.StepCompletedEvent{
+		_ = d.loom.SendCallback(c.Request.Context(), req.CallbackId, api.StepStatusEvent{
 			StepName:    req.StepName,
 			CandidateId: req.Candidate.Id,
-			Success:     false,
+			Status:      api.StepStatusEventStatusFailed,
 		})
 		c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 		return
@@ -129,9 +129,9 @@ func (d *Dispatch) Handle(c *gin.Context) {
 		PRURL:       pr.HTMLURL,
 	})
 
-	// Notify the workflow that the PR is open so the UI can show the link
+	// Notify the workflow that a PR is open so the UI can show the link
 	// and the "Mark as merged" button while waiting for the webhook.
-	d.loom.NotifyPROpened(c.Request.Context(), req.CallbackId, req.StepName, req.Candidate.Id, pr.HTMLURL)
+	d.loom.SendUpdate(c.Request.Context(), req.CallbackId, req.StepName, req.Candidate.Id, map[string]string{"prUrl": pr.HTMLURL})
 
 	c.JSON(http.StatusOK, gin.H{"status": "SUCCESS"})
 }

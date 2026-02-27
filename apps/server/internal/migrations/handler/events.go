@@ -12,7 +12,7 @@ import (
 func (h *Handler) Event(c *gin.Context) {
 	id := c.Param("id")
 
-	var event api.StepCompletedEvent
+	var event api.StepStatusEvent
 	if err := c.ShouldBindJSON(&event); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

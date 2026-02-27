@@ -43,9 +43,9 @@ sequenceDiagram
 
 The operator starts a candidate. The server validates, sets the candidate to `running`, starts a durable Temporal workflow, then immediately returns `202 Accepted`. Everything after that is asynchronous.
 
-The workflow sequences each step in turn: it dispatches outbound to the migrator, then blocks waiting for a completion signal sent via the migrator's callback to `POST /event/:id`. Steps can go through intermediate states (`open`, `awaiting_review`) before reaching a terminal state (`completed`, `merged`, `failed`).
+The workflow sequences each step in turn: it dispatches outbound to the migrator, then blocks waiting for a completion signal sent via the migrator's callback to `POST /event/:id`. Steps can go through intermediate states (`open`, `awaiting_review`) before reaching a terminal state (`succeeded`, `merged`, `failed`).
 
-The `StepCompletedEvent` has a first-class `phase` field for intermediate statuses (e.g. `"open"`, `"awaiting_review"`, `"merged"`). When present it overrides the default `completed`/`failed` status derived from the `success` boolean. Arbitrary data (e.g. `prUrl`) stays in `metadata`.
+The `StepStatusEvent` carries a single `status` field (one of `succeeded`, `failed`, `pending`, `merged`). `pending` is the only intermediate status — it keeps the workflow waiting while the migrator updates visible state via `metadata` (e.g. `prUrl`, `instructions`). Arbitrary data stays in `metadata`.
 
 ```mermaid
 sequenceDiagram
@@ -76,14 +76,14 @@ sequenceDiagram
 
         Note over W: executes step (e.g. opens PR on GitHub)
 
-        opt PR-based step: open → merged
-            W->>H: POST /event/:id {success: true, phase: "open"}
+        opt PR-based step: pending → merged
+            W->>H: POST /event/:id {StepStatusEvent status=pending, metadata={prUrl}}
             H->>S: HandleEvent(runID, event)
             S->>E: RaiseEvent(runID, step-N-completed, event)
-            Note over E: signal received, status=open — keep waiting
+            Note over E: signal received, status=pending — keep waiting
         end
 
-        W->>H: POST /event/:id {StepCompletedEvent}
+        W->>H: POST /event/:id {StepStatusEvent}
         H->>S: HandleEvent(runID, event)
         S->>E: RaiseEvent(runID, step-N-completed, event)
         H-->>W: 202 Accepted

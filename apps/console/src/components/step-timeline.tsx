@@ -1,33 +1,24 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { StepResult } from "@/lib/api";
+import type { StepState } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui";
-
-type Phase = "in_progress" | "open" | "merged" | "failed" | "completed" | "awaiting_review";
-
-function getPhase(r: StepResult): Phase {
-  return r.status as Phase;
-}
 
 export function StepTimeline({
   results,
   stepDescriptions,
-  stepInstructions,
   onComplete,
   onRetry,
 }: {
-  results: StepResult[];
+  results: StepState[];
   stepDescriptions?: Map<string, string>;
-  stepInstructions?: Map<string, string>;
-  onComplete?: (stepName: string, candidateId: string, success: boolean) => void;
+  onComplete?: (stepName: string, candidateId: string, status: string) => void;
   onRetry?: (stepName: string, candidateId: string) => void;
 }) {
-  // Hooks must be declared before any early return
   const lastActiveIndex = results.reduce((acc, r, idx) => {
-    const p = getPhase(r);
-    return p === "open" || p === "in_progress" || p === "awaiting_review" ? idx : acc;
+    const p = r.status;
+    return p === "pending" || p === "in_progress" ? idx : acc;
   }, -1);
 
   const activeRef = useRef<HTMLDivElement>(null);
@@ -72,20 +63,20 @@ export function StepTimeline({
   return (
     <div>
       {results.map((r, i) => {
-        const phase = getPhase(r);
+        const phase = r.status;
+        const meta = r.metadata ?? {};
         const description = stepDescriptions?.get(r.stepName);
-        const instructions = stepInstructions?.get(r.stepName);
         const isLast = i === results.length - 1;
-        const isActive = phase === "open" || phase === "in_progress" || phase === "awaiting_review";
+        const isActive = phase === "pending" || phase === "in_progress";
+        const hasPR = phase === "pending" && Boolean(meta.prUrl);
+        const hasReview = phase === "pending" && Boolean(meta.instructions);
 
         const lineColor =
-          phase === "completed" || phase === "merged"
+          phase === "succeeded" || phase === "merged"
             ? "bg-teal-500/25"
-            : phase === "open"
-              ? "bg-emerald-500/20"
-              : phase === "failed"
-                ? "bg-red-500/20"
-                : "bg-zinc-800";
+            : phase === "failed"
+              ? "bg-red-500/20"
+              : "bg-zinc-800";
 
         return (
           <div
@@ -93,19 +84,17 @@ export function StepTimeline({
             ref={i === lastActiveIndex ? activeRef : undefined}
             className={cn(
               "relative flex gap-5",
-              // Non-active: pb-6 is the inter-step gap (line runs through it)
               !isActive && !isLast && "pb-6",
-              // Active: box gets its own padding; mb-6 creates the gap outside the border
               isActive && !isLast && "mb-6",
               isActive && "px-3 py-3 rounded-lg",
-              phase === "awaiting_review" && "bg-blue-500/10 border border-blue-500/25",
-              phase === "open" && "bg-emerald-500/[0.07] border border-emerald-500/20",
+              hasReview && "bg-blue-500/10 border border-blue-500/25",
+              hasPR && "bg-emerald-500/[0.07] border border-emerald-500/20",
               phase === "in_progress" && "bg-amber-500/[0.07] border border-amber-500/20",
             )}
           >
             {/* Timeline column: dot + connecting line */}
             <div className="flex flex-col items-center flex-shrink-0 w-5">
-              <TimelineDot phase={phase} />
+              <TimelineDot phase={phase} meta={meta} />
               {!isLast && <div className={cn("w-px flex-1 mt-1", lineColor)} />}
             </div>
 
@@ -113,7 +102,6 @@ export function StepTimeline({
             <div className="flex-1 min-w-0 pt-px">
               {/* Top row: name/description left, badges right */}
               <div className="flex items-start gap-4">
-                {/* Left: name + description */}
                 <div className="flex-1 min-w-0">
                   <span className="text-base font-medium font-mono text-foreground block">
                     <span className="text-xs text-zinc-700 mr-1.5 tabular-nums select-none">
@@ -126,11 +114,10 @@ export function StepTimeline({
                   )}
                 </div>
 
-                {/* Right: View PR (top, beside name) then phase label (below, beside description) */}
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  {r.metadata?.prUrl ? (
+                  {meta.prUrl ? (
                     <a
-                      href={r.metadata.prUrl}
+                      href={meta.prUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={cn(buttonVariants({ variant: "default", size: "sm" }))}
@@ -141,14 +128,14 @@ export function StepTimeline({
                       </svg>
                     </a>
                   ) : null}
-                  <PhaseLabel phase={phase} />
+                  <PhaseLabel phase={phase} meta={meta} />
                 </div>
               </div>
 
-              {/* Open PR: manual merge action for local dev / no-webhook environments */}
-              {phase === "open" && onComplete ? (
+              {/* Pending with PR: manual merge action for local dev / no-webhook environments */}
+              {hasPR && onComplete ? (
                 <div className="mt-3">
-                  <MergeAction onMerge={() => onComplete(r.stepName, r.candidate.id, true)} />
+                  <MergeAction onMerge={() => onComplete(r.stepName, r.candidate.id, "merged")} />
                 </div>
               ) : null}
 
@@ -159,37 +146,34 @@ export function StepTimeline({
                 </div>
               ) : null}
 
-              {/* Awaiting review: instructions + actions — full width below header row */}
-              {phase === "awaiting_review" ? (
+              {/* Pending with review instructions: instructions + actions */}
+              {hasReview ? (
                 <div className="mt-3 space-y-3">
-                  {instructions ? (
-                    <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
-                      <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
-                        Instructions
-                      </div>
-                      <ul className="space-y-1">
-                        {instructions.split("\n").map((line, j) => (
-                          <li key={j} className="text-sm text-blue-200/80 font-mono">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
+                  <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
+                    <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
+                      Instructions
                     </div>
-                  ) : null}
+                    <ul className="space-y-1">
+                      {meta.instructions?.split("\n").map((line, j) => (
+                        <li key={j} className="text-sm text-blue-200/80 font-mono">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                   {onComplete ? (
                     <ReviewActions
-                      onComplete={(success) => onComplete(r.stepName, r.candidate.id, success)}
+                      onComplete={(status) => onComplete(r.stepName, r.candidate.id, status)}
                     />
                   ) : null}
                 </div>
               ) : null}
 
-              {/* Extra metadata tags — full width below header row */}
+              {/* Extra metadata tags */}
               {r.metadata
                 ? (() => {
                     const extra = Object.entries(r.metadata).filter(
-                      ([k]) =>
-                        k !== "phase" && k !== "prUrl" && k !== "instructions" && k !== "commitSha",
+                      ([k]) => k !== "prUrl" && k !== "instructions" && k !== "commitSha",
                     );
                     if (extra.length === 0) return null;
                     return (
@@ -215,11 +199,11 @@ export function StepTimeline({
   );
 }
 
-function TimelineDot({ phase }: { phase: Phase }) {
+function TimelineDot({ phase, meta }: { phase: StepState["status"]; meta: Record<string, string> }) {
   const cls = "w-4 h-4 flex-shrink-0 mt-0.5";
 
   switch (phase) {
-    case "completed":
+    case "succeeded":
       return (
         <svg className={cn(cls, "text-teal-500")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="8" cy="8" r="6.5" />
@@ -238,17 +222,28 @@ function TimelineDot({ phase }: { phase: Phase }) {
           <circle cx="8" cy="8" r="6.5" strokeDasharray="30" strokeDashoffset="10" />
         </svg>
       );
-    case "awaiting_review":
+    case "pending":
+      if (meta.instructions) {
+        // Awaiting human review
+        return (
+          <svg className={cn(cls, "text-blue-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z" />
+            <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+          </svg>
+        );
+      }
+      if (meta.prUrl) {
+        // PR open, awaiting merge
+        return (
+          <svg className={cn(cls, "text-emerald-400")} viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" />
+          </svg>
+        );
+      }
+      // Generic pending
       return (
-        <svg className={cn(cls, "text-blue-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z" />
-          <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
-        </svg>
-      );
-    case "open":
-      return (
-        <svg className={cn(cls, "text-emerald-400")} viewBox="0 0 16 16" fill="currentColor">
-          <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" />
+        <svg className={cn(cls, "text-zinc-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <circle cx="8" cy="8" r="6.5" strokeDasharray="28" strokeDashoffset="8" />
         </svg>
       );
     case "failed":
@@ -268,16 +263,20 @@ function TimelineDot({ phase }: { phase: Phase }) {
   }
 }
 
-function PhaseLabel({ phase }: { phase: Phase }) {
+function PhaseLabel({ phase, meta }: { phase: StepState["status"]; meta: Record<string, string> }) {
   const base = "text-xs font-medium px-2.5 py-1 rounded-md border shrink-0";
 
   switch (phase) {
-    case "awaiting_review":
-      return <span className={cn(base, "text-blue-400 bg-blue-500/10 border-blue-500/20")}>Awaiting review</span>;
+    case "pending":
+      if (meta.instructions) {
+        return <span className={cn(base, "text-blue-400 bg-blue-500/10 border-blue-500/20")}>Awaiting review</span>;
+      }
+      if (meta.prUrl) {
+        return <span className={cn(base, "text-emerald-400 bg-emerald-500/10 border-emerald-500/20")}>PR open</span>;
+      }
+      return <span className={cn(base, "text-zinc-400 bg-zinc-500/10 border-zinc-500/20")}>Pending</span>;
     case "in_progress":
       return <span className={cn(base, "text-amber-400 bg-amber-500/10 border-amber-500/20")}>Running</span>;
-    case "open":
-      return <span className={cn(base, "text-emerald-400 bg-emerald-500/10 border-emerald-500/20")}>PR open</span>;
     case "merged":
       return <span className={cn(base, "text-purple-400 bg-purple-500/10 border-purple-500/20")}>Merged</span>;
     case "failed":
@@ -288,17 +287,17 @@ function PhaseLabel({ phase }: { phase: Phase }) {
 }
 
 function MergeAction({ onMerge }: { onMerge: () => void }) {
-  const [pending, setPending] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
   return (
     <div className="flex items-center gap-3">
       <Button
         size="sm"
         variant="success"
-        disabled={pending}
-        onClick={() => { setPending(true); onMerge(); }}
+        disabled={isPending}
+        onClick={() => { setIsPending(true); onMerge(); }}
       >
-        {pending ? "Sending..." : "Mark as merged"}
+        {isPending ? "Sending..." : "Mark as merged"}
       </Button>
       <span className="text-xs text-zinc-600">PR merged but no webhook? Use this to advance the run.</span>
     </div>
@@ -306,37 +305,37 @@ function MergeAction({ onMerge }: { onMerge: () => void }) {
 }
 
 function RetryAction({ onRetry }: { onRetry: () => void }) {
-  const [pending, setPending] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
   return (
     <div className="flex items-center gap-3">
       <Button
         size="sm"
         variant="default"
-        disabled={pending}
-        onClick={() => { setPending(true); onRetry(); }}
+        disabled={isPending}
+        onClick={() => { setIsPending(true); onRetry(); }}
       >
-        {pending ? "Retrying..." : "Retry"}
+        {isPending ? "Retrying..." : "Retry"}
       </Button>
       <span className="text-xs text-zinc-600">Re-dispatch this step to the worker.</span>
     </div>
   );
 }
 
-function ReviewActions({ onComplete }: { onComplete: (success: boolean) => void }) {
-  const [pending, setPending] = useState(false);
+function ReviewActions({ onComplete }: { onComplete: (status: string) => void }) {
+  const [isPending, setIsPending] = useState(false);
 
-  const handle = (success: boolean) => {
-    setPending(true);
-    onComplete(success);
+  const handle = (status: string) => {
+    setIsPending(true);
+    onComplete(status);
   };
 
   return (
     <div className="flex items-center gap-2">
-      <Button size="sm" variant="success" disabled={pending} onClick={() => handle(true)}>
-        {pending ? "Sending..." : "Mark as done"}
+      <Button size="sm" variant="success" disabled={isPending} onClick={() => handle("succeeded")}>
+        {isPending ? "Sending..." : "Mark as done"}
       </Button>
-      <Button size="sm" variant="danger" disabled={pending} onClick={() => handle(false)}>
+      <Button size="sm" variant="danger" disabled={isPending} onClick={() => handle("failed")}>
         Mark as failed
       </Button>
     </div>
