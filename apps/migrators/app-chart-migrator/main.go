@@ -228,7 +228,7 @@ func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []str
 		Id:             "app-chart-migration",
 		Name:           "App Chart Migration",
 		Description:    desc,
-		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository"}},
+		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository", Description: strPtr("Pre-filled from discovery — verify before continuing")}},
 		Candidates:     []api.Candidate{},
 		Steps:          buildStepDefs(envs),
 		MigratorUrl:    workerURL,

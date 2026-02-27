@@ -252,6 +252,9 @@ components:
         label:
           type: string
           description: Human-readable display label shown in the UI (e.g. "Repository").
+        description:
+          type: string
+          description: Optional hint shown below the input field (e.g. "Pre-filled from discovery — verify before continuing").
 
     StepDefinition:
       type: object

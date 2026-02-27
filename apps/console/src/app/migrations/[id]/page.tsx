@@ -14,8 +14,7 @@ import {
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { PreviewPanel } from "@/components/preview-panel";
-import { Button, Skeleton } from "@/components/ui";
+import { Button, Input, Skeleton, Tooltip } from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +26,7 @@ export default function MigrationDetail() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
-  const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
+  const [previewModal, setPreviewModal] = useState<{ candidate: Candidate; inputs: Record<string, string> } | null>(null);
   const [cancelCandidate, setCancelCandidate] = useState<Candidate | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -83,7 +82,16 @@ export default function MigrationDetail() {
   const kindPluralCap = kindPlural.charAt(0).toUpperCase() + kindPlural.slice(1);
 
   function handlePreview(candidate: Candidate) {
-    setPreviewCandidate(candidate);
+    const required = migration?.requiredInputs ?? [];
+    if (required.length > 0) {
+      const prefilled: Record<string, string> = {};
+      for (const inp of required) {
+        prefilled[inp.name] = candidate.metadata?.[inp.name] ?? "";
+      }
+      setPreviewModal({ candidate, inputs: prefilled });
+    } else {
+      router.push(ROUTES.preview(id, candidate.id));
+    }
   }
 
   function handleCancel(candidate: Candidate) {
@@ -219,6 +227,93 @@ export default function MigrationDetail() {
       )
     : null;
 
+  const previewInputModal = previewModal && migration
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
+          onClick={() => setPreviewModal(null)}
+        >
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="relative w-full max-w-md bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[14px] font-semibold text-zinc-100">Required inputs</h3>
+                  <Tooltip content="These values are required to migrate this candidate. They are passed to each step at runtime.">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-zinc-600 hover:text-zinc-400 cursor-default transition-colors">
+                      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M8 7v5M8 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </Tooltip>
+                </div>
+                <button
+                  onClick={() => setPreviewModal(null)}
+                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="px-5 py-5 space-y-4">
+                {(migration.requiredInputs ?? []).map((inp, i) => (
+                  <div key={inp.name} className="space-y-1.5">
+                    <label
+                      htmlFor={`preview-modal-${inp.name}`}
+                      className="text-xs font-medium text-zinc-400"
+                    >
+                      {inp.label}
+                    </label>
+                    <Input
+                      id={`preview-modal-${inp.name}`}
+                      type="text"
+                      value={previewModal.inputs[inp.name] ?? ""}
+                      onChange={(e) =>
+                        setPreviewModal((prev) =>
+                          prev ? { ...prev, inputs: { ...prev.inputs, [inp.name]: e.target.value } } : null,
+                        )
+                      }
+                      placeholder={inp.label}
+                      className="font-mono"
+                      autoFocus={i === 0}
+                    />
+                    {inp.description ? (
+                      <p className="text-xs text-zinc-600 italic">{inp.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-zinc-800">
+                <button
+                  onClick={() => setPreviewModal(null)}
+                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <Button
+                  disabled={!(migration.requiredInputs ?? []).every((inp) => previewModal.inputs[inp.name]?.trim())}
+                  onClick={() => {
+                    const params = new URLSearchParams(previewModal.inputs);
+                    router.push(`${ROUTES.preview(id, previewModal.candidate.id)}?${params.toString()}`);
+                    setPreviewModal(null);
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                  Run preview
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   if (error && !migration) {
     return (
       <div className="space-y-6 animate-fade-in-up">
@@ -258,16 +353,7 @@ export default function MigrationDetail() {
     <div className="space-y-8 animate-fade-in-up">
       {stepsModal}
       {cancelModal}
-
-      {/* Preview panel — slide-in from right */}
-      {previewCandidate ? (
-        <PreviewPanel
-          migrationId={id}
-          migration={migration}
-          candidate={previewCandidate}
-          onClose={() => setPreviewCandidate(null)}
-        />
-      ) : null}
+      {previewInputModal}
 
       {/* Breadcrumb */}
       <Link

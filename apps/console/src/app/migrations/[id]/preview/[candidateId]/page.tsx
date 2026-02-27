@@ -26,11 +26,20 @@ export default function PreviewPage() {
   const [migration, setMigration] = useState<Migration | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [debouncedInputs, setDebouncedInputs] = useState<Record<string, string>>({});
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // When required inputs exist, dry run must be explicitly triggered by the user
+  const [dryRunEnabled, setDryRunEnabled] = useState(false);
+
+  // Debounce inputs for dry run — avoids re-running on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedInputs(inputs), 600);
+    return () => clearTimeout(timer);
+  }, [inputs]);
 
   // Track last inputs used for dry run to avoid redundant re-runs
   const lastDryRunInputs = useRef<string>("");
@@ -54,15 +63,24 @@ export default function PreviewPage() {
         };
         setCandidate(c);
 
-        // Pre-fill inputs: URL params (from preview modal) take precedence over candidate metadata
+        // Pre-fill inputs: URL params (passed from the preview modal) take precedence over candidate metadata
         const required = mig.requiredInputs ?? [];
         if (required.length > 0) {
           const prefilled: Record<string, string> = {};
+          let allFromUrl = true;
           for (const inp of required) {
             const urlVal = searchParams.get(inp.name);
             prefilled[inp.name] = urlVal !== null ? urlVal : (found.metadata?.[inp.name] ?? "");
+            if (urlVal === null) allFromUrl = false;
           }
           setInputs(prefilled);
+          if (allFromUrl) {
+            setDebouncedInputs(prefilled); // skip debounce — inputs already confirmed in modal
+            setDryRunEnabled(true);
+          }
+        } else {
+          // No required inputs — go straight to dry run
+          setDryRunEnabled(true);
         }
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load"));
@@ -71,18 +89,18 @@ export default function PreviewPage() {
   const requiredInputs = useMemo(() => migration?.requiredInputs ?? [], [migration]);
   const allInputsFilled = requiredInputs.every((inp) => inputs[inp.name]?.trim());
 
-  // Build the candidate with inputs merged into metadata (for dry-run and execute)
+  // Build the candidate with debounced inputs merged into metadata (for dry-run only)
   const candidateWithInputs = useMemo<Candidate | null>(() => {
     if (!candidate) return null;
     if (requiredInputs.length === 0) return candidate;
-    const merged = { ...(candidate.metadata ?? {}), ...inputs };
+    const merged = { ...(candidate.metadata ?? {}), ...debouncedInputs };
     return { ...candidate, metadata: merged };
-  }, [candidate, inputs, requiredInputs]);
+  }, [candidate, debouncedInputs, requiredInputs]);
 
   // Auto-trigger dry run once migration + candidate are loaded and all inputs are filled
   const triggerDryRun = useCallback(
     (c: Candidate) => {
-      const key = JSON.stringify(inputs);
+      const key = JSON.stringify(debouncedInputs);
       if (key === lastDryRunInputs.current) return;
       lastDryRunInputs.current = key;
 
@@ -93,14 +111,15 @@ export default function PreviewPage() {
         .catch((e) => setDryRunError(e instanceof Error ? e.message : "Dry run failed"))
         .finally(() => setDryRunLoading(false));
     },
-    [id, inputs],
+    [id, debouncedInputs],
   );
 
   useEffect(() => {
+    if (!dryRunEnabled) return;
     if (!candidateWithInputs || !migration) return;
     if (requiredInputs.length > 0 && !allInputsFilled) return;
     triggerDryRun(candidateWithInputs);
-  }, [candidateWithInputs, migration, requiredInputs.length, allInputsFilled, triggerDryRun]);
+  }, [dryRunEnabled, candidateWithInputs, migration, requiredInputs.length, allInputsFilled, triggerDryRun]);
 
   function handleRetry() {
     if (!candidateWithInputs) return;
@@ -191,15 +210,15 @@ export default function PreviewPage() {
       {/* Inputs */}
       {requiredInputs.length > 0 ? (
         <section className="w-fit min-w-[700px] mx-auto">
-          <div className="border border-zinc-800/80 rounded-lg px-5 py-4 space-y-3">
+          <div className="border border-zinc-800/80 rounded-lg px-5 py-4 space-y-4">
             <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
               Required inputs
             </div>
             {requiredInputs.map((inp, i) => (
-              <div key={inp.name} className="flex items-center gap-3">
+              <div key={inp.name} className="space-y-1.5">
                 <label
                   htmlFor={`preview-input-${inp.name}`}
-                  className="text-xs text-zinc-500 shrink-0 w-28 text-right"
+                  className="text-xs font-medium text-zinc-400"
                 >
                   {inp.label}
                 </label>
@@ -209,17 +228,20 @@ export default function PreviewPage() {
                   value={inputs[inp.name] ?? ""}
                   onChange={(e) => setInputs((v) => ({ ...v, [inp.name]: e.target.value }))}
                   placeholder={inp.label}
-                  className="font-mono flex-1 max-w-xs"
+                  className="font-mono"
                   autoFocus={i === 0}
                 />
+                {inp.description ? (
+                  <p className="text-xs text-zinc-600 italic">{inp.description}</p>
+                ) : null}
               </div>
             ))}
           </div>
         </section>
       ) : null}
 
-      {/* Steps preview */}
-      {steps.length > 0 ? (
+      {/* Steps preview — only shown after inputs are confirmed */}
+      {dryRunEnabled && steps.length > 0 ? (
         <section className="w-fit min-w-[700px] mx-auto">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-widest">Steps</h2>
@@ -240,9 +262,6 @@ export default function PreviewPage() {
                 </svg>
                 Simulating…
               </span>
-            ) : null}
-            {requiredInputs.length > 0 && !allInputsFilled ? (
-              <span className="text-xs text-zinc-600 italic">Fill inputs to preview</span>
             ) : null}
           </div>
           {dryRunError ? (
@@ -330,11 +349,11 @@ export default function PreviewPage() {
           </div>
           )}
         </section>
-      ) : (
+      ) : dryRunEnabled ? (
         <div className="text-sm text-zinc-600 italic">Loading step definitions…</div>
-      )}
+      ) : null}
 
-      {/* Start / Back actions */}
+      {/* Actions */}
       <div className="w-fit min-w-[700px] mx-auto flex items-center justify-between pt-2 pb-6">
         <Link
           href={ROUTES.migrationDetail(id)}
@@ -342,27 +361,44 @@ export default function PreviewPage() {
         >
           Back
         </Link>
-        <button
-          onClick={() => void handleStart()}
-          disabled={executing || (requiredInputs.length > 0 && !allInputsFilled)}
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {executing ? (
-            <>
-              <svg className="animate-spin w-4 h-4" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
-              </svg>
-              Starting…
-            </>
-          ) : (
-            <>
-              <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
-                <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
-              </svg>
-              Start
-            </>
-          )}
-        </button>
+        {!dryRunEnabled ? (
+          <button
+            onClick={() => {
+              lastDryRunInputs.current = "";
+              setDryRunEnabled(true);
+            }}
+            disabled={!allInputsFilled}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            Run preview
+          </button>
+        ) : (
+          <button
+            onClick={() => void handleStart()}
+            disabled={executing}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {executing ? (
+              <>
+                <svg className="animate-spin w-4 h-4" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
+                </svg>
+                Starting…
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
+                  <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
+                </svg>
+                Start
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

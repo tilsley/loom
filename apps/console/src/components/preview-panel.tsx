@@ -137,10 +137,8 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
                   Simulating…
                 </span>
               ) : null}
-              {requiredInputs.length > 0 && !dryRunEnabled ? (
-                <span className="text-xs text-zinc-600 italic">
-                  {allInputsFilled ? "Click \"Run preview\" to simulate" : "Fill inputs to preview"}
-                </span>
+              {requiredInputs.length > 0 && !allInputsFilled ? (
+                <span className="text-xs text-zinc-600 italic">Fill in all inputs to continue</span>
               ) : null}
             </div>
           </div>
@@ -165,42 +163,35 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
               </div>
               <div className="border border-zinc-800/80 rounded-lg px-4 py-4 space-y-3">
                 {requiredInputs.map((inp, i) => (
-                  <div key={inp.name} className="flex items-center gap-3">
+                  <div key={inp.name} className="flex items-start gap-3">
                     <label
                       htmlFor={`panel-input-${inp.name}`}
-                      className="text-xs text-zinc-500 shrink-0 w-28 text-right"
+                      className="text-xs text-zinc-500 shrink-0 w-28 text-right pt-2"
                     >
                       {inp.label}
                     </label>
+                    <div className="flex-1 space-y-1">
                     <Input
                       id={`panel-input-${inp.name}`}
                       type="text"
                       value={inputs[inp.name] ?? ""}
                       onChange={(e) => setInputs((v) => ({ ...v, [inp.name]: e.target.value }))}
                       placeholder={inp.label}
-                      className="font-mono flex-1"
+                      className="font-mono w-full"
                       autoFocus={i === 0}
                     />
+                    {inp.description ? (
+                      <p className="text-xs text-zinc-600 italic">{inp.description}</p>
+                    ) : null}
+                    </div>
                   </div>
                 ))}
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={() => {
-                      lastDryRunInputs.current = "";
-                      setDryRunEnabled(true);
-                    }}
-                    disabled={!allInputsFilled}
-                    className="text-xs font-medium px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 border border-zinc-700 hover:border-zinc-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Run preview
-                  </button>
-                </div>
               </div>
             </section>
           ) : null}
 
           {/* Dry run error */}
-          {dryRunError ? (
+          {dryRunEnabled && dryRunError ? (
             <div className="border border-red-500/20 bg-red-500/5 rounded-lg px-4 py-4 flex items-start justify-between gap-4">
               <div className="space-y-1 min-w-0">
                 <p className="text-sm font-medium text-red-400">Dry run failed</p>
@@ -218,8 +209,8 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
             </div>
           ) : null}
 
-          {/* Steps preview */}
-          {steps.length > 0 ? (
+          {/* Steps preview — only shown after inputs are confirmed */}
+          {dryRunEnabled && steps.length > 0 ? (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Steps</h2>
@@ -308,26 +299,42 @@ export function PreviewPanel({ migrationId, migration, candidate, onClose }: Pre
           >
             Cancel
           </button>
-          <Button
-            onClick={() => void handleStart()}
-            disabled={executing || (requiredInputs.length > 0 && !allInputsFilled)}
-          >
-            {executing ? (
-              <>
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
-                </svg>
-                Starting…
-              </>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
-                </svg>
-                Start
-              </>
-            )}
-          </Button>
+          {!dryRunEnabled ? (
+            <Button
+              onClick={() => {
+                lastDryRunInputs.current = "";
+                setDryRunEnabled(true);
+              }}
+              disabled={!allInputsFilled}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              Run preview
+            </Button>
+          ) : (
+            <Button
+              onClick={() => void handleStart()}
+              disabled={executing}
+            >
+              {executing ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
+                  </svg>
+                  Starting…
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
+                  </svg>
+                  Start
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>,

@@ -62,7 +62,17 @@
       "Bash(echo redis-cli not available or key not found:*)",
       "Bash(temporal workflow:*)",
       "Bash(redis-cli:*)",
-      "WebFetch(domain:mikhail.io)"
+      "WebFetch(domain:mikhail.io)",
+      "Bash(echo killed:*)",
+      "WebFetch(domain:www.radix-ui.com)",
+      "WebFetch(domain:m3.material.io)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "WebFetch(domain:linear.app)",
+      "WebFetch(domain:evilmartians.com)",
+      "WebFetch(domain:designsystems.surf)",
+      "WebFetch(domain:atlassian.design)",
+      "WebFetch(domain:www.colorsandfonts.com)",
+      "WebFetch(domain:blog.logrocket.com)"
     ]
   }
 }
