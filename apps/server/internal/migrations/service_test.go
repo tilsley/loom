@@ -203,7 +203,7 @@ func (s *memStore) UpdateCandidateMetadata(_ context.Context, migrationID, candi
 // ─── constructor helper ───────────────────────────────────────────────────────
 
 func newSvc(store *memStore, engine *stubEngine, dr *stubDryRunner) *migrations.Service {
-	return migrations.NewService(engine, store, dr)
+	return migrations.NewService(engine, store, dr, nil)
 }
 
 // ─── tests ────────────────────────────────────────────────────────────────────

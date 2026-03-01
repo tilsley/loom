@@ -30,7 +30,13 @@ function ThemeToggle() {
 
 function SunIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-muted-foreground shrink-0">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className="text-muted-foreground shrink-0"
+    >
       <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
       <path
         d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06"
@@ -44,7 +50,13 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-muted-foreground shrink-0">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className="text-muted-foreground shrink-0"
+    >
       <path
         d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z"
         stroke="currentColor"
@@ -63,6 +75,7 @@ export function Sidebar() {
   const navItems = [
     { href: ROUTES.dashboard, label: "Dashboard", icon: DashboardIcon },
     { href: ROUTES.migrations, label: "Migrations", icon: MigrationsIcon },
+    { href: ROUTES.metrics, label: "Metrics", icon: MetricsIcon },
   ];
 
   const visibleMigrations = migrations.slice(0, MAX_VISIBLE);
@@ -196,6 +209,22 @@ function MigrationsIcon({ active }: { active: boolean }) {
         strokeWidth="1.5"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function MetricsIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className={active ? "text-foreground/80" : "text-muted-foreground"}
+    >
+      <rect x="2" y="9" width="3" height="5" rx="0.5" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="6.5" y="5" width="3" height="9" rx="0.5" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="11" y="2" width="3" height="12" rx="0.5" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }

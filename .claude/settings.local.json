@@ -77,7 +77,11 @@
       "WebFetch(domain:tailwindcolor.com)",
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:imperavi.com)",
-      "WebFetch(domain:linear.style)"
+      "WebFetch(domain:linear.style)",
+      "WebFetch(domain:community.temporal.io)",
+      "WebFetch(domain:docs.temporal.io)",
+      "WebFetch(domain:temporal.io)",
+      "Bash(cd:*)"
     ]
   }
 }

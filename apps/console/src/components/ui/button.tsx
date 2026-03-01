@@ -9,14 +9,12 @@ const buttonVariants = cva(
       variant: {
         default:
           "bg-primary/15 text-primary border border-primary/25 hover:bg-primary/20 hover:border-primary/40",
-        primary:
-          "bg-primary text-primary-foreground border border-primary hover:bg-primary/90",
+        primary: "bg-primary text-primary-foreground border border-primary hover:bg-primary/90",
         danger:
           "bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/35",
         outline:
           "bg-card/50 text-muted-foreground border border-border hover:bg-muted hover:text-foreground/80",
-        success:
-          "bg-completed/10 text-completed border border-completed/20 hover:bg-completed/20",
+        success: "bg-completed/10 text-completed border border-completed/20 hover:bg-completed/20",
       },
       size: {
         default: "px-4 py-2",

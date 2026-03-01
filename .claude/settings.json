@@ -23,6 +23,11 @@
             "type": "command",
             "command": "bash .claude/hooks/console/quality-check.sh",
             "description": "Console quality check (oxlint + biome format + eslint --fix) — apps/console/src/**/*.{ts,tsx}"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/go/quality-check.sh",
+            "description": "Go quality check (gofmt + go vet) — apps/server, apps/migrators, pkg"
           }
         ]
       }

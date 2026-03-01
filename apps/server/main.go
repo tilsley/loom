@@ -19,9 +19,11 @@ import (
 	"github.com/tilsley/loom/apps/server/internal/migrations"
 	"github.com/tilsley/loom/apps/server/internal/migrations/execution"
 	"github.com/tilsley/loom/apps/server/internal/migrations/handler"
-	"github.com/tilsley/loom/apps/server/internal/migrations/store"
 	"github.com/tilsley/loom/apps/server/internal/migrations/migrator"
+	"github.com/tilsley/loom/apps/server/internal/migrations/store"
+	"github.com/tilsley/loom/apps/server/internal/migrations/store/pgmigrations"
 	"github.com/tilsley/loom/apps/server/internal/platform/logger"
+	pgplatform "github.com/tilsley/loom/apps/server/internal/platform/postgres"
 	"github.com/tilsley/loom/apps/server/internal/platform/telemetry"
 	temporalplatform "github.com/tilsley/loom/apps/server/internal/platform/temporal"
 	"github.com/tilsley/loom/apps/server/internal/platform/validation"
@@ -81,6 +83,22 @@ func main() {
 	})
 	defer rdb.Close() //nolint:errcheck
 
+	// --- Platform: Postgres (optional — event store) ---
+
+	var eventStore migrations.EventStore
+	if pgURL := os.Getenv("POSTGRES_URL"); pgURL != "" {
+		pool, err := pgplatform.New(ctx, pgURL, pgmigrations.FS)
+		if err != nil {
+			slog.Error("postgres init failed", "error", err)
+			os.Exit(1)
+		}
+		defer pool.Close()
+		eventStore = store.NewPGEventStore(pool)
+		slog.Info("event store enabled (postgres)")
+	} else {
+		slog.Info("event store disabled (no POSTGRES_URL)")
+	}
+
 	// --- Adapters ---
 
 	migrationStore := store.NewRedisMigrationStore(rdb)
@@ -90,7 +108,7 @@ func main() {
 
 	// --- Temporal Worker ---
 
-	activities := execution.NewActivities(notifier, migrationStore, slog)
+	activities := execution.NewActivities(notifier, migrationStore, eventStore, slog)
 
 	workerOpts := worker.Options{}
 	if otelEnabled {
@@ -117,7 +135,7 @@ func main() {
 
 	// --- Service + HTTP ---
 
-	svc := migrations.NewService(engine, migrationStore, dryRunner)
+	svc := migrations.NewService(engine, migrationStore, dryRunner, eventStore)
 
 	router := gin.New()
 

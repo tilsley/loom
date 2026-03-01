@@ -8,11 +8,14 @@ services:
     environment:
       - TEMPORAL_HOSTPORT=temporal:7233
       - REDIS_ADDR=redis:6379
+      - POSTGRES_URL=postgres://temporal:temporal@temporal-db:5432/loom?sslmode=disable
     depends_on:
       temporal:
         condition: service_started
       redis:
         condition: service_started
+      loom-db-init:
+        condition: service_completed_successfully
     networks:
       - loom
 
@@ -56,6 +59,17 @@ services:
       interval: 2s
       timeout: 5s
       retries: 15
+    networks:
+      - loom
+
+  loom-db-init:
+    image: postgres:16-alpine
+    entrypoint: ["sh", "-c", "until pg_isready -h temporal-db -U temporal; do sleep 1; done && psql -h temporal-db -U temporal -tc \"SELECT 1 FROM pg_database WHERE datname='loom'\" | grep -q 1 || psql -h temporal-db -U temporal -c 'CREATE DATABASE loom'"]
+    environment:
+      - PGPASSWORD=temporal
+    depends_on:
+      temporal-db:
+        condition: service_healthy
     networks:
       - loom
 

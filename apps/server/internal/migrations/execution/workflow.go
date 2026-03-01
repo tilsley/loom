@@ -10,12 +10,24 @@ import (
 	"github.com/tilsley/loom/pkg/api"
 )
 
+// localActivityOptions for fire-and-forget event recording.
+var localActOpts = workflow.LocalActivityOptions{
+	ScheduleToCloseTimeout: 5 * time.Second,
+}
+
+// recordEvent fires a local activity to persist a lifecycle event.
+// It is fire-and-forget: errors are logged but never block the workflow.
+func recordEvent(ctx workflow.Context, event migrations.StepEvent) {
+	laCtx := workflow.WithLocalActivityOptions(ctx, localActOpts)
+	_ = workflow.ExecuteLocalActivity(laCtx, "RecordEvent", event).Get(laCtx, nil)
+}
+
 // MigrationResult is the return type of MigrationOrchestrator.
 // It is an internal Temporal type; the JSON structure is intentionally stable
 // so that service.GetCandidateSteps can parse workflow output.
 type MigrationResult struct {
-	MigrationId string           `json:"migrationId"`
-	Status      string           `json:"status"`
+	MigrationId string          `json:"migrationId"`
+	Status      string          `json:"status"`
 	Results     []api.StepState `json:"results"`
 }
 
@@ -51,6 +63,15 @@ func MigrationOrchestrator(
 		return MigrationResult{}, fmt.Errorf("register query handler: %w", err)
 	}
 
+	runStartTime := workflow.Now(ctx)
+
+	// Record run_started event.
+	recordEvent(ctx, migrations.StepEvent{
+		MigrationID: manifest.MigrationId,
+		CandidateID: candidateID(manifest),
+		EventType:   migrations.EventRunStarted,
+	})
+
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		TaskQueue:           workflow.GetInfo(ctx).TaskQueueName,
 		StartToCloseTimeout: 24 * time.Hour,
@@ -59,6 +80,15 @@ func MigrationOrchestrator(
 	var failed bool
 	defer func() {
 		if failed {
+			// Record run_cancelled event with duration.
+			dur := int(workflow.Now(ctx).Sub(runStartTime).Milliseconds())
+			recordEvent(ctx, migrations.StepEvent{
+				MigrationID: manifest.MigrationId,
+				CandidateID: candidateID(manifest),
+				EventType:   migrations.EventRunCancelled,
+				DurationMs:  &dur,
+			})
+
 			// Use a disconnected context so the cleanup activity can run even if the
 			// workflow context has been cancelled (e.g. operator hit Cancel).
 			// Without this, ExecuteActivity on a cancelled ctx returns immediately
@@ -92,6 +122,15 @@ func MigrationOrchestrator(
 	}
 
 	runUpdateCandidateStatus(actCtx, ctx, manifest, resultCompleted)
+
+	// Record run_completed event with total duration.
+	runDur := int(workflow.Now(ctx).Sub(runStartTime).Milliseconds())
+	recordEvent(ctx, migrations.StepEvent{
+		MigrationID: manifest.MigrationId,
+		CandidateID: candidateID(manifest),
+		EventType:   migrations.EventRunCompleted,
+		DurationMs:  &runDur,
+	})
 
 	return MigrationResult{
 		MigrationId: manifest.MigrationId,
@@ -139,11 +178,20 @@ func processStep(
 			CallbackId:  callbackID,
 			EventName:   stepCompletedSignal,
 			MigratorApp: step.MigratorApp,
-			MigratorUrl:  manifest.MigratorUrl,
+			MigratorUrl: manifest.MigratorUrl,
 		}
+		stepStart := workflow.Now(ctx)
 		if err := workflow.ExecuteActivity(actCtx, "DispatchStep", req).Get(ctx, nil); err != nil {
 			return false, fmt.Errorf("dispatch step %q for %q: %w", step.Name, candidate.Id, err)
 		}
+
+		// Record step_dispatched.
+		recordEvent(ctx, migrations.StepEvent{
+			MigrationID: manifest.MigrationId,
+			CandidateID: candidate.Id,
+			StepName:    step.Name,
+			EventType:   migrations.EventStepDispatched,
+		})
 
 		// Keep receiving signals until the step reaches a terminal state.
 		// "pending" is intermediate — keep waiting for the final signal.
@@ -161,6 +209,26 @@ func processStep(
 		}
 
 		last := (*results)[len(*results)-1]
+
+		// Record step_completed with duration and status.
+		stepDur := int(workflow.Now(ctx).Sub(stepStart).Milliseconds())
+		stepStatus := string(last.Status)
+		stepMeta := make(map[string]string)
+		if last.Metadata != nil {
+			for k, v := range *last.Metadata {
+				stepMeta[k] = v
+			}
+		}
+		recordEvent(ctx, migrations.StepEvent{
+			MigrationID: manifest.MigrationId,
+			CandidateID: candidate.Id,
+			StepName:    step.Name,
+			EventType:   migrations.EventStepCompleted,
+			Status:      stepStatus,
+			DurationMs:  &stepDur,
+			Metadata:    stepMeta,
+		})
+
 		if last.Status == api.StepStateStatusSucceeded || last.Status == api.StepStateStatusMerged {
 			return true, nil
 		}
@@ -170,6 +238,15 @@ func processStep(
 		if !awaitRetryOrCancel(ctx, retryCh) {
 			return false, nil // operator cancelled while waiting for retry
 		}
+
+		// Record step_retried.
+		recordEvent(ctx, migrations.StepEvent{
+			MigrationID: manifest.MigrationId,
+			CandidateID: candidate.Id,
+			StepName:    step.Name,
+			EventType:   migrations.EventStepRetried,
+		})
+
 		// Retry signal received: clear the failed result before re-dispatching.
 		removeResult(results, step.Name, candidate.Id)
 	}
@@ -303,4 +380,12 @@ func removeResult(results *[]api.StepState, stepName, candidateId string) {
 			return
 		}
 	}
+}
+
+// candidateID returns the first candidate ID from the manifest, or empty string.
+func candidateID(manifest api.MigrationManifest) string {
+	if len(manifest.Candidates) > 0 {
+		return manifest.Candidates[0].Id
+	}
+	return ""
 }

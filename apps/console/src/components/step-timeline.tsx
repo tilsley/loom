@@ -43,6 +43,8 @@ export function StepTimeline({
     return forced;
   }, [results]);
 
+  const prevForcedRef = useRef<Set<string>>(new Set());
+
   const [value, setValue] = useState<string[]>(() => forcedIndices());
 
   const handleValueChange = useCallback(
@@ -58,12 +60,18 @@ export function StepTimeline({
 
   // Sync when results change (new steps appear, statuses change)
   useEffect(() => {
+    const forced = new Set(forcedIndices());
     setValue((prev) => {
-      const forced = new Set(forcedIndices());
-      const merged = new Set(prev);
-      for (const f of forced) merged.add(f);
-      return Array.from(merged);
+      const next = new Set(prev);
+      // Add newly forced indices
+      for (const f of forced) next.add(f);
+      // Auto-collapse steps that just completed (were forced, now aren't)
+      for (const p of prevForcedRef.current) {
+        if (!forced.has(p)) next.delete(p);
+      }
+      return Array.from(next);
     });
+    prevForcedRef.current = forced;
   }, [forcedIndices]);
 
   useEffect(() => {
@@ -196,11 +204,6 @@ export function StepTimeline({
               {/* Expandable content */}
               <AccordionContent>
                 <div className="pt-1">
-                  {/* Step description */}
-                  {description ? (
-                    <p className="text-sm text-muted-foreground mb-3">{description}</p>
-                  ) : null}
-
                   {/* PR link */}
                   {meta.prUrl ? (
                     <div className="mb-2">
@@ -232,26 +235,28 @@ export function StepTimeline({
                     </div>
                   ) : null}
 
-                  {/* Pending with review instructions */}
-                  {hasReview ? (
-                    <div className="mt-2 space-y-3">
-                      <div className="bg-pending/5 border border-pending/15 rounded-md px-3 py-2.5">
-                        <div className="text-xs font-medium text-pending/70 uppercase tracking-widest mb-1.5">
-                          Instructions
-                        </div>
-                        <ul className="space-y-1">
-                          {meta.instructions?.split("\n").map((line, j) => (
-                            <li key={j} className="text-sm text-foreground/80 font-mono">
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
+                  {/* Review instructions (shown regardless of phase) */}
+                  {meta.instructions ? (
+                    <div className="mt-2 bg-pending/5 border border-pending/15 rounded-md px-3 py-2.5">
+                      <div className="text-xs font-medium text-pending/70 uppercase tracking-widest mb-1.5">
+                        Instructions
                       </div>
-                      {onComplete ? (
-                        <ReviewActions
-                          onComplete={(status) => onComplete(r.stepName, r.candidate.id, status)}
-                        />
-                      ) : null}
+                      <ul className="space-y-1">
+                        {meta.instructions.split("\n").map((line, j) => (
+                          <li key={j} className="text-sm text-foreground/80 font-mono">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {/* Review actions (only when pending + awaiting review) */}
+                  {hasReview && onComplete ? (
+                    <div className="mt-3">
+                      <ReviewActions
+                        onComplete={(status) => onComplete(r.stepName, r.candidate.id, status)}
+                      />
                     </div>
                   ) : null}
 

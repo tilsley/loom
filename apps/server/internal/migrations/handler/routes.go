@@ -35,4 +35,10 @@ func RegisterRoutes(r *gin.Engine, svc *migrations.Service, log *slog.Logger) {
 	r.POST("/migrations/:id/candidates/:candidateId/retry-step", h.RetryStep)
 	r.PATCH("/migrations/:id/candidates/:candidateId/inputs", h.UpdateInputs)
 	r.GET("/migrations/:id/candidates/:candidateId/steps", h.GetCandidateSteps)
+
+	// Metrics (not in OpenAPI spec — passes through validation middleware)
+	r.GET("/metrics/overview", h.MetricsOverview)
+	r.GET("/metrics/steps", h.MetricsSteps)
+	r.GET("/metrics/timeline", h.MetricsTimeline)
+	r.GET("/metrics/failures", h.MetricsFailures)
 }

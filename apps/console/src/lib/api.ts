@@ -122,3 +122,65 @@ export async function dryRun(migrationId: string, candidate: Candidate): Promise
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<DryRunResult>;
 }
+
+// --- Metrics ---
+
+export interface MetricsOverview {
+  totalRuns: number;
+  completedRuns: number;
+  failedSteps: number;
+  prsRaised: number;
+  avgDurationMs: number;
+  failureRate: number;
+}
+
+export interface StepMetrics {
+  stepName: string;
+  count: number;
+  avgMs: number;
+  p95Ms: number;
+  failureRate: number;
+}
+
+export interface TimelinePoint {
+  date: string;
+  started: number;
+  completed: number;
+  failed: number;
+}
+
+export interface StepEventFailure {
+  id: number;
+  migrationId: string;
+  candidateId: string;
+  stepName: string;
+  eventType: string;
+  status: string;
+  durationMs: number | null;
+  metadata: Record<string, string> | null;
+  createdAt: string;
+}
+
+export async function getMetricsOverview(): Promise<MetricsOverview> {
+  const res = await fetch(`${BASE}/metrics/overview`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getStepMetrics(): Promise<StepMetrics[]> {
+  const res = await fetch(`${BASE}/metrics/steps`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getMetricsTimeline(days = 30): Promise<TimelinePoint[]> {
+  const res = await fetch(`${BASE}/metrics/timeline?days=${days}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getRecentFailures(limit = 20): Promise<StepEventFailure[]> {
+  const res = await fetch(`${BASE}/metrics/failures?limit=${limit}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}

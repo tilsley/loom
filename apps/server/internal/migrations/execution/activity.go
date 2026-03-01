@@ -25,14 +25,28 @@ type UpdateCandidateStatusInput struct {
 // Activities groups Temporal activity methods. The struct holds dependencies
 // injected at startup (idiomatic Temporal pattern).
 type Activities struct {
-	notifier migrations.MigratorNotifier
-	store    migrations.MigrationStore
-	log      *slog.Logger
+	notifier   migrations.MigratorNotifier
+	store      migrations.MigrationStore
+	eventStore migrations.EventStore
+	log        *slog.Logger
 }
 
 // NewActivities creates a new Activities instance with the given dependencies.
-func NewActivities(notifier migrations.MigratorNotifier, store migrations.MigrationStore, log *slog.Logger) *Activities {
-	return &Activities{notifier: notifier, store: store, log: log}
+// eventStore may be nil — event recording is best-effort.
+func NewActivities(notifier migrations.MigratorNotifier, store migrations.MigrationStore, eventStore migrations.EventStore, log *slog.Logger) *Activities {
+	return &Activities{notifier: notifier, store: store, eventStore: eventStore, log: log}
+}
+
+// RecordEvent persists a lifecycle event into the event store.
+// Always returns nil — analytics are best-effort and must never block workflows.
+func (a *Activities) RecordEvent(ctx context.Context, event migrations.StepEvent) error {
+	if a.eventStore == nil {
+		return nil
+	}
+	if err := a.eventStore.RecordEvent(ctx, event); err != nil {
+		a.log.Warn("failed to record event", "error", err, "eventType", event.EventType)
+	}
+	return nil
 }
 
 // DispatchStep dispatches a step request to the migrator via MigratorNotifier.

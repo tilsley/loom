@@ -19,9 +19,10 @@ const instrName = "github.com/tilsley/loom"
 // Service is the application-level use-case orchestrator for migrations.
 // It depends only on port interfaces — no framework imports.
 type Service struct {
-	engine    ExecutionEngine
-	store     MigrationStore
-	dryRunner DryRunner
+	engine     ExecutionEngine
+	store      MigrationStore
+	dryRunner  DryRunner
+	eventStore EventStore
 
 	// metrics
 	runsStarted      metric.Int64Counter
@@ -30,8 +31,9 @@ type Service struct {
 	dryRunsTotal     metric.Int64Counter
 }
 
-// NewService creates a new Service.
-func NewService(engine ExecutionEngine, store MigrationStore, dryRunner DryRunner) *Service {
+// NewService creates a new Service. eventStore may be nil — metrics queries
+// return empty results when it is not configured.
+func NewService(engine ExecutionEngine, store MigrationStore, dryRunner DryRunner, eventStore EventStore) *Service {
 	m := otel.Meter(instrName)
 
 	runsStarted, _ := m.Int64Counter("loom.runs.started",
@@ -47,6 +49,7 @@ func NewService(engine ExecutionEngine, store MigrationStore, dryRunner DryRunne
 		engine:           engine,
 		store:            store,
 		dryRunner:        dryRunner,
+		eventStore:       eventStore,
 		runsStarted:      runsStarted,
 		runsCancelled:    runsCancelled,
 		candidatesSubmit: candidatesSubmit,
@@ -122,7 +125,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		Candidates:     ann.Candidates,
 		Steps:          ann.Steps,
 		CreatedAt:      time.Now().UTC(),
-		MigratorUrl:      ann.MigratorUrl,
+		MigratorUrl:    ann.MigratorUrl,
 	}
 	if err := s.store.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save migration: %w", err)
@@ -425,7 +428,7 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 		MigrationId: migrationID,
 		Candidates:  []api.Candidate{candidate},
 		Steps:       manifestSteps,
-		MigratorUrl:   m.MigratorUrl,
+		MigratorUrl: m.MigratorUrl,
 	}
 
 	if _, err := s.engine.StartRun(ctx, "MigrationOrchestrator", runID, manifest); err != nil {
@@ -441,4 +444,38 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 	s.runsStarted.Add(ctx, 1,
 		metric.WithAttributes(attribute.String("migration_id", migrationID)))
 	return runID, nil
+}
+
+// --- Metrics query methods (nil-safe) ---
+
+// GetMetricsOverview returns aggregate totals. Returns empty overview if no event store.
+func (s *Service) GetMetricsOverview(ctx context.Context) (*MetricsOverview, error) {
+	if s.eventStore == nil {
+		return &MetricsOverview{}, nil
+	}
+	return s.eventStore.GetOverview(ctx)
+}
+
+// GetStepMetrics returns per-step-name breakdown. Returns empty slice if no event store.
+func (s *Service) GetStepMetrics(ctx context.Context) ([]StepMetrics, error) {
+	if s.eventStore == nil {
+		return []StepMetrics{}, nil
+	}
+	return s.eventStore.GetStepMetrics(ctx)
+}
+
+// GetMetricsTimeline returns daily event counts. Returns empty slice if no event store.
+func (s *Service) GetMetricsTimeline(ctx context.Context, days int) ([]TimelinePoint, error) {
+	if s.eventStore == nil {
+		return []TimelinePoint{}, nil
+	}
+	return s.eventStore.GetTimeline(ctx, days)
+}
+
+// GetRecentFailures returns recent failed steps. Returns empty slice if no event store.
+func (s *Service) GetRecentFailures(ctx context.Context, limit int) ([]StepEvent, error) {
+	if s.eventStore == nil {
+		return []StepEvent{}, nil
+	}
+	return s.eventStore.GetRecentFailures(ctx, limit)
 }

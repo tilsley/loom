@@ -18,12 +18,13 @@ import (
 // All activity methods are mocked via env.OnActivity so the nil dependencies
 // are never actually called.
 func newActivities() *execution.Activities {
-	return execution.NewActivities(nil, nil, slog.Default())
+	return execution.NewActivities(nil, nil, nil, slog.Default())
 }
 
 // dummyMigrator configures env so that every DispatchStep call immediately signals
 // step-completed back to the workflow, simulating a worker that succeeds instantly.
 func dummyMigrator(env *testsuite.TestWorkflowEnvironment, acts *execution.Activities) {
+	env.OnActivity(acts.RecordEvent, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity(acts.DispatchStep, mock.Anything, mock.Anything).
 		Return(nil).
 		Run(func(args mock.Arguments) {
@@ -143,6 +144,7 @@ func TestMigrationOrchestrator_StepFailure_RetrySucceeds(t *testing.T) {
 	env.RegisterActivity(acts)
 
 	// First dispatch signals failure; a retry signal is then sent; second dispatch succeeds.
+	env.OnActivity(acts.RecordEvent, mock.Anything, mock.Anything).Return(nil).Maybe()
 	retrySent := false
 	env.OnActivity(acts.DispatchStep, mock.Anything, mock.Anything).
 		Return(nil).
@@ -245,6 +247,7 @@ func TestMigrationOrchestrator_UpdateInputs_AppliedOnRetry(t *testing.T) {
 	env.RegisterActivity(acts)
 
 	// Track the DispatchStepRequests so we can inspect metadata on retry.
+	env.OnActivity(acts.RecordEvent, mock.Anything, mock.Anything).Return(nil).Maybe()
 	var dispatches []api.DispatchStepRequest
 	retrySent := false
 

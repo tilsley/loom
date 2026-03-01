@@ -172,7 +172,7 @@ func newTestServer(t *testing.T) *testServer {
 		engine: &stubEngine{},
 		dryRun: &stubDryRunner{},
 	}
-	svc := migrations.NewService(ts.engine, ts.store, ts.dryRun)
+	svc := migrations.NewService(ts.engine, ts.store, ts.dryRun, nil)
 	r := gin.New()
 	handler.RegisterRoutes(r, svc, slog.Default())
 	ts.router = r
@@ -186,7 +186,7 @@ func newTestServerWithValidation(t *testing.T) *testServer {
 	require.NoError(t, err)
 	r := gin.New()
 	r.Use(mw)
-	handler.RegisterRoutes(r, migrations.NewService(ts.engine, ts.store, ts.dryRun), slog.Default())
+	handler.RegisterRoutes(r, migrations.NewService(ts.engine, ts.store, ts.dryRun, nil), slog.Default())
 	ts.router = r
 	return ts
 }

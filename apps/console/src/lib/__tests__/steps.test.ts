@@ -28,6 +28,11 @@ const candidateWith = (steps?: StepDefinition[]): Candidate => ({
   ...(steps ? { steps } : {}),
 });
 
+const testCandidate: Candidate = {
+  id: "c",
+  kind: "repo",
+};
+
 describe("getApplicableSteps", () => {
   it("falls back to migration steps when candidate has none", () => {
     const migSteps = [step("a"), step("b")];
@@ -37,7 +42,9 @@ describe("getApplicableSteps", () => {
   it("uses candidate steps when present", () => {
     const candSteps = [step("x")];
     const migSteps = [step("a"), step("b")];
-    expect(getApplicableSteps(candidateWith(candSteps), migrationWith(migSteps))).toEqual(candSteps);
+    expect(getApplicableSteps(candidateWith(candSteps), migrationWith(migSteps))).toEqual(
+      candSteps,
+    );
   });
 
   it("falls back to migration steps when candidate steps array is empty", () => {
@@ -67,6 +74,7 @@ describe("buildStepDescriptionMap", () => {
 describe("calculateStepProgress", () => {
   const makeState = (stepName: string, status: StepState["status"]): StepState => ({
     stepName,
+    candidate: testCandidate,
     status,
   });
 
@@ -105,10 +113,7 @@ describe("calculateStepProgress", () => {
   });
 
   it("falls back to pending step when there is no in_progress or failed step", () => {
-    const data = stepsData([
-      makeState("a", "succeeded"),
-      makeState("b", "pending"),
-    ]);
+    const data = stepsData([makeState("a", "succeeded"), makeState("b", "pending")]);
     expect(calculateStepProgress(data, 2).activeStepName).toBe("b");
   });
 
