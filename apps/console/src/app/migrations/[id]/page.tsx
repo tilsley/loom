@@ -32,9 +32,7 @@ export default function MigrationDetail() {
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   // URL-persisted filter state
-  const search = searchParams.get("q") ?? "";
   const filter = searchParams.get("status") ?? "all";
-  const groupBy = searchParams.get("groupBy") ?? null;
 
   function updateParam(key: string, value: string | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -408,12 +406,8 @@ export default function MigrationDetail() {
           onPreview={handlePreview}
           onCancel={handleCancel}
           runningCandidate={null}
-          search={search}
           filter={filter}
-          groupBy={groupBy}
-          onSearchChange={(v) => updateParam("q", v || null)}
           onFilterChange={(v) => updateParam("status", v === "all" ? null : v)}
-          onGroupByChange={(v) => updateParam("groupBy", v)}
         />
       </section>
     </div>

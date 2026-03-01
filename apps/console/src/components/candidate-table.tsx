@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Migration, Candidate } from "@/lib/api";
 import { StatusFilter } from "./status-filter";
 import { CandidateRow } from "./candidate-row";
-import { Button, Input } from "@/components/ui";
+import { Button, Input, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui";
 
 const PAGE_SIZE = 50;
 
@@ -13,13 +13,8 @@ interface CandidateTableProps {
   onPreview: (candidate: Candidate) => void;
   onCancel?: (candidate: Candidate) => void;
   runningCandidate: string | null;
-  // Controlled filter state — synced to URL by the parent
-  search: string;
   filter: string;
-  groupBy: string | null;
-  onSearchChange: (v: string) => void;
   onFilterChange: (v: string) => void;
-  onGroupByChange: (v: string | null) => void;
 }
 
 export function CandidateTable({
@@ -27,22 +22,18 @@ export function CandidateTable({
   onPreview,
   onCancel,
   runningCandidate,
-  search,
   filter,
-  groupBy,
-  onSearchChange,
   onFilterChange,
-  onGroupByChange,
 }: CandidateTableProps) {
   const kind = (migration.candidates ?? [])[0]?.kind ?? "candidate";
   const kindPlural = kind + "s";
   const kindCap = kind.charAt(0).toUpperCase() + kind.slice(1);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
 
-  // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, filter]);
+  }, [columnFilters, filter]);
 
   const counts = useMemo(() => {
     const c = { running: 0, completed: 0, not_started: 0 };
@@ -54,24 +45,44 @@ export function CandidateTable({
     return c;
   }, [migration.candidates]);
 
-  // Derive groupable keys from metadata across all candidates
-  const groupKeys = useMemo(() => {
+  const metaColumns = useMemo(() => {
     const keys = new Set<string>();
     for (const c of (migration.candidates ?? [])) {
       if (!c.metadata) continue;
-      for (const k of Object.keys(c.metadata)) {
-        keys.add(k);
-      }
+      for (const k of Object.keys(c.metadata)) keys.add(k);
     }
     return Array.from(keys).sort();
   }, [migration.candidates]);
 
+  function getMetaLabel(key: string) {
+    return migration.requiredInputs?.find((i) => i.name === key)?.label ?? key;
+  }
+
+  function setColumnFilter(key: string, value: string) {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleCellFilter(key: string, value: string) {
+    setColumnFilters((prev) => ({
+      ...prev,
+      [key]: prev[key] === value ? "" : value,
+    }));
+  }
+
   const filtered = useMemo(() => {
     let candidates = migration.candidates ?? [];
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      candidates = candidates.filter((t) => t.id.toLowerCase().includes(q));
+    if (columnFilters.id?.trim()) {
+      const q = columnFilters.id.toLowerCase();
+      candidates = candidates.filter((c) => c.id.toLowerCase().includes(q));
+    }
+
+    for (const key of metaColumns) {
+      const val = columnFilters[key]?.trim();
+      if (!val) continue;
+      candidates = candidates.filter((c) =>
+        c.metadata?.[key]?.toLowerCase().includes(val.toLowerCase()),
+      );
     }
 
     if (filter !== "all") {
@@ -82,167 +93,109 @@ export function CandidateTable({
     }
 
     return candidates;
-  }, [migration.candidates, search, filter]);
-
-  // Group filtered candidates by the active key, or null for flat list
-  const groups = useMemo<[string, Candidate[]][] | null>(() => {
-    if (!groupBy) return null;
-    const map = new Map<string, Candidate[]>();
-    for (const c of filtered) {
-      const val = c.metadata?.[groupBy] ?? "—";
-      if (!map.has(val)) map.set(val, []);
-      map.get(val)?.push(c);
-    }
-    // Sort groups alphabetically, "—" last
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (a === "—") return 1;
-      if (b === "—") return -1;
-      return a.localeCompare(b);
-    });
-  }, [filtered, groupBy]);
+  }, [migration.candidates, columnFilters, metaColumns, filter]);
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = filtered.length > visibleCount;
-
-  const columnHeader = (
-    <div className="grid grid-cols-[1fr_100px_1fr_80px] gap-2 px-4 text-xs text-zinc-600 uppercase tracking-widest font-medium">
-      <span>{kindCap}</span>
-      <span>Status</span>
-      <span>Steps</span>
-      <span className="text-right">Actions</span>
-    </div>
-  );
+  const colCount = 1 + metaColumns.length + 1 + 1 + 1;
+  const anyColumnFilter = Object.values(columnFilters).some((v) => v.trim());
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"
-          >
-            <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M9 9l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <Input
-            type="text"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={`Search ${kindPlural}...`}
-            className="pl-9 py-1.5 font-mono"
-          />
-        </div>
-      </div>
-
-      {/* Controls row: status filter + group-by */}
+      {/* Controls row: status filter + clear */}
       <div className="flex items-center gap-2 flex-wrap">
-        <StatusFilter
-          counts={counts}
-          active={filter}
-          onChange={(f) => onFilterChange(f)}
-        />
-
-        {groupKeys.length > 0 && (
+        <StatusFilter counts={counts} active={filter} onChange={onFilterChange} />
+        {anyColumnFilter ? (
           <>
             <div className="w-px h-4 bg-zinc-700/50 shrink-0 mx-1" />
-            {groupKeys.map((key) => {
-              const isActive = groupBy === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => onGroupByChange(isActive ? null : key)}
-                  className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-1 rounded-full border transition-all ${
-                    isActive
-                      ? "bg-teal-500/10 text-teal-400 border-teal-500/30"
-                      : "text-zinc-500 bg-transparent border-zinc-800/60 hover:border-zinc-700 hover:text-zinc-300"
-                  }`}
-                >
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" className="opacity-70">
-                    <rect x="1" y="1" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" />
-                    <rect x="7" y="1" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" />
-                    <rect x="1" y="7" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" />
-                    <rect x="7" y="7" width="4" height="4" rx="0.75" stroke="currentColor" strokeWidth="1.2" />
-                  </svg>
-                  {migration.requiredInputs?.find((i) => i.name === key)?.label ?? key}
-                  {isActive ? <span className="opacity-50">×</span> : null}
-                </button>
-              );
-            })}
+            <button
+              onClick={() => setColumnFilters({})}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Clear filters
+            </button>
           </>
-        )}
+        ) : null}
       </div>
 
-      {/* Grouped view */}
-      {groups !== null ? (
-        <div className="space-y-5">
-          {groups.length === 0 ? (
-            <div className="text-center py-8 text-sm text-zinc-600">
-              No {kindPlural} match the current filter.
-            </div>
-          ) : (
-            groups.map(([groupValue, candidates]) => (
-              <div key={groupValue}>
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-xs font-medium text-zinc-300">{groupValue}</span>
-                  <span className="text-xs text-zinc-600">
-                    {candidates.length} {candidates.length !== 1 ? kindPlural : kind}
-                  </span>
-                </div>
-                {columnHeader}
-                <div className="space-y-1 mt-2">
-                  {candidates.map((c) => (
-                    <CandidateRow
-                      key={c.id}
-                      candidate={c}
-                      migrationId={(c.status === "running" || c.status === "completed") ? migration.id : undefined}
-                      onPreview={onPreview}
-                      onCancel={onCancel}
-                      isRunning={runningCandidate === c.id}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Flat view */}
-          {columnHeader}
+      {/* Table */}
+      <div className="rounded-lg border border-zinc-800/80 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-b border-zinc-800">
+              <TableHead>{kindCap}</TableHead>
+              {metaColumns.map((key) => (
+                <TableHead key={key}>{getMetaLabel(key)}</TableHead>
+              ))}
+              <TableHead>Files</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+            <TableRow className="border-b border-zinc-800/60 bg-zinc-900/30">
+              <TableHead className="py-1.5">
+                <Input
+                  value={columnFilters.id ?? ""}
+                  onChange={(e) => setColumnFilter("id", e.target.value)}
+                  placeholder={`Search ${kindPlural}…`}
+                  className="h-7 text-xs py-1 font-mono bg-transparent border-zinc-700/50"
+                />
+              </TableHead>
+              {metaColumns.map((key) => (
+                <TableHead key={key} className="py-1.5">
+                  <Input
+                    value={columnFilters[key] ?? ""}
+                    onChange={(e) => setColumnFilter(key, e.target.value)}
+                    placeholder="Filter…"
+                    className="h-7 text-xs py-1 font-mono bg-transparent border-zinc-700/50"
+                  />
+                </TableHead>
+              ))}
+              <TableHead />
+              <TableHead />
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {renderRows(visible)}
+            {visible.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={colCount} className="py-8 text-center text-zinc-600">
+                  No {kindPlural} match the current filter.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
-          <div className="space-y-1">
-            {visible.map((t) => (
-              <CandidateRow
-                key={t.id}
-                candidate={t}
-                migrationId={(t.status === "running" || t.status === "completed") ? migration.id : undefined}
-                onPreview={onPreview}
-                onCancel={onCancel}
-                isRunning={runningCandidate === t.id}
-              />
-            ))}
-          </div>
-
-          {visible.length === 0 && (
-            <div className="text-center py-8 text-sm text-zinc-600">
-              No {kindPlural} match the current filter.
-            </div>
-          )}
-
-          {hasMore ? <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-              className="w-full"
-            >
-              Show more ({filtered.length - visibleCount} remaining)
-            </Button> : null}
-        </>
-      )}
+      {hasMore ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+          className="w-full"
+        >
+          Show more ({filtered.length - visibleCount} remaining)
+        </Button>
+      ) : null}
     </div>
   );
+
+  function renderRows(candidates: Candidate[]) {
+    return candidates.map((c) => (
+      <CandidateRow
+        key={c.id}
+        candidate={c}
+        migrationId={
+          c.status === "running" || c.status === "completed" ? migration.id : undefined
+        }
+        onPreview={onPreview}
+        onCancel={onCancel}
+        isRunning={runningCandidate === c.id}
+        metaColumns={metaColumns}
+        onMetaFilter={handleCellFilter}
+        colCount={colCount}
+      />
+    ));
+  }
 }

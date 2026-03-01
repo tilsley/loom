@@ -72,7 +72,12 @@
       "WebFetch(domain:designsystems.surf)",
       "WebFetch(domain:atlassian.design)",
       "WebFetch(domain:www.colorsandfonts.com)",
-      "WebFetch(domain:blog.logrocket.com)"
+      "WebFetch(domain:blog.logrocket.com)",
+      "WebFetch(domain:www.joshwcomeau.com)",
+      "WebFetch(domain:tailwindcolor.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:imperavi.com)",
+      "WebFetch(domain:linear.style)"
     ]
   }
 }

@@ -29,6 +29,9 @@
 :root {
   --scrollbar-thumb: #3f3f46;
   --scrollbar-thumb-hover: #52525b;
+  /* Elevation shadows — minimal in dark mode (shadows barely visible on dark surfaces) */
+  --shadow-card: none;
+  --shadow-popover: 0 4px 12px hsl(240 5% 10% / 0.5);
 }
 
 @layer base {
@@ -40,8 +43,8 @@
 /* Light mode: remap the zinc scale so all bg-zinc-* / text-zinc-* / border-zinc-*
    utilities automatically flip without touching any component code. */
 .light {
-  --color-zinc-950: #ffffff;
-  --color-zinc-900: #f4f4f5;
+  --color-zinc-950: #fafafa;
+  --color-zinc-900: #ffffff;
   --color-zinc-800: #e4e4e7;
   --color-zinc-700: #d4d4d8;
   --color-zinc-600: #a1a1aa;
@@ -53,15 +56,15 @@
   --color-zinc-50: #09090b;
 
   /* Semantic tokens — light equivalents */
-  --color-background: #ffffff;
+  --color-background: #fafafa;
   --color-foreground: #09090b;
-  --color-surface: #f4f4f5;
-  --color-surface-raised: #e4e4e7;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
   --color-border: #e4e4e7;
   --color-border-hover: #d4d4d8;
-  --color-card: #f4f4f5;
+  --color-card: #ffffff;
   --color-card-foreground: #18181b;
-  --color-muted: #e4e4e7;
+  --color-muted: #f4f4f5;
   --color-muted-foreground: #52525b;
   --color-accent: #0f766e;
   --color-accent-dim: #0f766e26;
@@ -70,12 +73,16 @@
   --color-primary-foreground: #ffffff;
   --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
-  --color-input: #e4e4e7;
+  --color-input: #ffffff;
   --color-ring: #0f766e;
 
   /* Scrollbar */
   --scrollbar-thumb: #d4d4d8;
   --scrollbar-thumb-hover: #a1a1aa;
+
+  /* Elevation shadows — multi-layer for natural depth on white surfaces */
+  --shadow-card: 0 1px 3px hsl(240 5% 40% / 0.08), 0 1px 2px hsl(240 5% 40% / 0.06);
+  --shadow-popover: 0 4px 6px hsl(240 5% 40% / 0.07), 0 10px 15px hsl(240 5% 40% / 0.07), 0 0 0 1px hsl(240 5% 40% / 0.04);
 }
 
 
