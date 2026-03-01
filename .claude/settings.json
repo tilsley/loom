@@ -7,6 +7,16 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/guard-generated-files.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/go/guard-go-mod.sh",
+            "description": "Block direct edits to go.mod / go.sum"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/go/guard-arch.sh",
+            "description": "Enforce server architecture import boundaries (service/execution/handler layers)"
           }
         ]
       }

@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# PostToolUse hook — runs gofmt + go build on edited Go source files.
+# PostToolUse hook — runs gofmt + go vet + staticcheck on edited Go source files.
 #
-# go build compiles production code only (excludes *_test.go), giving fast
-# feedback on type/compilation errors without test-file noise.
-#
-# Intentionally omits go vet and golangci-lint. Run `make lint-go` and
-# `make test` manually at the end of a task.
+# staticcheck catches real bugs and bad patterns beyond go vet (~150 checks).
+# golangci-lint (the full suite) is intentionally omitted — run `make lint-go`
+# and `make test` manually at the end of a task.
 
 file_path=$(python3 -c "
 import sys, json
@@ -40,14 +38,20 @@ if ! gofmt -w "$file_path" 2>&1; then
   has_error=1
 fi
 
-# go build — compile the package containing the edited file.
-# Does NOT include _test.go files, so stale tests don't create noise here.
-# Run `make test` at end of task to validate tests.
+# go vet — vet the package containing the edited file (includes test files).
+# Run `make lint-go` at end of task for the full golangci-lint pass.
 pkg_dir=$(dirname "$file_path")
 rel_pkg="./${pkg_dir#"$PROJECT_ROOT/"}"
 
-if ! go build "$rel_pkg" 2>&1; then
+if ! go vet "$rel_pkg" 2>&1; then
   has_error=1
+fi
+
+# staticcheck — catches bugs and bad patterns beyond go vet
+if command -v staticcheck &>/dev/null; then
+  if ! staticcheck "$rel_pkg" 2>&1; then
+    has_error=1
+  fi
 fi
 
 exit $has_error
