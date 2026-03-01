@@ -16,6 +16,8 @@ import {
   type Migration,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
+import { buildStepDescriptionMap, calculateStepProgress } from "@/lib/steps";
+import { prefillInputs } from "@/lib/inputs";
 import { StepTimeline } from "@/components/step-timeline";
 import {
   Button,
@@ -96,11 +98,7 @@ export default function CandidateStepsPage() {
 
   const openDialog = useCallback(() => {
     if (!requiredInputs || !candidate) return;
-    const values: Record<string, string> = {};
-    for (const inp of requiredInputs) {
-      values[inp.name] = candidate.metadata?.[inp.name] ?? "";
-    }
-    setInputValues(values);
+    setInputValues(prefillInputs(requiredInputs, candidate));
     setDialogOpen(true);
   }, [requiredInputs, candidate]);
 
@@ -118,24 +116,15 @@ export default function CandidateStepsPage() {
     }
   }, [id, candidateId, inputValues, fetchCandidate]);
 
-  const stepDescriptions = useMemo(() => {
-    if (!migration) return new Map<string, string>();
-    return new Map(
-      migration.steps.filter((s) => s.description).map((s) => [s.name, s.description ?? ""]),
-    );
-  }, [migration]);
+  const stepDescriptions = useMemo(
+    () => (migration ? buildStepDescriptionMap(migration.steps) : new Map<string, string>()),
+    [migration],
+  );
 
-  const progress = useMemo(() => {
-    if (!stepsData || !migration) return null;
-    const reported = stepsData.steps;
-    const totalSteps = migration.steps.length;
-    const done = reported.filter((s) => s.status === "succeeded" || s.status === "merged").length;
-    const active =
-      reported.find((s) => s.status === "in_progress")
-      ?? reported.find((s) => s.status === "failed")
-      ?? reported.find((s) => s.status === "pending");
-    return { done, total: totalSteps, activeStepName: active?.stepName };
-  }, [stepsData, migration]);
+  const progress = useMemo(
+    () => (stepsData && migration ? calculateStepProgress(stepsData, migration.steps.length) : null),
+    [stepsData, migration],
+  );
 
   // Temporal workflow ID used for event callbacks — derived from migration + candidate IDs
   const runId = `${id}__${candidateId}`;
@@ -167,87 +156,99 @@ export default function CandidateStepsPage() {
         </div>
       ) : (
         <>
-          {/* Header */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              href={ROUTES.migrationDetail(id)}
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground/80 transition-colors shrink-0"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {migration?.name ?? id}
-            </Link>
-            <span className="text-muted-foreground/50 select-none">·</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-mono bg-muted border border-border-hover/50 text-foreground/80 px-2 py-0.5 rounded-md">
-              {candidateId}
-            </span>
-            {stepsData ? (
-              <>
-                <span className="flex-1" />
-                {hasRequiredInputs ? (
-                  <button
-                    type="button"
-                    onClick={openDialog}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground/80 bg-muted hover:bg-muted border border-border-hover/50 px-2.5 py-1 rounded-md transition-colors shrink-0"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M8.5 1.5l2 2M1.5 8.5l6-6 2 2-6 6H1.5v-2Z" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Edit inputs
-                  </button>
-                ) : null}
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-md border shrink-0 ${
-                  stepsData.status === "completed"
-                    ? "text-completed bg-completed/10 border-completed/20"
-                    : "text-running bg-running/10 border-running/20"
-                }`}>
-                  {stepsData.status}
-                </span>
-              </>
-            ) : null}
-          </div>
-
-          {error ? (
-            <div className="bg-destructive/8 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-
-          {/* Loading skeleton */}
-          {!stepsData && !error ? (
-            <div className="space-y-4">
-              <Skeleton className="h-1 w-full rounded-full" />
-              <Skeleton className="h-32 w-full" />
-            </div>
-          ) : null}
-
-          {/* Progress */}
-          {progress ? (
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary/50 rounded-full transition-all duration-500"
-                  style={{ width: `${(progress.done / progress.total) * 100}%` }}
-                />
-              </div>
-              <span className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
-                {progress.done} / {progress.total}
+          {/* Sticky header */}
+          <div className="sticky top-0 z-10 bg-background pb-6 -mb-6 space-y-5">
+            {/* Breadcrumb + actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href={ROUTES.migrationDetail(id)}
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground/80 transition-colors shrink-0"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {migration?.name ?? id}
+              </Link>
+              <span className="text-muted-foreground/50 select-none">·</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono bg-muted border border-border-hover/50 text-foreground/80 px-2 py-0.5 rounded-md">
+                {candidateId}
               </span>
-              {progress.activeStepName ? (
+              {candidate?.metadata ? Object.entries(candidate.metadata).map(([k, v]) => (
+                <span
+                  key={k}
+                  className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground bg-muted/50 border border-border-hover/30 px-2 py-0.5 rounded-md"
+                >
+                  <span className="text-muted-foreground/60">{k}</span>
+                  <span>{v}</span>
+                </span>
+              )) : null}
+              {stepsData ? (
                 <>
-                  <span className="text-muted-foreground/50 select-none">·</span>
-                  <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
-                    {progress.activeStepName}
+                  <span className="flex-1" />
+                  {hasRequiredInputs ? (
+                    <button
+                      type="button"
+                      onClick={openDialog}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground/80 bg-muted hover:bg-muted border border-border-hover/50 px-2.5 py-1 rounded-md transition-colors shrink-0"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M8.5 1.5l2 2M1.5 8.5l6-6 2 2-6 6H1.5v-2Z" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Edit inputs
+                    </button>
+                  ) : null}
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-md border shrink-0 ${
+                    stepsData.status === "completed"
+                      ? "text-completed bg-completed/10 border-completed/20"
+                      : "text-running bg-running/10 border-running/20"
+                  }`}>
+                    {stepsData.status}
                   </span>
                 </>
               ) : null}
             </div>
-          ) : null}
+
+            {error ? (
+              <div className="bg-destructive/8 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
+
+            {/* Loading skeleton */}
+            {!stepsData && !error ? (
+              <div className="space-y-4">
+                <Skeleton className="h-1 w-full rounded-full" />
+                <Skeleton className="h-32 w-full" />
+              </div>
+            ) : null}
+
+            {/* Progress */}
+            {progress ? (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary/50 rounded-full transition-all duration-500"
+                    style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
+                  {progress.done} / {progress.total}
+                </span>
+                {progress.activeStepName ? (
+                  <>
+                    <span className="text-muted-foreground/50 select-none">·</span>
+                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
+                      {progress.activeStepName}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           {/* Step timeline */}
           {stepsData ? (
-            <div className="border border-border rounded-lg p-5">
+            <div className="border border-border rounded-lg p-5 max-w-2xl mx-auto">
               <StepTimeline
                 results={stepsData.steps}
                 stepDescriptions={stepDescriptions}

@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Migration, Candidate } from "@/lib/api";
+import { getCandidateCounts } from "@/lib/stats";
+import { discoverMetadataColumns, filterCandidates } from "@/lib/filtering";
+import { pluralizeKind } from "@/lib/formatting";
 import { StatusFilter } from "./status-filter";
 import { CandidateRow } from "./candidate-row";
 import { Button, Input, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui";
@@ -26,7 +29,7 @@ export function CandidateTable({
   onFilterChange,
 }: CandidateTableProps) {
   const kind = (migration.candidates ?? [])[0]?.kind ?? "candidate";
-  const kindPlural = kind + "s";
+  const kindPlural = pluralizeKind(kind);
   const kindCap = kind.charAt(0).toUpperCase() + kind.slice(1);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -35,24 +38,15 @@ export function CandidateTable({
     setVisibleCount(PAGE_SIZE);
   }, [columnFilters, filter]);
 
-  const counts = useMemo(() => {
-    const c = { running: 0, completed: 0, not_started: 0 };
-    for (const t of (migration.candidates ?? [])) {
-      if (t.status === "completed") c.completed++;
-      else if (t.status === "running") c.running++;
-      else c.not_started++;
-    }
-    return c;
-  }, [migration.candidates]);
+  const counts = useMemo(
+    () => getCandidateCounts(migration.candidates ?? []),
+    [migration.candidates],
+  );
 
-  const metaColumns = useMemo(() => {
-    const keys = new Set<string>();
-    for (const c of (migration.candidates ?? [])) {
-      if (!c.metadata) continue;
-      for (const k of Object.keys(c.metadata)) keys.add(k);
-    }
-    return Array.from(keys).sort();
-  }, [migration.candidates]);
+  const metaColumns = useMemo(
+    () => discoverMetadataColumns(migration.candidates ?? []),
+    [migration.candidates],
+  );
 
   function getMetaLabel(key: string) {
     return migration.requiredInputs?.find((i) => i.name === key)?.label ?? key;
@@ -69,31 +63,10 @@ export function CandidateTable({
     }));
   }
 
-  const filtered = useMemo(() => {
-    let candidates = migration.candidates ?? [];
-
-    if (columnFilters.id?.trim()) {
-      const q = columnFilters.id.toLowerCase();
-      candidates = candidates.filter((c) => c.id.toLowerCase().includes(q));
-    }
-
-    for (const key of metaColumns) {
-      const val = columnFilters[key]?.trim();
-      if (!val) continue;
-      candidates = candidates.filter((c) =>
-        c.metadata?.[key]?.toLowerCase().includes(val.toLowerCase()),
-      );
-    }
-
-    if (filter !== "all") {
-      candidates = candidates.filter((t) => {
-        if (filter === "not_started") return !t.status || t.status === "not_started";
-        return t.status === filter;
-      });
-    }
-
-    return candidates;
-  }, [migration.candidates, columnFilters, metaColumns, filter]);
+  const filtered = useMemo(
+    () => filterCandidates(migration.candidates ?? [], columnFilters, metaColumns, filter),
+    [migration.candidates, columnFilters, metaColumns, filter],
+  );
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = filtered.length > visibleCount;

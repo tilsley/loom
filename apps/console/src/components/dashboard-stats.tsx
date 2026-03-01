@@ -1,19 +1,12 @@
 import type { Migration } from "@/lib/api";
+import { getDashboardStats } from "@/lib/stats";
 
 interface DashboardStatsProps {
   migrations: Migration[];
 }
 
 export function DashboardStats({ migrations }: DashboardStatsProps) {
-  let activeCandidates = 0;
-  let completedCandidates = 0;
-
-  for (const m of migrations) {
-    for (const c of (m.candidates ?? [])) {
-      if (c.status === "running") activeCandidates++;
-      else if (c.status === "completed") completedCandidates++;
-    }
-  }
+  const { activeCandidates, completedCandidates } = getDashboardStats(migrations);
 
   const stats = [
     { label: "Migrations", value: migrations.length, accent: false },

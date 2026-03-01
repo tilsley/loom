@@ -12,6 +12,8 @@ import {
   type DryRunResult,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
+import { getApplicableSteps } from "@/lib/steps";
+import { prefillInputs, mergeInputsIntoCandidate } from "@/lib/inputs";
 import { Button, Input, Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle } from "@/components/ui";
 import { DryRunStepResult } from "@/components/file-diff-view";
 
@@ -30,13 +32,9 @@ export function PreviewPanel({ open, migrationId, migration, candidate, onClose 
     [migration.requiredInputs],
   );
 
-  const [inputs, setInputs] = useState<Record<string, string>>(() => {
-    const prefilled: Record<string, string> = {};
-    for (const inp of requiredInputs) {
-      prefilled[inp.name] = candidate.metadata?.[inp.name] ?? "";
-    }
-    return prefilled;
-  });
+  const [inputs, setInputs] = useState<Record<string, string>>(() =>
+    prefillInputs(requiredInputs, candidate),
+  );
 
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
   const [dryRunLoading, setDryRunLoading] = useState(false);
@@ -49,11 +47,10 @@ export function PreviewPanel({ open, migrationId, migration, candidate, onClose 
 
   const allInputsFilled = requiredInputs.every((inp) => inputs[inp.name]?.trim());
 
-  const candidateWithInputs = useMemo<Candidate>(() => {
-    if (requiredInputs.length === 0) return candidate;
-    const merged = { ...(candidate.metadata ?? {}), ...inputs };
-    return { ...candidate, metadata: merged };
-  }, [candidate, inputs, requiredInputs]);
+  const candidateWithInputs = useMemo<Candidate>(
+    () => mergeInputsIntoCandidate(candidate, requiredInputs, inputs),
+    [candidate, inputs, requiredInputs],
+  );
 
   const triggerDryRun = useCallback(
     (c: Candidate) => {
@@ -95,7 +92,7 @@ export function PreviewPanel({ open, migrationId, migration, candidate, onClose 
     }
   }
 
-  const steps = (candidate.steps?.length ? candidate.steps : migration.steps) ?? [];
+  const steps = getApplicableSteps(candidate, migration);
 
   const dryRunByStep = useMemo(() => {
     if (!dryRunResult) return new Map<string, DryRunResult["steps"][number]>();

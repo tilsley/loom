@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { buildSearchParams } from "@/lib/url";
+import { pluralizeKind } from "@/lib/formatting";
+import { prefillInputs } from "@/lib/inputs";
 import Link from "next/link";
 import {
   getMigration,
@@ -45,14 +48,7 @@ export default function MigrationDetail() {
   const filter = searchParams.get("status") ?? "all";
 
   function updateParam(key: string, value: string | null) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (!value || value === "all") {
-      params.delete(key);
-    } else {
-      params.set(key, value);
-    }
-    const qs = params.toString();
-    router.replace(`${pathname}${qs ? "?" + qs : ""}`, { scroll: false });
+    router.replace(`${pathname}${buildSearchParams(searchParams, key, value)}`, { scroll: false });
   }
 
   const fetchMigration = useCallback(async () => {
@@ -86,17 +82,13 @@ export default function MigrationDetail() {
     return () => clearInterval(interval);
   }, [fetchMigration, fetchCandidates, hasRunning]);
 
-  const kindPlural = (candidates[0]?.kind ?? "candidate") + "s";
+  const kindPlural = pluralizeKind(candidates[0]?.kind);
   const kindPluralCap = kindPlural.charAt(0).toUpperCase() + kindPlural.slice(1);
 
   function handlePreview(candidate: Candidate) {
     const required = migration?.requiredInputs ?? [];
     if (required.length > 0) {
-      const prefilled: Record<string, string> = {};
-      for (const inp of required) {
-        prefilled[inp.name] = candidate.metadata?.[inp.name] ?? "";
-      }
-      setPreviewModal({ candidate, inputs: prefilled });
+      setPreviewModal({ candidate, inputs: prefillInputs(required, candidate) });
     } else {
       router.push(ROUTES.preview(id, candidate.id));
     }

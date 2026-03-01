@@ -17,6 +17,8 @@ import {
 import { Button, Input } from "@/components/ui";
 import { DryRunStepResult } from "@/components/file-diff-view";
 import { ROUTES } from "@/lib/routes";
+import { getApplicableSteps } from "@/lib/steps";
+import { prefillInputsFromUrl, mergeInputsIntoCandidate } from "@/lib/inputs";
 
 export default function PreviewPage() {
   const { id, candidateId } = useParams<{ id: string; candidateId: string }>();
@@ -66,16 +68,10 @@ export default function PreviewPage() {
         // Pre-fill inputs: URL params (passed from the preview modal) take precedence over candidate metadata
         const required = mig.requiredInputs ?? [];
         if (required.length > 0) {
-          const prefilled: Record<string, string> = {};
-          let allFromUrl = true;
-          for (const inp of required) {
-            const urlVal = searchParams.get(inp.name);
-            prefilled[inp.name] = urlVal !== null ? urlVal : (found.metadata?.[inp.name] ?? "");
-            if (urlVal === null) allFromUrl = false;
-          }
-          setInputs(prefilled);
+          const { values, allFromUrl } = prefillInputsFromUrl(required, found, searchParams);
+          setInputs(values);
           if (allFromUrl) {
-            setDebouncedInputs(prefilled); // skip debounce — inputs already confirmed in modal
+            setDebouncedInputs(values); // skip debounce — inputs already confirmed in modal
             setDryRunEnabled(true);
           }
         } else {
@@ -92,9 +88,7 @@ export default function PreviewPage() {
   // Build the candidate with debounced inputs merged into metadata (for dry-run only)
   const candidateWithInputs = useMemo<Candidate | null>(() => {
     if (!candidate) return null;
-    if (requiredInputs.length === 0) return candidate;
-    const merged = { ...(candidate.metadata ?? {}), ...debouncedInputs };
-    return { ...candidate, metadata: merged };
+    return mergeInputsIntoCandidate(candidate, requiredInputs, debouncedInputs);
   }, [candidate, debouncedInputs, requiredInputs]);
 
   // Auto-trigger dry run once migration + candidate are loaded and all inputs are filled
@@ -144,10 +138,7 @@ export default function PreviewPage() {
     }
   }
 
-  // Use the candidate's own step list if present — it was computed at discovery
-  // time and contains only the steps applicable to this specific candidate.
-  // Fall back to the migration-level template for display if not set.
-  const steps = (candidate?.steps?.length ? candidate.steps : migration?.steps) ?? [];
+  const steps = getApplicableSteps(candidate, migration);
 
   const dryRunByStep = useMemo(() => {
     if (!dryRunResult) return new Map<string, DryRunResult["steps"][number]>();

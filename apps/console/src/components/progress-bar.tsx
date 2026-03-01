@@ -1,4 +1,5 @@
 import type { Candidate } from "@/lib/api";
+import { getCandidateCounts } from "@/lib/stats";
 
 interface ProgressBarProps {
   candidates: Candidate[];
@@ -6,13 +7,7 @@ interface ProgressBarProps {
 
 export function ProgressBar({ candidates }: ProgressBarProps) {
   const total = candidates.length;
-  const counts = { completed: 0, running: 0, not_started: 0 };
-
-  for (const c of candidates) {
-    if (c.status === "completed") counts.completed++;
-    else if (c.status === "running") counts.running++;
-    else counts.not_started++;
-  }
+  const counts = getCandidateCounts(candidates);
 
   const segments = [
     { key: "completed", count: counts.completed, color: "bg-completed", label: "completed" },

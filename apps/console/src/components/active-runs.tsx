@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Migration } from "@/lib/api";
+import { filterActiveMigrations, getCandidateCounts } from "@/lib/stats";
 import { ProgressBar } from "./progress-bar";
 
 interface ActiveRunsProps {
@@ -7,9 +8,7 @@ interface ActiveRunsProps {
 }
 
 export function ActiveRuns({ migrations }: ActiveRunsProps) {
-  const active = migrations.filter((m) =>
-    (m.candidates ?? []).some((c) => c.status === "running"),
-  );
+  const active = filterActiveMigrations(migrations);
 
   return (
     <div className="bg-card/50 border border-border rounded-lg">
@@ -22,7 +21,7 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
         ) : (
           <div className="space-y-4">
             {active.map((m) => {
-              const runningCount = (m.candidates ?? []).filter((c) => c.status === "running").length;
+              const runningCount = getCandidateCounts(m.candidates ?? []).running;
 
               return (
                 <div key={m.id}>

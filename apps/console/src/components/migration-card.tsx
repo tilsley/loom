@@ -1,22 +1,13 @@
 import Link from "next/link";
 import type { Migration } from "@/lib/api";
-
-function timeAgo(date: string): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-}
+import { getMigrationRunStats } from "@/lib/stats";
+import { timeAgo, pluralizeKind } from "@/lib/formatting";
 
 export function MigrationCard({ migration }: { migration: Migration }) {
   const candidates = migration.candidates ?? [];
-  const kindPlural = (candidates[0]?.kind ?? "candidate") + "s";
-  const runCount = candidates.filter(
-    (c) => c.status === "running" || c.status === "completed",
-  ).length;
+  const kindPlural = pluralizeKind(candidates[0]?.kind);
+  const { runCount, doneCount } = getMigrationRunStats(candidates);
   const hasRuns = runCount > 0;
-  const doneCount = candidates.filter((c) => c.status === "completed").length;
 
   return (
     <Link
