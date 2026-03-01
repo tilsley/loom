@@ -18,6 +18,11 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/remind-generate.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/console/quality-check.sh",
+            "description": "Console quality check (oxlint + biome format + eslint --fix) — apps/console/src/**/*.{ts,tsx}"
           }
         ]
       }
