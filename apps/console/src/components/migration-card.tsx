@@ -21,23 +21,23 @@ export function MigrationCard({ migration }: { migration: Migration }) {
   return (
     <Link
       href={`/migrations/${migration.id}`}
-      className="group relative block rounded-lg border border-zinc-800/80 bg-[var(--color-surface)] hover:border-zinc-700 hover:bg-[var(--color-surface-raised)] transition-all duration-200"
+      className="group relative block rounded-lg border border-border bg-[var(--color-surface)] hover:border-border-hover hover:bg-[var(--color-surface-raised)] transition-all duration-200"
     >
       {/* Left accent */}
-      <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-teal-500/40 group-hover:bg-teal-400/70 transition-colors" />
+      <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-primary/40 group-hover:bg-primary/70 transition-colors" />
 
       <div className="pl-5 pr-4 py-3.5">
         {/* Top row: name + slug */}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="text-[14px] font-semibold text-zinc-100 group-hover:text-white truncate transition-colors">
+            <h3 className="text-[14px] font-semibold text-foreground truncate transition-colors">
               {migration.name}
             </h3>
-            <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
               {migration.description}
             </p>
           </div>
-          <span className="shrink-0 text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+          <span className="shrink-0 text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
             {migration.id}
           </span>
         </div>
@@ -60,7 +60,7 @@ export function MigrationCard({ migration }: { migration: Migration }) {
             </>
           )}
           <div className="flex-1" />
-          <span className="text-xs text-zinc-600 font-mono">
+          <span className="text-xs text-muted-foreground font-mono">
             {timeAgo(migration.createdAt)}
           </span>
           <svg
@@ -68,7 +68,7 @@ export function MigrationCard({ migration }: { migration: Migration }) {
             height="14"
             viewBox="0 0 14 14"
             fill="none"
-            className="text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-0.5 transition-all"
+            className="text-muted-foreground/70 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all"
           >
             <path
               d="M5 3l4 4-4 4"
@@ -89,16 +89,16 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
     <div className="flex items-center gap-1.5">
       <span
         className={`text-sm font-mono font-medium ${
-          accent ? "text-teal-400" : "text-zinc-300"
+          accent ? "text-primary" : "text-foreground/80"
         }`}
       >
         {value}
       </span>
-      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }
 
 function StatDivider() {
-  return <div className="w-px h-3 bg-zinc-800" />;
+  return <div className="w-px h-3 bg-border" />;
 }

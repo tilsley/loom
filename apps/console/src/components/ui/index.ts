@@ -7,3 +7,6 @@ export { Toaster } from "./toaster";
 export { ErrorBoundary } from "./error-boundary";
 export { Tooltip, TooltipProvider } from "./tooltip";
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./table";
+export { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "./dialog";
+export { Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle } from "./sheet";
+export { ToggleGroup, ToggleGroupItem } from "./toggle-group";

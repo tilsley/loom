@@ -158,6 +158,35 @@ paths:
         "409":
           description: Candidate is not running
 
+  /migrations/{id}/candidates/{candidateId}/inputs:
+    patch:
+      summary: Update operator-supplied inputs for a candidate
+      operationId: updateCandidateInputs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInputsRequest"
+      responses:
+        "204":
+          description: Inputs updated
+        "400":
+          description: Invalid input key
+        "404":
+          description: Migration or candidate not found
+
   /migrations/{id}/candidates/{candidateId}/steps:
     get:
       summary: Get step execution progress for a running or completed candidate
@@ -403,6 +432,16 @@ components:
           additionalProperties:
             type: string
           description: Operator-supplied inputs collected at preview time. Merged into candidate metadata before starting the workflow.
+
+    UpdateInputsRequest:
+      type: object
+      required: [inputs]
+      properties:
+        inputs:
+          type: object
+          additionalProperties:
+            type: string
+          description: Operator-supplied input values to update. Keys must match entries in migration.requiredInputs.
 
     CandidateStepsResponse:
       type: object

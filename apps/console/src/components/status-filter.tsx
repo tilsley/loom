@@ -1,3 +1,5 @@
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui";
+
 interface StatusFilterProps {
   counts: Record<string, number>;
   active: string;
@@ -5,42 +7,38 @@ interface StatusFilterProps {
 }
 
 const filters = [
-  { key: "all", label: "All", color: "text-zinc-300 bg-zinc-800/60 border-zinc-700" },
-  { key: "running", label: "Running", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-  {
-    key: "completed",
-    label: "Completed",
-    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  },
-  { key: "not_started", label: "Not started", color: "text-slate-400 bg-slate-500/10 border-slate-500/20" },
+  { key: "all", label: "All", color: "text-foreground/80 bg-muted border-border-hover", inactive: "text-muted-foreground bg-transparent border-border/60 hover:border-border-hover" },
+  { key: "running", label: "Running", color: "text-running bg-running/10 border-running/20", inactive: "text-muted-foreground bg-transparent border-border/60 hover:border-border-hover" },
+  { key: "completed", label: "Completed", color: "text-completed bg-completed/10 border-completed/20", inactive: "text-muted-foreground bg-transparent border-border/60 hover:border-border-hover" },
+  { key: "not_started", label: "Not started", color: "text-muted-foreground bg-muted-foreground/10 border-muted-foreground/20", inactive: "text-muted-foreground bg-transparent border-border/60 hover:border-border-hover" },
 ];
 
 export function StatusFilter({ counts, active, onChange }: StatusFilterProps) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="flex items-center gap-1.5">
+    <ToggleGroup
+      type="single"
+      value={active}
+      onValueChange={(v) => { if (v) onChange(v); }}
+    >
       {filters.map((f) => {
         const count = f.key === "all" ? total : (counts[f.key] ?? 0);
         const isActive = active === f.key;
 
         return (
-          <button
+          <ToggleGroupItem
             key={f.key}
-            onClick={() => onChange(f.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-              isActive
-                ? f.color
-                : "text-zinc-500 bg-transparent border-zinc-800/60 hover:border-zinc-700"
-            }`}
+            value={f.key}
+            className={isActive ? f.color : f.inactive}
           >
             {f.label}
-            <span className={`text-xs font-mono ${isActive ? "opacity-80" : "text-zinc-600"}`}>
+            <span className={`text-xs font-mono ${isActive ? "opacity-80" : "text-muted-foreground"}`}>
               {count}
             </span>
-          </button>
+          </ToggleGroupItem>
         );
       })}
-    </div>
+    </ToggleGroup>
   );
 }

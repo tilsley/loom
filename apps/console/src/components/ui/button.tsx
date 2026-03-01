@@ -8,13 +8,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-teal-500/15 text-teal-400 border border-teal-500/25 hover:bg-teal-500/20 hover:border-teal-500/40",
+          "bg-primary/15 text-primary border border-primary/25 hover:bg-primary/20 hover:border-primary/40",
+        primary:
+          "bg-primary text-primary-foreground border border-primary hover:bg-primary/90",
         danger:
-          "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/35",
+          "bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/35",
         outline:
-          "bg-zinc-900/50 text-zinc-400 border border-zinc-800 hover:bg-zinc-800 hover:text-zinc-300",
+          "bg-card/50 text-muted-foreground border border-border hover:bg-muted hover:text-foreground/80",
         success:
-          "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20",
+          "bg-completed/10 text-completed border border-completed/20 hover:bg-completed/20",
       },
       size: {
         default: "px-4 py-2",

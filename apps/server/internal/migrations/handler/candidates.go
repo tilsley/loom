@@ -122,6 +122,38 @@ func (h *Handler) RetryStep(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
+// UpdateInputs handles PATCH /migrations/:id/candidates/:candidateId/inputs —
+// updates operator-supplied inputs in the candidate's metadata.
+func (h *Handler) UpdateInputs(c *gin.Context) {
+	id := c.Param("id")
+	candidateID := c.Param("candidateId")
+
+	var req api.UpdateInputsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.svc.UpdateInputs(c.Request.Context(), id, candidateID, req.Inputs); err != nil {
+		var invalidKey migrations.InvalidInputKeyError
+		if errors.As(err, &invalidKey) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		var migNotFound migrations.MigrationNotFoundError
+		var candNotFound migrations.CandidateNotFoundError
+		if errors.As(err, &migNotFound) || errors.As(err, &candNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		h.log.Error("failed to update inputs", "id", id, "candidateId", candidateID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // GetCandidateSteps handles GET /migrations/:id/candidates/:candidateId/steps —
 // returns step execution progress for a running or completed candidate.
 func (h *Handler) GetCandidateSteps(c *gin.Context) {

@@ -70,19 +70,19 @@ export function FileDiffView({ diff }: { diff: FileDiff }) {
   const collapsed = collapseContext(lines);
 
   return (
-    <div className="border border-zinc-800/60 rounded-md overflow-hidden text-xs font-mono">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 border-b border-zinc-800/60">
-        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="text-zinc-500 shrink-0">
+    <div className="border border-border/60 rounded-md overflow-hidden text-xs font-mono">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-card/80 border-b border-border/60">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="text-muted-foreground shrink-0">
           <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z" />
         </svg>
-        <span className="text-zinc-300 flex-1 truncate">{diff.path}</span>
-        <span className="text-zinc-600 shrink-0">{diff.repo}</span>
+        <span className="text-foreground/80 flex-1 truncate">{diff.path}</span>
+        <span className="text-muted-foreground/70 shrink-0">{diff.repo}</span>
         {diff.status === "new" ? (
-          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-completed/10 text-completed border border-completed/20">
             new
           </span>
         ) : diff.status === "deleted" ? (
-          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20">
             deleted
           </span>
         ) : null}
@@ -91,13 +91,13 @@ export function FileDiffView({ diff }: { diff: FileDiff }) {
         {collapsed.map((line, idx) => {
           if (line.type === "ellipsis") {
             return (
-              <div key={idx} className="px-3 py-0.5 text-zinc-600 bg-zinc-900/30 select-none">
+              <div key={idx} className="px-3 py-0.5 text-muted-foreground/70 bg-muted/30 select-none">
                 ··· {line.count} unchanged {line.count === 1 ? "line" : "lines"}
               </div>
             );
           }
-          const bg = line.type === "add" ? "bg-emerald-500/10" : line.type === "remove" ? "bg-red-500/10" : "";
-          const color = line.type === "add" ? "text-emerald-300" : line.type === "remove" ? "text-red-300" : "text-zinc-500";
+          const bg = line.type === "add" ? "bg-diff-add/10" : line.type === "remove" ? "bg-diff-remove/10" : "";
+          const color = line.type === "add" ? "text-diff-add" : line.type === "remove" ? "text-diff-remove" : "text-muted-foreground";
           const prefix = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
           return (
             <div key={idx} className={`flex ${bg} px-3 py-px`}>
@@ -117,17 +117,17 @@ export function DryRunStepResult({
   result: { stepName: string; skipped: boolean; error?: string; files?: FileDiff[] };
 }) {
   if (result.skipped) {
-    return <div className="text-xs text-zinc-600 italic">Skipped — handled by another worker</div>;
+    return <div className="text-xs text-muted-foreground/70 italic">Skipped — handled by another worker</div>;
   }
   if (result.error) {
     return (
-      <div className="text-xs font-mono text-red-400 bg-red-500/8 border border-red-500/20 rounded-md px-3 py-2">
+      <div className="text-xs font-mono text-destructive bg-destructive/8 border border-destructive/20 rounded-md px-3 py-2">
         {result.error}
       </div>
     );
   }
   if (!result.files?.length) {
-    return <div className="text-xs text-zinc-600 italic">No file changes</div>;
+    return <div className="text-xs text-muted-foreground/70 italic">No file changes</div>;
   }
   return (
     <div className="space-y-2">

@@ -12,13 +12,13 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
   );
 
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg">
-      <div className="px-4 py-3 border-b border-zinc-800/60">
-        <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Active Runs</h3>
+    <div className="bg-card/50 border border-border rounded-lg">
+      <div className="px-4 py-3 border-b border-border">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Active Runs</h3>
       </div>
       <div className="p-4">
         {active.length === 0 ? (
-          <p className="text-sm text-zinc-600 py-4 text-center">No active runs</p>
+          <p className="text-sm text-muted-foreground/70 py-4 text-center">No active runs</p>
         ) : (
           <div className="space-y-4">
             {active.map((m) => {
@@ -29,11 +29,11 @@ export function ActiveRuns({ migrations }: ActiveRunsProps) {
                   <div className="flex items-center justify-between mb-2">
                     <Link
                       href={`/migrations/${m.id}`}
-                      className="text-sm font-medium text-zinc-200 hover:text-teal-400 transition-colors truncate"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors truncate"
                     >
                       {m.name}
                     </Link>
-                    <span className="text-xs font-mono text-zinc-500 shrink-0 ml-2">
+                    <span className="text-xs font-mono text-muted-foreground shrink-0 ml-2">
                       {runningCount}/{(m.candidates ?? []).length} running
                     </span>
                   </div>

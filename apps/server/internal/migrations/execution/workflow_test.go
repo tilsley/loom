@@ -233,3 +233,87 @@ func TestMigrationOrchestrator_ManualReviewStep_DispatchedToWorker(t *testing.T)
 	require.Equal(t, api.StepStateStatusSucceeded, result.Results[0].Status)
 }
 
+// ─── Update inputs signal ─────────────────────────────────────────────────────
+
+// TestMigrationOrchestrator_UpdateInputs_AppliedOnRetry verifies that metadata
+// sent via the update-inputs signal is used in the next DispatchStep call.
+func TestMigrationOrchestrator_UpdateInputs_AppliedOnRetry(t *testing.T) {
+	ts := &testsuite.WorkflowTestSuite{}
+	env := ts.NewTestWorkflowEnvironment()
+
+	acts := newActivities()
+	env.RegisterActivity(acts)
+
+	// Track the DispatchStepRequests so we can inspect metadata on retry.
+	var dispatches []api.DispatchStepRequest
+	retrySent := false
+
+	env.OnActivity(acts.DispatchStep, mock.Anything, mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			req := args.Get(1).(api.DispatchStepRequest)
+			dispatches = append(dispatches, req)
+
+			env.RegisterDelayedCallback(func() {
+				if !retrySent {
+					// First dispatch → signal failure.
+					env.SignalWorkflow(req.EventName, api.StepStatusEvent{
+						StepName:    req.StepName,
+						CandidateId: req.Candidate.Id,
+						Status:      api.StepStatusEventStatusFailed,
+					})
+					// While waiting for retry, push updated inputs then send retry.
+					env.RegisterDelayedCallback(func() {
+						env.SignalWorkflow(
+							migrations.UpdateInputsEventName(req.Candidate.Id),
+							map[string]string{"repoName": "fixed-name"},
+						)
+						env.RegisterDelayedCallback(func() {
+							retrySent = true
+							env.SignalWorkflow(
+								migrations.RetryStepEventName(req.StepName, req.Candidate.Id),
+								nil,
+							)
+						}, time.Millisecond)
+					}, time.Millisecond)
+				} else {
+					// Second dispatch (after retry) → succeed.
+					env.SignalWorkflow(req.EventName, api.StepStatusEvent{
+						StepName:    req.StepName,
+						CandidateId: req.Candidate.Id,
+						Status:      api.StepStatusEventStatusSucceeded,
+					})
+				}
+			}, time.Millisecond)
+		})
+
+	env.OnActivity(acts.UpdateCandidateStatus, mock.Anything, mock.Anything).Return(nil)
+
+	md := map[string]string{"repoName": "typo-name"}
+	manifest := api.MigrationManifest{
+		MigrationId: "mig-abc",
+		Candidates:  []api.Candidate{{Id: "billing-api", Metadata: &md}},
+		Steps:       []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
+	}
+
+	env.ExecuteWorkflow(execution.MigrationOrchestrator, manifest)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	// Should have been dispatched twice (initial + retry).
+	require.Len(t, dispatches, 2)
+
+	// First dispatch should have the original metadata.
+	require.NotNil(t, dispatches[0].Candidate.Metadata)
+	require.Equal(t, "typo-name", (*dispatches[0].Candidate.Metadata)["repoName"])
+
+	// Second dispatch (after update-inputs signal) should have the corrected metadata.
+	require.NotNil(t, dispatches[1].Candidate.Metadata)
+	require.Equal(t, "fixed-name", (*dispatches[1].Candidate.Metadata)["repoName"])
+
+	var result execution.MigrationResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, "completed", result.Status)
+}
+

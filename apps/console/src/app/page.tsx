@@ -43,8 +43,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-fade-in-up">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-50">Dashboard</h1>
-        <p className="text-sm text-zinc-500 mt-1">Migration orchestration overview</p>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-1">Migration orchestration overview</p>
       </div>
 
       {loading ? (
@@ -62,9 +62,9 @@ export default function Dashboard() {
       )}
 
       {/* Candidate search */}
-      <div className="pt-4 border-t border-zinc-800/50 space-y-3">
+      <div className="pt-4 border-t border-border/50 space-y-3">
         <div className="flex items-center gap-3">
-          <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-widest shrink-0">
+          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest shrink-0">
             Find target
           </h2>
           <div className="relative flex-1">
@@ -73,7 +73,7 @@ export default function Dashboard() {
               height="14"
               viewBox="0 0 14 14"
               fill="none"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70"
             >
               <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
               <path d="M9 9l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -89,19 +89,19 @@ export default function Dashboard() {
         </div>
 
         {results.length > 0 && (
-          <div className="rounded-lg border border-zinc-800/80 overflow-hidden">
+          <div className="rounded-lg border border-border overflow-hidden">
             {results.map((r, i) => (
               <div
                 key={`${r.migration.id}-${r.id}`}
-                className={`flex items-center gap-4 px-4 py-3 ${i < results.length - 1 ? "border-b border-zinc-800/60" : ""}`}
+                className={`flex items-center gap-4 px-4 py-3 ${i < results.length - 1 ? "border-b border-border/60" : ""}`}
               >
                 {/* Candidate */}
-                <span className="flex-1 text-sm font-mono text-zinc-200 truncate min-w-0">
+                <span className="flex-1 text-sm font-mono text-foreground truncate min-w-0">
                   {r.id}
                 </span>
 
                 {/* Migration name */}
-                <span className="text-xs text-zinc-500 truncate hidden sm:block">
+                <span className="text-xs text-muted-foreground truncate hidden sm:block">
                   {r.migration.name}
                 </span>
 
@@ -112,14 +112,14 @@ export default function Dashboard() {
                 {r.hasRun ? (
                   <Link
                     href={ROUTES.candidateSteps(r.migration.id, r.id)}
-                    className="text-xs text-teal-400 hover:text-teal-300 font-medium shrink-0 transition-colors"
+                    className="text-xs text-primary hover:text-primary/80 font-medium shrink-0 transition-colors"
                   >
                     View steps →
                   </Link>
                 ) : (
                   <Link
                     href={ROUTES.migrationDetail(r.migration.id)}
-                    className="text-xs text-zinc-500 hover:text-zinc-300 font-medium shrink-0 transition-colors"
+                    className="text-xs text-muted-foreground hover:text-foreground/80 font-medium shrink-0 transition-colors"
                   >
                     Go to migration →
                   </Link>
@@ -130,7 +130,7 @@ export default function Dashboard() {
         )}
 
         {query.trim() && results.length === 0 && !loading && (
-          <p className="text-xs text-zinc-600 pl-1">No targets match &quot;{query}&quot;</p>
+          <p className="text-xs text-muted-foreground/70 pl-1">No targets match &quot;{query}&quot;</p>
         )}
       </div>
     </div>
@@ -139,10 +139,10 @@ export default function Dashboard() {
 
 function StatusChip({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    not_started: "text-zinc-400 bg-zinc-800/60 border-zinc-700/50",
-    running: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    completed: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    failed: "text-red-400 bg-red-500/10 border-red-500/20",
+    not_started: "text-muted-foreground bg-muted border-border",
+    running: "text-running bg-running/10 border-running/20",
+    completed: "text-completed bg-completed/10 border-completed/20",
+    failed: "text-destructive bg-destructive/10 border-destructive/20",
   };
   const cls = styles[status] ?? styles.not_started;
   return (

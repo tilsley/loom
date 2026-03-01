@@ -54,3 +54,14 @@ type RunNotFoundError struct {
 func (e RunNotFoundError) Error() string {
 	return fmt.Sprintf("run %q not found", e.InstanceID)
 }
+
+// InvalidInputKeyError is returned when an input key does not match any entry
+// in the migration's requiredInputs.
+type InvalidInputKeyError struct {
+	Key string
+}
+
+// Error implements the error interface.
+func (e InvalidInputKeyError) Error() string {
+	return fmt.Sprintf("input key %q is not in requiredInputs", e.Key)
+}

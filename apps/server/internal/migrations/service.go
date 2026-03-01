@@ -307,6 +307,56 @@ func (s *Service) DryRun(ctx context.Context, migrationID string, candidate api.
 	return result, err
 }
 
+// UpdateInputs validates that all keys are declared in requiredInputs, then
+// merges the values into the candidate's metadata.
+func (s *Service) UpdateInputs(ctx context.Context, migrationID, candidateID string, inputs map[string]string) error {
+	m, err := s.store.Get(ctx, migrationID)
+	if err != nil {
+		return fmt.Errorf("get migration %q: %w", migrationID, err)
+	}
+	if m == nil {
+		return MigrationNotFoundError{ID: migrationID}
+	}
+
+	allowed := make(map[string]struct{}, len(derefInputs(m.RequiredInputs)))
+	for _, inp := range derefInputs(m.RequiredInputs) {
+		allowed[inp.Name] = struct{}{}
+	}
+	for k := range inputs {
+		if _, ok := allowed[k]; !ok {
+			return InvalidInputKeyError{Key: k}
+		}
+	}
+
+	if err := s.store.UpdateCandidateMetadata(ctx, migrationID, candidateID, inputs); err != nil {
+		return err
+	}
+
+	// Signal the running workflow so updated inputs take effect on the next dispatch.
+	for _, c := range m.Candidates {
+		if c.Id == candidateID && c.Status != nil && *c.Status == api.CandidateStatusRunning {
+			runID := RunID(migrationID, candidateID)
+			if err := s.engine.RaiseEvent(ctx, runID, UpdateInputsEventName(candidateID), inputs); err != nil {
+				var notFound RunNotFoundError
+				if !errors.As(err, &notFound) {
+					return fmt.Errorf("signal workflow: %w", err)
+				}
+			}
+			break
+		}
+	}
+
+	return nil
+}
+
+// derefInputs safely dereferences *[]api.InputDefinition.
+func derefInputs(p *[]api.InputDefinition) []api.InputDefinition {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 // Start atomically looks up the candidate, merges any operator-supplied inputs,
 // and starts a Run for the given migration+candidate pair.
 func (s *Service) Start(ctx context.Context, migrationID, candidateID string, inputs map[string]string) (string, error) {

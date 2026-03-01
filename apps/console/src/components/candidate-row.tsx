@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Candidate } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
-import { Button, TableRow, TableCell } from "@/components/ui";
+import { Button, Badge, TableRow, TableCell } from "@/components/ui";
 
 interface CandidateRowProps {
   candidate: Candidate;
@@ -44,13 +44,13 @@ export function CandidateRow({
     <>
       <TableRow
         onClick={handleRowClick}
-        className={hasRun ? "cursor-pointer hover:bg-zinc-800/25" : ""}
+        className={hasRun ? "cursor-pointer hover:bg-muted/25" : ""}
       >
         {/* Candidate ID */}
         <TableCell>
           <div className="flex items-center gap-2">
             <CandidateStatusDot status={status} />
-            <span className="text-sm font-mono text-zinc-300">{candidate.id}</span>
+            <span className="text-sm font-mono text-foreground/80">{candidate.id}</span>
           </div>
         </TableCell>
 
@@ -65,12 +65,12 @@ export function CandidateRow({
                     e.stopPropagation();
                     onMetaFilter(key, val);
                   }}
-                  className="text-xs font-mono text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 px-1.5 py-0.5 rounded transition-colors"
+                  className="text-xs font-mono text-muted-foreground hover:text-foreground hover:bg-muted px-1.5 py-0.5 rounded transition-colors"
                 >
                   {val}
                 </button>
               ) : (
-                <span className="text-xs text-zinc-700">—</span>
+                <span className="text-xs text-muted-foreground/50">—</span>
               )}
             </TableCell>
           );
@@ -84,7 +84,7 @@ export function CandidateRow({
                 e.stopPropagation();
                 setFilesExpanded((v) => !v);
               }}
-              className="inline-flex items-center gap-1 text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground/80 transition-colors"
             >
               <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" className="opacity-60 shrink-0">
                 <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z" />
@@ -101,16 +101,18 @@ export function CandidateRow({
               </svg>
             </button>
           ) : (
-            <span className="text-xs text-zinc-700">—</span>
+            <span className="text-xs text-muted-foreground/50">—</span>
           )}
         </TableCell>
 
         {/* Status */}
         <TableCell>
           {status && status !== "not_started" ? (
-            <CandidateStatusBadge status={status} />
+            <Badge variant={status === "running" ? "running" : status === "completed" ? "completed" : "default"}>
+              {status}
+            </Badge>
           ) : (
-            <span className="text-xs text-zinc-700">—</span>
+            <span className="text-xs text-muted-foreground/50">—</span>
           )}
         </TableCell>
 
@@ -137,16 +139,16 @@ export function CandidateRow({
       {/* Files expansion row */}
       {filesExpanded && fileGroups.length > 0 ? (
         <TableRow>
-          <TableCell colSpan={colCount} className="bg-zinc-900/40 py-3">
-            <p className="text-xs text-zinc-600 mb-2.5">
+          <TableCell colSpan={colCount} className="bg-muted/50 py-3">
+            <p className="text-xs text-muted-foreground mb-2.5">
               Files detected by the discovery scanner · the dry run shows what will change
             </p>
             <div className="flex flex-wrap gap-x-8 gap-y-3">
               {fileGroups.map((group) => (
                 <div key={group.name} className="min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{group.name}</span>
-                    <span className="text-xs font-mono text-zinc-700">{group.repo}</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{group.name}</span>
+                    <span className="text-xs font-mono text-muted-foreground/70">{group.repo}</span>
                   </div>
                   <div className="space-y-0.5">
                     {group.files.map((f) => (
@@ -155,7 +157,7 @@ export function CandidateRow({
                         href={f.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs font-mono text-zinc-500 hover:text-teal-400 transition-colors"
+                        className="flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
                       >
                         <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 opacity-50">
                           <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z" />
@@ -177,10 +179,10 @@ export function CandidateRow({
 function CandidateStatusDot({ status }: { status?: string }) {
   const color =
     status === "running"
-      ? "bg-amber-400"
+      ? "bg-running"
       : status === "completed"
-        ? "bg-emerald-400"
-        : "bg-zinc-600";
+        ? "bg-completed"
+        : "bg-muted-foreground/50";
 
   return (
     <span
@@ -191,17 +193,3 @@ function CandidateStatusDot({ status }: { status?: string }) {
   );
 }
 
-function CandidateStatusBadge({ status }: { status: string }) {
-  const styles =
-    status === "running"
-      ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-      : status === "completed"
-        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-        : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
-
-  return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded border ${styles}`}>
-      {status}
-    </span>
-  );
-}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,7 +13,18 @@ import {
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
-import { Button, Input, Skeleton, Tooltip } from "@/components/ui";
+import {
+  Button,
+  Input,
+  Skeleton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui";
 
 export default function MigrationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -112,212 +122,12 @@ export default function MigrationDetail() {
     }
   }
 
-  const stepsModal = stepsOpen && migration
-    ? createPortal(
-        <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
-          onClick={() => setStepsOpen(false)}
-        >
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div
-              className="relative w-full max-w-lg bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-                <div>
-                  <h3 className="text-[14px] font-semibold text-zinc-100">Workflow definition</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    {migration.steps.length} steps — applies to all {kindPlural}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setStepsOpen(false)}
-                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-5 py-4 space-y-0">
-                {migration.steps.map((step, i) => (
-                  <div key={step.name} className="flex gap-3">
-                    <div className="flex flex-col items-center w-6 shrink-0">
-                      <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-xs font-mono font-medium text-zinc-400">
-                        {i + 1}
-                      </div>
-                      {i < migration.steps.length - 1 && (
-                        <div className="w-px flex-1 bg-zinc-800 my-0.5" />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-3 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-medium text-sm text-zinc-200">{step.name}</span>
-                        <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded shrink-0">
-                          {step.migratorApp}
-                        </span>
-                      </div>
-                      {Boolean(step.description) && (
-                        <p className="text-xs text-zinc-500 mt-0.5">{step.description}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null;
-
-  const cancelModal = cancelCandidate
-    ? createPortal(
-        <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
-          onClick={() => { if (!cancelling) setCancelCandidate(null); }}
-        >
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div
-              className="relative w-full max-w-md bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-                <h3 className="text-[14px] font-semibold text-zinc-100">Cancel migration?</h3>
-                <button
-                  onClick={() => { if (!cancelling) setCancelCandidate(null); }}
-                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-5 py-4">
-                <p className="text-sm text-zinc-400">
-                  Stop the running migration for{" "}
-                  <span className="font-mono text-zinc-200">{cancelCandidate.id}</span>? This will
-                  reset it to not started.
-                </p>
-                {cancelError ? <p className="mt-3 text-sm text-red-400">{cancelError}</p> : null}
-              </div>
-              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-zinc-800">
-                <button
-                  onClick={() => setCancelCandidate(null)}
-                  disabled={cancelling}
-                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-50"
-                >
-                  Keep running
-                </button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => void confirmCancel()}
-                  disabled={cancelling}
-                >
-                  {cancelling ? "Cancelling…" : "Cancel run"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null;
-
-  const previewInputModal = previewModal && migration
-    ? createPortal(
-        <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
-          onClick={() => setPreviewModal(null)}
-        >
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div
-              className="relative w-full max-w-md bg-[var(--color-surface)] border border-zinc-800 rounded-xl shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-[14px] font-semibold text-zinc-100">Required inputs</h3>
-                  <Tooltip content="These values are required to migrate this candidate. They are passed to each step at runtime.">
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-zinc-600 hover:text-zinc-400 cursor-default transition-colors">
-                      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M8 7v5M8 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  </Tooltip>
-                </div>
-                <button
-                  onClick={() => setPreviewModal(null)}
-                  className="text-zinc-600 hover:text-zinc-300 transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-5 py-5 space-y-4">
-                {(migration.requiredInputs ?? []).map((inp, i) => (
-                  <div key={inp.name} className="space-y-1.5">
-                    <label
-                      htmlFor={`preview-modal-${inp.name}`}
-                      className="text-xs font-medium text-zinc-400"
-                    >
-                      {inp.label}
-                    </label>
-                    <Input
-                      id={`preview-modal-${inp.name}`}
-                      type="text"
-                      value={previewModal.inputs[inp.name] ?? ""}
-                      onChange={(e) =>
-                        setPreviewModal((prev) =>
-                          prev ? { ...prev, inputs: { ...prev.inputs, [inp.name]: e.target.value } } : null,
-                        )
-                      }
-                      placeholder={inp.label}
-                      className="font-mono"
-                      autoFocus={i === 0}
-                    />
-                    {inp.description ? (
-                      <p className="text-xs text-zinc-600 italic">{inp.description}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-zinc-800">
-                <button
-                  onClick={() => setPreviewModal(null)}
-                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <Button
-                  disabled={!(migration.requiredInputs ?? []).every((inp) => previewModal.inputs[inp.name]?.trim())}
-                  onClick={() => {
-                    const params = new URLSearchParams(previewModal.inputs);
-                    router.push(`${ROUTES.preview(id, previewModal.candidate.id)}?${params.toString()}`);
-                    setPreviewModal(null);
-                  }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-                  </svg>
-                  Run preview
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )
-    : null;
-
   if (error && !migration) {
     return (
       <div className="space-y-6 animate-fade-in-up">
         <Link
           href={ROUTES.migrations}
-          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground/80 transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
@@ -330,7 +140,7 @@ export default function MigrationDetail() {
           </svg>
           Migrations
         </Link>
-        <div className="bg-red-500/8 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
+        <div className="bg-destructive/8 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       </div>
@@ -342,21 +152,161 @@ export default function MigrationDetail() {
       <div className="space-y-6 animate-fade-in-up">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-3 w-full bg-zinc-900/50" />
+        <Skeleton className="h-3 w-full bg-card/50" />
       </div>
     );
   }
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-      {stepsModal}
-      {cancelModal}
-      {previewInputModal}
+      {/* Steps modal */}
+      <Dialog open={stepsOpen} onOpenChange={setStepsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Workflow definition</DialogTitle>
+            <DialogDescription>
+              {migration.steps.length} steps — applies to all {kindPlural}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-5 py-4 space-y-0">
+            {migration.steps.map((step, i) => (
+              <div key={step.name} className="flex gap-3">
+                <div className="flex flex-col items-center w-6 shrink-0">
+                  <div className="w-6 h-6 rounded-md bg-muted border border-border-hover/50 flex items-center justify-center text-xs font-mono font-medium text-muted-foreground">
+                    {i + 1}
+                  </div>
+                  {i < migration.steps.length - 1 && (
+                    <div className="w-px flex-1 bg-border my-0.5" />
+                  )}
+                </div>
+                <div className="flex-1 pb-3 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium text-sm text-foreground">{step.name}</span>
+                    <span className="text-xs font-mono text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded shrink-0">
+                      {step.migratorApp}
+                    </span>
+                  </div>
+                  {Boolean(step.description) && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel confirmation modal */}
+      <Dialog
+        open={!!cancelCandidate}
+        onOpenChange={(open) => { if (!open && !cancelling) setCancelCandidate(null); }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel migration?</DialogTitle>
+          </DialogHeader>
+          <div className="px-5 py-4">
+            <p className="text-sm text-muted-foreground">
+              Stop the running migration for{" "}
+              <span className="font-mono text-foreground">{cancelCandidate?.id}</span>? This will
+              reset it to not started.
+            </p>
+            {cancelError ? <p className="mt-3 text-sm text-destructive">{cancelError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCancelCandidate(null)}
+              disabled={cancelling}
+            >
+              Keep running
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => void confirmCancel()}
+              disabled={cancelling}
+            >
+              {cancelling ? "Cancelling…" : "Cancel run"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview inputs modal */}
+      <Dialog open={!!previewModal} onOpenChange={(open) => { if (!open) setPreviewModal(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <DialogTitle>Required inputs</DialogTitle>
+              <Tooltip content="These values are required to migrate this candidate. They are passed to each step at runtime.">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-muted-foreground/70 hover:text-muted-foreground cursor-default transition-colors">
+                  <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M8 7v5M8 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </Tooltip>
+            </div>
+          </DialogHeader>
+          <div className="px-5 py-5 space-y-4">
+            {(migration.requiredInputs ?? []).map((inp, i) => (
+              <div key={inp.name} className="space-y-1.5">
+                <label
+                  htmlFor={`preview-modal-${inp.name}`}
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  {inp.label}
+                </label>
+                <Input
+                  id={`preview-modal-${inp.name}`}
+                  type="text"
+                  value={previewModal?.inputs[inp.name] ?? ""}
+                  onChange={(e) =>
+                    setPreviewModal((prev) =>
+                      prev ? { ...prev, inputs: { ...prev.inputs, [inp.name]: e.target.value } } : null,
+                    )
+                  }
+                  placeholder={inp.label}
+                  className="font-mono"
+                  autoFocus={i === 0}
+                />
+                {inp.description ? (
+                  <p className="text-xs text-muted-foreground/70 italic">{inp.description}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewModal(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!(migration.requiredInputs ?? []).every((inp) => previewModal?.inputs[inp.name]?.trim())}
+              onClick={() => {
+                if (!previewModal) return;
+                const params = new URLSearchParams(previewModal.inputs);
+                router.push(`${ROUTES.preview(id, previewModal.candidate.id)}?${params.toString()}`);
+                setPreviewModal(null);
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              Run preview
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Breadcrumb */}
       <Link
         href={ROUTES.migrations}
-        className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground/80 transition-colors"
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
           <path
@@ -374,15 +324,15 @@ export default function MigrationDetail() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-50">{migration.name}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">{migration.name}</h2>
             <button
               onClick={() => setStepsOpen(true)}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2 decoration-zinc-700 hover:decoration-zinc-500 shrink-0"
+              className="text-xs text-muted-foreground hover:text-foreground/80 transition-colors underline underline-offset-2 decoration-border hover:decoration-border-hover shrink-0"
             >
               {migration.steps.length} steps
             </button>
           </div>
-          <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
             {migration.description}
           </p>
         </div>
@@ -394,10 +344,10 @@ export default function MigrationDetail() {
       {/* Candidates table */}
       <section>
         <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
             {kindPluralCap}
           </h3>
-          <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+          <span className="text-xs font-mono text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded">
             {candidates.length}
           </span>
         </div>

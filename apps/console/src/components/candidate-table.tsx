@@ -107,10 +107,10 @@ export function CandidateTable({
         <StatusFilter counts={counts} active={filter} onChange={onFilterChange} />
         {anyColumnFilter ? (
           <>
-            <div className="w-px h-4 bg-zinc-700/50 shrink-0 mx-1" />
+            <div className="w-px h-4 bg-border-hover/50 shrink-0 mx-1" />
             <button
               onClick={() => setColumnFilters({})}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground/80 transition-colors"
             >
               Clear filters
             </button>
@@ -119,10 +119,10 @@ export function CandidateTable({
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-zinc-800/80 overflow-hidden">
+      <div className="rounded-lg border border-border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="border-b border-zinc-800">
+            <TableRow className="border-b border-border">
               <TableHead>{kindCap}</TableHead>
               {metaColumns.map((key) => (
                 <TableHead key={key}>{getMetaLabel(key)}</TableHead>
@@ -131,13 +131,13 @@ export function CandidateTable({
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-            <TableRow className="border-b border-zinc-800/60 bg-zinc-900/30">
+            <TableRow className="border-b border-border/60 bg-muted/50">
               <TableHead className="py-1.5">
                 <Input
                   value={columnFilters.id ?? ""}
                   onChange={(e) => setColumnFilter("id", e.target.value)}
                   placeholder={`Search ${kindPlural}…`}
-                  className="h-7 text-xs py-1 font-mono bg-transparent border-zinc-700/50"
+                  className="h-7 text-xs py-1 font-mono bg-transparent border-border-hover/50"
                 />
               </TableHead>
               {metaColumns.map((key) => (
@@ -146,7 +146,7 @@ export function CandidateTable({
                     value={columnFilters[key] ?? ""}
                     onChange={(e) => setColumnFilter(key, e.target.value)}
                     placeholder="Filter…"
-                    className="h-7 text-xs py-1 font-mono bg-transparent border-zinc-700/50"
+                    className="h-7 text-xs py-1 font-mono bg-transparent border-border-hover/50"
                   />
                 </TableHead>
               ))}
@@ -159,7 +159,7 @@ export function CandidateTable({
             {renderRows(visible)}
             {visible.length === 0 && (
               <TableRow>
-                <TableCell colSpan={colCount} className="py-8 text-center text-zinc-600">
+                <TableCell colSpan={colCount} className="py-8 text-center text-muted-foreground">
                   No {kindPlural} match the current filter.
                 </TableCell>
               </TableRow>

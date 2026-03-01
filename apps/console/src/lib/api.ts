@@ -97,6 +97,22 @@ export async function retryStep(
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function updateInputs(
+  migrationId: string,
+  candidateId: string,
+  inputs: Record<string, string>,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE}/migrations/${encodeURIComponent(migrationId)}/candidates/${encodeURIComponent(candidateId)}/inputs`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function dryRun(migrationId: string, candidate: Candidate): Promise<DryRunResult> {
   const res = await fetch(`${BASE}/migrations/${encodeURIComponent(migrationId)}/dry-run`, {
     method: "POST",

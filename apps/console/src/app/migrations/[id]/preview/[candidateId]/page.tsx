@@ -14,7 +14,7 @@ import {
   type Candidate,
   type DryRunResult,
 } from "@/lib/api";
-import { Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { DryRunStepResult } from "@/components/file-diff-view";
 import { ROUTES } from "@/lib/routes";
 
@@ -159,14 +159,14 @@ export default function PreviewPage() {
       <div className="space-y-6 animate-fade-in-up">
         <Link
           href={ROUTES.migrationDetail(id)}
-          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground/80 transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Back
         </Link>
-        <div className="bg-red-500/8 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
+        <div className="bg-destructive/8 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
           {loadError}
         </div>
       </div>
@@ -175,7 +175,7 @@ export default function PreviewPage() {
 
   if (!migration || !candidate) {
     return (
-      <div className="space-y-6 animate-fade-in-up text-sm text-zinc-600">
+      <div className="space-y-6 animate-fade-in-up text-sm text-muted-foreground/70">
         Loading…
       </div>
     );
@@ -189,20 +189,20 @@ export default function PreviewPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <Link
           href={ROUTES.migrationDetail(id)}
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground/80 transition-colors shrink-0"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M7 3L4 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           {migration.name}
         </Link>
-        <span className="text-zinc-700 select-none">·</span>
-        <span className="inline-flex items-center gap-1.5 text-xs font-mono bg-zinc-800/60 border border-zinc-700/50 text-zinc-300 px-2 py-0.5 rounded-md">
-          {team ? <span className="text-zinc-500">{team} /</span> : null}
+        <span className="text-muted-foreground/50 select-none">·</span>
+        <span className="inline-flex items-center gap-1.5 text-xs font-mono bg-muted border border-border-hover/50 text-foreground/80 px-2 py-0.5 rounded-md">
+          {team ? <span className="text-muted-foreground">{team} /</span> : null}
           {candidate.id}
         </span>
         <span className="flex-1" />
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded border bg-running/10 text-running border-running/20">
           preview
         </span>
       </div>
@@ -210,15 +210,15 @@ export default function PreviewPage() {
       {/* Inputs */}
       {requiredInputs.length > 0 ? (
         <section className="w-fit min-w-[700px] mx-auto">
-          <div className="border border-zinc-800/80 rounded-lg px-5 py-4 space-y-4">
-            <div className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
+          <div className="border border-border rounded-lg px-5 py-4 space-y-4">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
               Required inputs
             </div>
             {requiredInputs.map((inp, i) => (
               <div key={inp.name} className="space-y-1.5">
                 <label
                   htmlFor={`preview-input-${inp.name}`}
-                  className="text-xs font-medium text-zinc-400"
+                  className="text-xs font-medium text-muted-foreground"
                 >
                   {inp.label}
                 </label>
@@ -232,7 +232,7 @@ export default function PreviewPage() {
                   autoFocus={i === 0}
                 />
                 {inp.description ? (
-                  <p className="text-xs text-zinc-600 italic">{inp.description}</p>
+                  <p className="text-xs text-muted-foreground/70 italic">{inp.description}</p>
                 ) : null}
               </div>
             ))}
@@ -244,11 +244,11 @@ export default function PreviewPage() {
       {dryRunEnabled && steps.length > 0 ? (
         <section className="w-fit min-w-[700px] mx-auto">
           <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-widest">Steps</h2>
-            <span className="text-xs font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Steps</h2>
+            <span className="text-xs font-mono text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded">
               {steps.length}
             </span>
-            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-running/10 text-running border-running/20">
               <svg width="8" height="8" viewBox="0 0 16 16" fill="none">
                 <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
@@ -256,7 +256,7 @@ export default function PreviewPage() {
               Dry run
             </span>
             {dryRunLoading ? (
-              <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <svg className="animate-spin w-3 h-3" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
                 </svg>
@@ -265,20 +265,17 @@ export default function PreviewPage() {
             ) : null}
           </div>
           {dryRunError ? (
-            <div className="border border-red-500/20 bg-red-500/5 rounded-lg px-5 py-5 flex items-start justify-between gap-4">
+            <div className="border border-destructive/20 bg-destructive/5 rounded-lg px-5 py-5 flex items-start justify-between gap-4">
               <div className="space-y-1 min-w-0">
-                <p className="text-sm font-medium text-red-400">Dry run failed</p>
-                <p className="text-xs font-mono text-red-400/60 break-all">{dryRunError}</p>
+                <p className="text-sm font-medium text-destructive">Dry run failed</p>
+                <p className="text-xs font-mono text-destructive/60 break-all">{dryRunError}</p>
               </div>
-              <button
-                onClick={handleRetry}
-                className="shrink-0 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 rounded px-3 py-1.5 transition-colors"
-              >
+              <Button variant="outline" size="sm" onClick={handleRetry} className="shrink-0">
                 Retry
-              </button>
+              </Button>
             </div>
           ) : (
-          <div className="border border-zinc-800/80 rounded-lg divide-y divide-zinc-800/60">
+          <div className="border border-border rounded-lg divide-y divide-border/60">
             {steps.map((step, i) => {
               const config = step.config ? Object.entries(step.config) : [];
               const instructions = step.config?.instructions;
@@ -289,28 +286,28 @@ export default function PreviewPage() {
                 <div key={step.name} className="px-5 py-4 space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-mono text-zinc-600 tabular-nums w-5 shrink-0 select-none">
+                      <span className="text-xs font-mono text-muted-foreground/70 tabular-nums w-5 shrink-0 select-none">
                         {String(i + 1).padStart(2, "0")}.
                       </span>
-                      <span className="text-base font-medium font-mono text-zinc-100">{step.name}</span>
+                      <span className="text-base font-medium font-mono text-foreground">{step.name}</span>
                     </div>
-                    <span className="text-xs font-mono text-zinc-500 bg-zinc-800/60 px-2 py-0.5 rounded shrink-0">
+                    <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded shrink-0">
                       {step.migratorApp}
                     </span>
                   </div>
 
                   {Boolean(step.description) && (
-                    <p className="text-sm text-zinc-400 ml-7">{step.description}</p>
+                    <p className="text-sm text-muted-foreground ml-7">{step.description}</p>
                   )}
 
                   {instructions ? (
-                    <div className="ml-7 bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
-                      <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-2">
+                    <div className="ml-7 bg-pending/5 border border-pending/15 rounded-md px-3 py-2.5">
+                      <div className="text-xs font-medium text-pending/70 uppercase tracking-widest mb-2">
                         Instructions
                       </div>
                       <ul className="space-y-1">
                         {instructions.split("\n").map((line, j) => (
-                          <li key={j} className="text-sm text-blue-200/80 font-mono">
+                          <li key={j} className="text-sm text-foreground/80 font-mono">
                             {line}
                           </li>
                         ))}
@@ -321,8 +318,8 @@ export default function PreviewPage() {
                   {otherConfig.length > 0 && (
                     <div className="ml-7 flex flex-wrap gap-1.5">
                       {otherConfig.map(([k, v]) => (
-                        <span key={k} className="text-xs font-mono text-zinc-500 bg-zinc-800/40 px-1.5 py-0.5 rounded">
-                          {k}=<span className="text-zinc-400">{v}</span>
+                        <span key={k} className="text-xs font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
+                          {k}=<span className="text-muted-foreground">{v}</span>
                         </span>
                       ))}
                     </div>
@@ -331,13 +328,13 @@ export default function PreviewPage() {
                   {(dryRunLoading && !stepDryRun) || (stepDryRun && !stepDryRun.skipped) ? (
                     <div className="ml-7 space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-zinc-600 uppercase tracking-widest">
+                        <span className="text-xs font-medium text-muted-foreground/70 uppercase tracking-widest">
                           Expected changes
                         </span>
-                        <div className="flex-1 h-px bg-zinc-800/80" />
+                        <div className="flex-1 h-px bg-border" />
                       </div>
                       {dryRunLoading && !stepDryRun ? (
-                        <div className="h-5 rounded bg-zinc-800/40 animate-pulse w-48" />
+                        <div className="h-5 rounded bg-muted/40 animate-pulse w-48" />
                       ) : (
                         stepDryRun && <DryRunStepResult result={stepDryRun} />
                       )}
@@ -350,38 +347,35 @@ export default function PreviewPage() {
           )}
         </section>
       ) : dryRunEnabled ? (
-        <div className="text-sm text-zinc-600 italic">Loading step definitions…</div>
+        <div className="text-sm text-muted-foreground/70 italic">Loading step definitions…</div>
       ) : null}
 
       {/* Actions */}
       <div className="w-fit min-w-[700px] mx-auto flex items-center justify-between pt-2 pb-6">
         <Link
           href={ROUTES.migrationDetail(id)}
-          className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="text-sm text-muted-foreground hover:text-foreground/80 transition-colors"
         >
           Back
         </Link>
         {!dryRunEnabled ? (
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={() => {
               lastDryRunInputs.current = "";
               setDryRunEnabled(true);
             }}
             disabled={!allInputsFilled}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
             </svg>
             Run preview
-          </button>
+          </Button>
         ) : (
-          <button
-            onClick={() => void handleStart()}
-            disabled={executing}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button variant="primary" size="lg" onClick={() => void handleStart()} disabled={executing}>
             {executing ? (
               <>
                 <svg className="animate-spin w-4 h-4" viewBox="0 0 16 16" fill="none">
@@ -397,7 +391,7 @@ export default function PreviewPage() {
                 Start
               </>
             )}
-          </button>
+          </Button>
         )}
       </div>
     </div>

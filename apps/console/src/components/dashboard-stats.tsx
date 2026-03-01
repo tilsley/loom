@@ -26,14 +26,14 @@ export function DashboardStats({ migrations }: DashboardStatsProps) {
       {stats.map((s) => (
         <div
           key={s.label}
-          className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg px-3.5 py-3"
+          className="bg-card/50 border border-border rounded-lg px-3.5 py-3"
         >
-          <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1.5">
+          <div className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
             {s.label}
           </div>
           <div
             className={`text-lg font-mono font-medium ${
-              s.accent ? "text-teal-400" : "text-zinc-200"
+              s.accent ? "text-primary" : "text-foreground"
             }`}
           >
             {s.value}

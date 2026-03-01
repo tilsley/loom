@@ -231,6 +231,37 @@ func (s *RedisMigrationStore) SaveCandidates(ctx context.Context, migrationID st
 	return nil
 }
 
+// UpdateCandidateMetadata merges the given key-value pairs into a candidate's metadata.
+func (s *RedisMigrationStore) UpdateCandidateMetadata(
+	ctx context.Context,
+	migrationID, candidateID string,
+	metadata map[string]string,
+) error {
+	key := candidateKey(migrationID, candidateID)
+	val, err := s.rdb.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return fmt.Errorf("candidate %q not found in migration %q", candidateID, migrationID)
+	}
+	if err != nil {
+		return fmt.Errorf("get candidate %q: %w", candidateID, err)
+	}
+	var c api.Candidate
+	if err := json.Unmarshal([]byte(val), &c); err != nil {
+		return fmt.Errorf("unmarshal candidate %q: %w", candidateID, err)
+	}
+	if c.Metadata == nil {
+		c.Metadata = &map[string]string{}
+	}
+	for k, v := range metadata {
+		(*c.Metadata)[k] = v
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshal candidate %q: %w", candidateID, err)
+	}
+	return s.rdb.Set(ctx, key, data, 0).Err()
+}
+
 // GetCandidates returns the candidate list for a migration with their current status.
 func (s *RedisMigrationStore) GetCandidates(ctx context.Context, migrationID string) ([]api.Candidate, error) {
 	candidates, err := s.getCandidates(ctx, migrationID)

@@ -10,6 +10,53 @@ import oxlint from "eslint-plugin-oxlint";
 // Build ESLint config from oxlint config to disable rules oxlint handles
 const oxlintConfigs = oxlint.buildFromOxlintConfigFile(".oxlintrc.json");
 
+// ─── Inline plugin: disallow hardcoded Tailwind colour-scale classes ──────────
+// Components must use semantic tokens (bg-card, text-muted-foreground, etc.)
+// instead of zinc/teal/amber/emerald/red/blue/purple/indigo scale classes.
+const COLOUR_HINTS = {
+  zinc: "Use semantic tokens: bg-card, bg-muted, bg-background, text-foreground, text-muted-foreground, border-border, etc.",
+  teal: "Use text-primary / bg-primary",
+  amber: "Use text-running / bg-running",
+  emerald: "Use text-completed / bg-completed or text-diff-add / bg-diff-add",
+  red: "Use text-destructive / bg-destructive or text-diff-remove / bg-diff-remove",
+  blue: "Use text-pending / bg-pending",
+  purple: "Use text-merged / bg-merged",
+  indigo: "Use text-primary / bg-primary",
+};
+
+// Matches e.g. "text-zinc-500", "hover:bg-amber-400", "border-red-500/20"
+// Capturing group 1 = colour name (zinc | teal | …)
+const HARDCODED_COLOUR_RE = new RegExp(
+  `(?:bg|text|border|ring|fill|stroke|from|to|via|outline|divide|shadow)-` +
+  `(${Object.keys(COLOUR_HINTS).join("|")})-\\d`,
+);
+
+const noHardcodedColourScale = {
+  meta: {
+    type: "suggestion",
+    docs: { description: "Disallow hardcoded Tailwind colour-scale classes; use semantic design tokens" },
+    schema: [],
+  },
+  create(context) {
+    function check(node, str) {
+      const m = HARDCODED_COLOUR_RE.exec(str);
+      if (!m) return;
+      context.report({
+        node,
+        message: `Hardcoded colour class '*-${m[1]}-*' found. ${COLOUR_HINTS[m[1]]}.`,
+      });
+    }
+    return {
+      Literal(node) {
+        if (typeof node.value === "string") check(node, node.value);
+      },
+      TemplateLiteral(node) {
+        for (const q of node.quasis) check(node, q.value.raw);
+      },
+    };
+  },
+};
+
 // Type-aware rules that require TypeScript type checking (projectService: true).
 // oxlint handles these, so we disable them in ESLint and skip building the full
 // type graph — this is the main speed optimisation.
@@ -170,6 +217,16 @@ export default [
       react: { version: "detect" },
       next: { rootDir: "." },
     },
+  },
+
+  // Disallow hardcoded colour-scale classes in component source files.
+  // Tests are excluded — they may use colour strings as test input data.
+  {
+    name: "loom-ui/no-hardcoded-colour-scale",
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/__tests__/**", "src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
+    plugins: { "loom-ui": { rules: { "no-hardcoded-colour-scale": noHardcodedColourScale } } },
+    rules: { "loom-ui/no-hardcoded-colour-scale": "error" },
   },
 
   // Disable rules that oxlint handles (oxlint runs first, ~100x faster).

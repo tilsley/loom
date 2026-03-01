@@ -74,8 +74,8 @@ func MigrationOrchestrator(
 	}()
 
 	for _, step := range manifest.Steps {
-		for _, candidate := range manifest.Candidates {
-			ok, err := processStep(ctx, actCtx, manifest, step, candidate, &results)
+		for i := range manifest.Candidates {
+			ok, err := processStep(ctx, actCtx, manifest, step, &manifest.Candidates[i], &results)
 			if err != nil {
 				failed = true
 				return MigrationResult{}, err
@@ -107,7 +107,7 @@ func processStep(
 	ctx, actCtx workflow.Context,
 	manifest api.MigrationManifest,
 	step api.StepDefinition,
-	candidate api.Candidate,
+	candidate *api.Candidate,
 	results *[]api.StepState,
 ) (bool, error) {
 	callbackID := workflow.GetInfo(ctx).WorkflowExecution.ID
@@ -115,20 +115,25 @@ func processStep(
 
 	stepCompletedCh := workflow.GetSignalChannel(ctx, stepCompletedSignal)
 	retryCh := workflow.GetSignalChannel(ctx, migrations.RetryStepEventName(step.Name, candidate.Id))
+	updateInputsCh := workflow.GetSignalChannel(ctx, migrations.UpdateInputsEventName(candidate.Id))
 
 	for {
+		// Drain any pending input updates before building the dispatch request
+		// so that metadata edits made while the workflow was waiting take effect.
+		drainInputUpdates(updateInputsCh, candidate)
+
 		// Mark as in-progress before dispatching so the progress query
 		// reflects the current step immediately — not only after it completes.
 		upsertResult(results, api.StepState{
 			StepName:  step.Name,
-			Candidate: candidate,
+			Candidate: *candidate,
 			Status:    api.StepStateStatusInProgress,
 		})
 
 		req := api.DispatchStepRequest{
 			MigrationId: manifest.MigrationId,
 			StepName:    step.Name,
-			Candidate:   candidate,
+			Candidate:   *candidate,
 			Config:      step.Config,
 			Type:        step.Type,
 			CallbackId:  callbackID,
@@ -146,7 +151,7 @@ func processStep(
 		// in which case it does NOT append to results (safe to return immediately).
 		// When it returns true it has always appended, so results is non-empty.
 		for {
-			if !awaitStepCompletion(ctx, stepCompletedCh, candidate, results) {
+			if !awaitStepCompletion(ctx, stepCompletedCh, *candidate, results) {
 				return false, nil // cancelled while waiting for step signal
 			}
 			last := (*results)[len(*results)-1]
@@ -167,6 +172,25 @@ func processStep(
 		}
 		// Retry signal received: clear the failed result before re-dispatching.
 		removeResult(results, step.Name, candidate.Id)
+	}
+}
+
+// drainInputUpdates consumes all pending update-inputs signals from the channel
+// and merges them into the candidate's metadata. ReceiveAsync is non-blocking —
+// it returns false when the channel is empty.
+func drainInputUpdates(ch workflow.ReceiveChannel, candidate *api.Candidate) {
+	for {
+		var inputs map[string]string
+		if !ch.ReceiveAsync(&inputs) {
+			return
+		}
+		if candidate.Metadata == nil {
+			md := make(map[string]string)
+			candidate.Metadata = &md
+		}
+		for k, v := range inputs {
+			(*candidate.Metadata)[k] = v
+		}
 	}
 }
 
@@ -255,9 +279,15 @@ func runResetCandidate(actCtx, ctx workflow.Context, manifest api.MigrationManif
 }
 
 // upsertResult updates an existing entry for the same step+candidate, or appends a new one.
+// When the incoming result has nil metadata, the existing metadata is preserved so that
+// status transitions (e.g. pending→merged via the UI) don't discard worker-provided
+// metadata such as prUrl.
 func upsertResult(results *[]api.StepState, r api.StepState) {
 	for i, existing := range *results {
 		if existing.StepName == r.StepName && existing.Candidate.Id == r.Candidate.Id {
+			if r.Metadata == nil {
+				r.Metadata = existing.Metadata
+			}
 			(*results)[i] = r
 			return
 		}

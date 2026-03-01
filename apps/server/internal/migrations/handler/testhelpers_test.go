@@ -135,6 +135,27 @@ func (m *memStore) GetCandidates(_ context.Context, migID string) ([]api.Candida
 	return m.candidates[migID], nil
 }
 
+func (m *memStore) UpdateCandidateMetadata(_ context.Context, migID, candidateID string, metadata map[string]string) error {
+	mig, ok := m.migrations[migID]
+	if !ok {
+		return nil
+	}
+	for i, c := range mig.Candidates {
+		if c.Id == candidateID {
+			if c.Metadata == nil {
+				md := map[string]string{}
+				mig.Candidates[i].Metadata = &md
+			}
+			for k, v := range metadata {
+				(*mig.Candidates[i].Metadata)[k] = v
+			}
+			m.migrations[migID] = mig
+			return nil
+		}
+	}
+	return nil
+}
+
 // ─── Test server builder ──────────────────────────────────────────────────────
 
 type testServer struct {

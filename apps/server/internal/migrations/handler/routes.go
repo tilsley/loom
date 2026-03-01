@@ -33,5 +33,6 @@ func RegisterRoutes(r *gin.Engine, svc *migrations.Service, log *slog.Logger) {
 	r.POST("/migrations/:id/candidates/:candidateId/start", h.StartRun)
 	r.POST("/migrations/:id/candidates/:candidateId/cancel", h.CancelRun)
 	r.POST("/migrations/:id/candidates/:candidateId/retry-step", h.RetryStep)
+	r.PATCH("/migrations/:id/candidates/:candidateId/inputs", h.UpdateInputs)
 	r.GET("/migrations/:id/candidates/:candidateId/steps", h.GetCandidateSteps)
 }

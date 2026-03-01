@@ -95,7 +95,7 @@ export function StepTimeline({
           </svg>
         </div>
         <p className="text-sm text-muted-foreground">Waiting for worker callbacks...</p>
-        <p className="text-xs text-zinc-600 mt-1">
+        <p className="text-xs text-muted-foreground/70 mt-1">
           Steps will appear here as workers report progress
         </p>
       </div>
@@ -118,10 +118,10 @@ export function StepTimeline({
 
         const lineColor =
           phase === "succeeded" || phase === "merged"
-            ? "bg-teal-500/25"
+            ? "bg-primary/25"
             : phase === "failed"
-              ? "bg-red-500/20"
-              : "bg-zinc-800";
+              ? "bg-destructive/20"
+              : "bg-border";
 
         return (
           <AccordionItem
@@ -137,9 +137,9 @@ export function StepTimeline({
                     isActive && !isLast && "mb-6",
                   ),
               isActive && "px-3 py-3 rounded-lg",
-              hasReview && "bg-blue-500/10 border border-blue-500/25",
-              hasPR && "bg-emerald-500/[0.07] border border-emerald-500/20",
-              phase === "in_progress" && "bg-amber-500/[0.07] border border-amber-500/20",
+              hasReview && "bg-pending/10 border border-pending/25",
+              hasPR && "bg-completed/[0.07] border border-completed/20",
+              phase === "in_progress" && "bg-running/[0.07] border border-running/20",
             )}
           >
             {/* Timeline column: dot + connecting line */}
@@ -162,17 +162,17 @@ export function StepTimeline({
                   <div className="flex-1 min-w-0">
                     <span className={cn(
                       "font-medium font-mono block transition-colors",
-                      !isOpen && isDone ? "text-sm text-zinc-500 group-hover/step:text-zinc-300" : "text-base text-foreground",
+                      !isOpen && isDone ? "text-sm text-muted-foreground group-hover/step:text-foreground/80" : "text-base text-foreground",
                     )}>
-                      {isCollapsible && (
+                      {isCollapsible ? (
                         <span className={cn(
                           "text-xs mr-0.5 select-none transition-colors",
-                          !isOpen ? "text-zinc-700 group-hover/step:text-zinc-500" : "text-zinc-600",
+                          !isOpen ? "text-muted-foreground/50 group-hover/step:text-muted-foreground" : "text-muted-foreground/70",
                         )}>
                           {isOpen ? "▾" : "▸"}
                         </span>
-                      )}
-                      <span className="text-xs text-zinc-700 mr-1.5 tabular-nums select-none">
+                      ) : null}
+                      <span className="text-xs text-muted-foreground/50 mr-1.5 tabular-nums select-none">
                         {String(i + 1).padStart(2, "0")}.
                       </span>
                       {r.stepName}
@@ -196,6 +196,11 @@ export function StepTimeline({
               {/* Expandable content */}
               <AccordionContent>
                 <div className="pt-1">
+                  {/* Step description */}
+                  {description ? (
+                    <p className="text-sm text-muted-foreground mb-3">{description}</p>
+                  ) : null}
+
                   {/* PR link */}
                   {meta.prUrl ? (
                     <div className="mb-2">
@@ -230,13 +235,13 @@ export function StepTimeline({
                   {/* Pending with review instructions */}
                   {hasReview ? (
                     <div className="mt-2 space-y-3">
-                      <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
-                        <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
+                      <div className="bg-pending/5 border border-pending/15 rounded-md px-3 py-2.5">
+                        <div className="text-xs font-medium text-pending/70 uppercase tracking-widest mb-1.5">
                           Instructions
                         </div>
                         <ul className="space-y-1">
                           {meta.instructions?.split("\n").map((line, j) => (
-                            <li key={j} className="text-sm text-blue-200/80 font-mono">
+                            <li key={j} className="text-sm text-foreground/80 font-mono">
                               {line}
                             </li>
                           ))}
@@ -262,10 +267,10 @@ export function StepTimeline({
                             {extra.map(([k, v]) => (
                               <span
                                 key={k}
-                                className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 bg-zinc-800/50 px-2 py-0.5 rounded"
+                                className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded"
                               >
-                                <span className="text-zinc-600">{k}</span>
-                                <span className="text-zinc-400">{v}</span>
+                                <span className="text-muted-foreground/70">{k}</span>
+                                <span className="text-muted-foreground">{v}</span>
                               </span>
                             ))}
                           </div>
@@ -288,27 +293,27 @@ function TimelineDot({ phase, meta }: { phase: StepState["status"]; meta: Record
   switch (phase) {
     case "succeeded":
       return (
-        <svg className={cn(cls, "text-teal-500")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg className={cn(cls, "text-primary")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="8" cy="8" r="6.5" />
           <path d="M5 8l2 2 4-4" />
         </svg>
       );
     case "merged":
       return (
-        <svg className={cn(cls, "text-purple-400")} viewBox="0 0 16 16" fill="currentColor">
+        <svg className={cn(cls, "text-merged")} viewBox="0 0 16 16" fill="currentColor">
           <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z" />
         </svg>
       );
     case "in_progress":
       return (
-        <svg className={cn(cls, "text-amber-400 animate-spin")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <svg className={cn(cls, "text-running animate-spin")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <circle cx="8" cy="8" r="6.5" strokeDasharray="30" strokeDashoffset="10" />
         </svg>
       );
     case "pending":
       if (meta.instructions) {
         return (
-          <svg className={cn(cls, "text-blue-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg className={cn(cls, "text-pending")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z" />
             <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
           </svg>
@@ -316,26 +321,26 @@ function TimelineDot({ phase, meta }: { phase: StepState["status"]; meta: Record
       }
       if (meta.prUrl) {
         return (
-          <svg className={cn(cls, "text-emerald-400")} viewBox="0 0 16 16" fill="currentColor">
+          <svg className={cn(cls, "text-completed")} viewBox="0 0 16 16" fill="currentColor">
             <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" />
           </svg>
         );
       }
       return (
-        <svg className={cn(cls, "text-zinc-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <svg className={cn(cls, "text-muted-foreground")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <circle cx="8" cy="8" r="6.5" strokeDasharray="28" strokeDashoffset="8" />
         </svg>
       );
     case "failed":
       return (
-        <svg className={cn(cls, "text-red-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <svg className={cn(cls, "text-destructive")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <circle cx="8" cy="8" r="6.5" />
           <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
         </svg>
       );
     default:
       return (
-        <svg className={cn(cls, "text-zinc-500")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg className={cn(cls, "text-muted-foreground")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="8" cy="8" r="6.5" />
           <path d="M5 8l2 2 4-4" />
         </svg>
@@ -349,20 +354,20 @@ function PhaseLabel({ phase, meta }: { phase: StepState["status"]; meta: Record<
   switch (phase) {
     case "pending":
       if (meta.instructions) {
-        return <span className={cn(base, "text-blue-400 bg-blue-500/10 border-blue-500/20")}>Awaiting review</span>;
+        return <span className={cn(base, "text-pending bg-pending/10 border-pending/20")}>Awaiting review</span>;
       }
       if (meta.prUrl) {
-        return <span className={cn(base, "text-emerald-400 bg-emerald-500/10 border-emerald-500/20")}>PR open</span>;
+        return <span className={cn(base, "text-completed bg-completed/10 border-completed/20")}>PR open</span>;
       }
-      return <span className={cn(base, "text-zinc-400 bg-zinc-500/10 border-zinc-500/20")}>Pending</span>;
+      return <span className={cn(base, "text-muted-foreground bg-muted border-border")}>Pending</span>;
     case "in_progress":
-      return <span className={cn(base, "text-amber-400 bg-amber-500/10 border-amber-500/20")}>Running</span>;
+      return <span className={cn(base, "text-running bg-running/10 border-running/20")}>Running</span>;
     case "merged":
-      return <span className={cn(base, "text-purple-400 bg-purple-500/10 border-purple-500/20")}>Merged</span>;
+      return <span className={cn(base, "text-merged bg-merged/10 border-merged/20")}>Merged</span>;
     case "failed":
-      return <span className={cn(base, "text-red-400 bg-red-500/10 border-red-500/20")}>Failed</span>;
+      return <span className={cn(base, "text-destructive bg-destructive/10 border-destructive/20")}>Failed</span>;
     default:
-      return <span className={cn(base, "text-emerald-400 bg-emerald-500/10 border-emerald-500/20")}>Done</span>;
+      return <span className={cn(base, "text-completed bg-completed/10 border-completed/20")}>Done</span>;
   }
 }
 
@@ -379,7 +384,7 @@ function MergeAction({ onMerge }: { onMerge: () => void }) {
       >
         {isPending ? "Sending..." : "Mark as merged"}
       </Button>
-      <span className="text-xs text-zinc-600">PR merged but no webhook? Use this to advance the run.</span>
+      <span className="text-xs text-muted-foreground/70">PR merged but no webhook? Use this to advance the run.</span>
     </div>
   );
 }
@@ -397,7 +402,7 @@ function RetryAction({ onRetry }: { onRetry: () => void }) {
       >
         {isPending ? "Retrying..." : "Retry"}
       </Button>
-      <span className="text-xs text-zinc-600">Re-dispatch this step to the worker.</span>
+      <span className="text-xs text-muted-foreground/70">Re-dispatch this step to the worker.</span>
     </div>
   );
 }

@@ -45,33 +45,33 @@ export function CommandPalette() {
       />
       <div className="absolute left-1/2 top-[18vh] -translate-x-1/2 w-full max-w-[560px] px-4">
         <Command
-          className="bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl overflow-hidden"
+          className="bg-card border border-border-hover/80 rounded-xl shadow-2xl overflow-hidden"
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
           }}
         >
-          <div className="flex items-center gap-2.5 px-4 border-b border-zinc-800">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-zinc-500 shrink-0">
+          <div className="flex items-center gap-2.5 px-4 border-b border-border">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-muted-foreground shrink-0">
               <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
               <path d="M9 9l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             <Command.Input
               placeholder="Go to migration, search…"
-              className="flex-1 bg-transparent py-3.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none"
+              className="flex-1 bg-transparent py-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 outline-none"
             />
-            <kbd className="text-[11px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded font-mono shrink-0">
+            <kbd className="text-[11px] text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded font-mono shrink-0">
               esc
             </kbd>
           </div>
 
           <Command.List className="max-h-72 overflow-y-auto py-1.5">
-            <Command.Empty className="py-8 text-center text-sm text-zinc-600">
+            <Command.Empty className="py-8 text-center text-sm text-muted-foreground/70">
               No results found
             </Command.Empty>
 
             <Command.Group
               heading="Navigate"
-              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-zinc-600 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest"
+              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground/70 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest"
             >
               <PaletteItem
                 icon={<DashboardIcon />}
@@ -92,7 +92,7 @@ export function CommandPalette() {
             {migrations.length > 0 ? (
               <Command.Group
                 heading="Migrations"
-                className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-zinc-600 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest"
+                className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground/70 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest"
               >
                 {migrations.map((m) => (
                   <PaletteItem
@@ -108,18 +108,18 @@ export function CommandPalette() {
             ) : null}
           </Command.List>
 
-          <div className="flex items-center gap-4 px-3 py-2 border-t border-zinc-800/80 text-[11px] text-zinc-600">
+          <div className="flex items-center gap-4 px-3 py-2 border-t border-border/80 text-[11px] text-muted-foreground/70">
             <span className="flex items-center gap-1">
-              <kbd className="bg-zinc-800 px-1 py-0.5 rounded font-mono">↑</kbd>
-              <kbd className="bg-zinc-800 px-1 py-0.5 rounded font-mono">↓</kbd>
+              <kbd className="bg-muted px-1 py-0.5 rounded font-mono">↑</kbd>
+              <kbd className="bg-muted px-1 py-0.5 rounded font-mono">↓</kbd>
               navigate
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="bg-zinc-800 px-1 py-0.5 rounded font-mono">↵</kbd>
+              <kbd className="bg-muted px-1 py-0.5 rounded font-mono">↵</kbd>
               select
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
+              <kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
               toggle
             </span>
           </div>
@@ -144,11 +144,11 @@ function PaletteItem({
   return (
     <Command.Item
       onSelect={onSelect}
-      className="flex items-center gap-2.5 px-3 py-2 mx-1.5 rounded-lg text-sm text-zinc-300 cursor-pointer data-[selected=true]:bg-zinc-800 data-[selected=true]:text-zinc-100 transition-colors"
+      className="flex items-center gap-2.5 px-3 py-2 mx-1.5 rounded-lg text-sm text-foreground/80 cursor-pointer data-[selected=true]:bg-muted data-[selected=true]:text-foreground transition-colors"
     >
-      {icon ? <span className="text-zinc-500 shrink-0">{icon}</span> : null}
+      {icon ? <span className="text-muted-foreground shrink-0">{icon}</span> : null}
       <span className="flex-1 min-w-0 truncate">{children}</span>
-      {hint ? <span className="text-xs text-zinc-600 shrink-0">{hint}</span> : null}
+      {hint ? <span className="text-xs text-muted-foreground/70 shrink-0">{hint}</span> : null}
     </Command.Item>
   );
 }

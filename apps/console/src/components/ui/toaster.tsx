@@ -1,17 +1,19 @@
 "use client";
 
 import { Toaster as SonnerToaster } from "sonner";
+import { useTheme } from "@/contexts/theme-context";
 
 export function Toaster() {
+  const { theme } = useTheme();
   return (
     <SonnerToaster
       position="top-right"
-      theme="dark"
+      theme={theme}
       toastOptions={{
         style: {
-          background: "#18181b",
-          border: "1px solid #27272a",
-          color: "#e4e4e7",
+          background: "var(--color-card)",
+          border: "1px solid var(--color-border)",
+          color: "var(--color-card-foreground)",
           fontSize: "13px",
         },
       }}

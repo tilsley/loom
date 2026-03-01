@@ -49,3 +49,9 @@ func StepEventName(stepName, candidateId string) string {
 func RetryStepEventName(stepName, candidateId string) string {
 	return fmt.Sprintf("retry-step:%s:%s", stepName, candidateId)
 }
+
+// UpdateInputsEventName returns the signal name used to push updated metadata
+// into a running workflow for the given candidate.
+func UpdateInputsEventName(candidateId string) string {
+	return fmt.Sprintf("update-inputs:%s", candidateId)
+}

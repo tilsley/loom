@@ -82,12 +82,13 @@ type memStore struct {
 	data map[string]api.Migration
 
 	// per-method error stubs
-	errSave               error
-	errGet                error
-	errList               error
-	errSetCandidateStatus error
-	errSaveCandidates     error
-	errGetCandidates      error
+	errSave                    error
+	errGet                     error
+	errList                    error
+	errSetCandidateStatus      error
+	errSaveCandidates          error
+	errGetCandidates           error
+	errUpdateCandidateMetadata error
 }
 
 func newMemStore() *memStore {
@@ -173,6 +174,30 @@ func (s *memStore) GetCandidates(_ context.Context, migrationID string) ([]api.C
 		return nil, nil
 	}
 	return m.Candidates, nil
+}
+
+func (s *memStore) UpdateCandidateMetadata(_ context.Context, migrationID, candidateID string, metadata map[string]string) error {
+	if s.errUpdateCandidateMetadata != nil {
+		return s.errUpdateCandidateMetadata
+	}
+	m, ok := s.data[migrationID]
+	if !ok {
+		return nil
+	}
+	for i, c := range m.Candidates {
+		if c.Id == candidateID {
+			if c.Metadata == nil {
+				md := map[string]string{}
+				m.Candidates[i].Metadata = &md
+			}
+			for k, v := range metadata {
+				(*m.Candidates[i].Metadata)[k] = v
+			}
+			s.data[migrationID] = m
+			return nil
+		}
+	}
+	return nil
 }
 
 // ─── constructor helper ───────────────────────────────────────────────────────
@@ -873,6 +898,132 @@ func TestService_Start(t *testing.T) {
 
 		_, err := svc.Start(ctx, "m1", "repo-a", nil)
 		require.ErrorContains(t, err, "state write failed")
+	})
+}
+
+func TestService_UpdateInputs(t *testing.T) {
+	ctx := context.Background()
+
+	reqInputs := &[]api.InputDefinition{{Name: "repoName"}}
+
+	saveMigration := func(store *memStore, status *api.CandidateStatus) {
+		_ = store.Save(ctx, api.Migration{
+			Id:             "m1",
+			RequiredInputs: reqInputs,
+			Candidates:     []api.Candidate{{Id: "repo-a", Status: status}},
+		})
+	}
+
+	t.Run("signals running workflow after store update", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, ptr(api.CandidateStatusRunning))
+		var raisedID, raisedEvent string
+		var raisedPayload any
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, id, event string, payload any) error {
+				raisedID = id
+				raisedEvent = event
+				raisedPayload = payload
+				return nil
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "fixed"})
+		require.NoError(t, err)
+		assert.Equal(t, "m1__repo-a", raisedID)
+		assert.Equal(t, migrations.UpdateInputsEventName("repo-a"), raisedEvent)
+		assert.Equal(t, map[string]string{"repoName": "fixed"}, raisedPayload)
+	})
+
+	t.Run("does not signal when candidate is not running", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, ptr(api.CandidateStatusNotStarted))
+		signalCalled := false
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
+				signalCalled = true
+				return nil
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "val"})
+		require.NoError(t, err)
+		assert.False(t, signalCalled, "should not signal non-running candidate")
+	})
+
+	t.Run("does not signal when candidate has nil status", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, nil)
+		signalCalled := false
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
+				signalCalled = true
+				return nil
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "val"})
+		require.NoError(t, err)
+		assert.False(t, signalCalled, "should not signal candidate with nil status")
+	})
+
+	t.Run("tolerates RunNotFoundError from engine", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, ptr(api.CandidateStatusRunning))
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, id, _ string, _ any) error {
+				return migrations.RunNotFoundError{InstanceID: id}
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "val"})
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates other engine errors", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, ptr(api.CandidateStatusRunning))
+		engine := &stubEngine{
+			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
+				return errors.New("temporal unavailable")
+			},
+		}
+		svc := newSvc(store, engine, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "val"})
+		require.ErrorContains(t, err, "temporal unavailable")
+	})
+
+	t.Run("rejects unknown input key", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, ptr(api.CandidateStatusNotStarted))
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"unknown": "val"})
+		var invalidKey migrations.InvalidInputKeyError
+		require.ErrorAs(t, err, &invalidKey)
+		assert.Equal(t, "unknown", invalidKey.Key)
+	})
+
+	t.Run("returns error when migration not found", func(t *testing.T) {
+		svc := newSvc(newMemStore(), &stubEngine{}, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "missing", "repo-a", map[string]string{"repoName": "val"})
+		require.ErrorContains(t, err, "not found")
+	})
+
+	t.Run("propagates store UpdateCandidateMetadata error", func(t *testing.T) {
+		store := newMemStore()
+		saveMigration(store, ptr(api.CandidateStatusNotStarted))
+		store.errUpdateCandidateMetadata = errors.New("write failed")
+		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
+
+		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "val"})
+		require.ErrorContains(t, err, "write failed")
 	})
 }
 
