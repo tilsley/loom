@@ -1,4 +1,6 @@
+export { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "./accordion";
 export { Button, buttonVariants, type ButtonProps } from "./button";
+export { Badge } from "./badge";
 export { Input } from "./input";
 export { Skeleton } from "./skeleton";
 export { Toaster } from "./toaster";

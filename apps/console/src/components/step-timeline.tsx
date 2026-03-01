@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { StepState } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Button, buttonVariants } from "@/components/ui";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+  Button,
+  buttonVariants,
+} from "@/components/ui";
 
 export function StepTimeline({
   results,
@@ -23,6 +30,41 @@ export function StepTimeline({
 
   const activeRef = useRef<HTMLDivElement>(null);
   const hasScrolled = useRef(false);
+
+  // Non-collapsible: everything that isn't succeeded/merged
+  const forcedIndices = useCallback(() => {
+    const forced: string[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const s = results[i].status;
+      if (s !== "succeeded" && s !== "merged") {
+        forced.push(String(i));
+      }
+    }
+    return forced;
+  }, [results]);
+
+  const [value, setValue] = useState<string[]>(() => forcedIndices());
+
+  const handleValueChange = useCallback(
+    (next: string[]) => {
+      // Re-add forced indices so non-collapsible steps can't be closed
+      const forced = new Set(forcedIndices());
+      const merged = new Set(next);
+      for (const f of forced) merged.add(f);
+      setValue(Array.from(merged));
+    },
+    [forcedIndices],
+  );
+
+  // Sync when results change (new steps appear, statuses change)
+  useEffect(() => {
+    setValue((prev) => {
+      const forced = new Set(forcedIndices());
+      const merged = new Set(prev);
+      for (const f of forced) merged.add(f);
+      return Array.from(merged);
+    });
+  }, [forcedIndices]);
 
   useEffect(() => {
     if (!hasScrolled.current && activeRef.current) {
@@ -61,7 +103,7 @@ export function StepTimeline({
   }
 
   return (
-    <div>
+    <Accordion type="multiple" value={value} onValueChange={handleValueChange}>
       {results.map((r, i) => {
         const phase = r.status;
         const meta = r.metadata ?? {};
@@ -70,6 +112,9 @@ export function StepTimeline({
         const isActive = phase === "pending" || phase === "in_progress";
         const hasPR = phase === "pending" && Boolean(meta.prUrl);
         const hasReview = phase === "pending" && Boolean(meta.instructions);
+        const isDone = phase === "succeeded" || phase === "merged";
+        const isCollapsible = isDone;
+        const isOpen = value.includes(String(i));
 
         const lineColor =
           phase === "succeeded" || phase === "merged"
@@ -79,13 +124,18 @@ export function StepTimeline({
               : "bg-zinc-800";
 
         return (
-          <div
+          <AccordionItem
             key={i}
+            value={String(i)}
             ref={i === lastActiveIndex ? activeRef : undefined}
             className={cn(
               "relative flex gap-5",
-              !isActive && !isLast && "pb-6",
-              isActive && !isLast && "mb-6",
+              !isOpen
+                ? (!isLast && "pb-1")
+                : cn(
+                    !isActive && !isLast && "pb-6",
+                    isActive && !isLast && "mb-6",
+                  ),
               isActive && "px-3 py-3 rounded-lg",
               hasReview && "bg-blue-500/10 border border-blue-500/25",
               hasPR && "bg-emerald-500/[0.07] border border-emerald-500/20",
@@ -98,104 +148,137 @@ export function StepTimeline({
               {!isLast && <div className={cn("w-px flex-1 mt-1", lineColor)} />}
             </div>
 
-            {/* Content */}
+            {/* Content column */}
             <div className="flex-1 min-w-0 pt-px">
-              {/* Top row: name/description left, badges right */}
-              <div className="flex items-start gap-4">
-                <div className="flex-1 min-w-0">
-                  <span className="text-base font-medium font-mono text-foreground block">
-                    <span className="text-xs text-zinc-700 mr-1.5 tabular-nums select-none">
-                      {String(i + 1).padStart(2, "0")}.
+              {/* Trigger: always-visible row */}
+              <AccordionTrigger
+                className={cn(
+                  "gap-4",
+                  isCollapsible && "cursor-pointer group/step",
+                  !isCollapsible && "pointer-events-none",
+                )}
+              >
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <div className="flex-1 min-w-0">
+                    <span className={cn(
+                      "font-medium font-mono block transition-colors",
+                      !isOpen && isDone ? "text-sm text-zinc-500 group-hover/step:text-zinc-300" : "text-base text-foreground",
+                    )}>
+                      {isCollapsible && (
+                        <span className={cn(
+                          "text-xs mr-0.5 select-none transition-colors",
+                          !isOpen ? "text-zinc-700 group-hover/step:text-zinc-500" : "text-zinc-600",
+                        )}>
+                          {isOpen ? "▾" : "▸"}
+                        </span>
+                      )}
+                      <span className="text-xs text-zinc-700 mr-1.5 tabular-nums select-none">
+                        {String(i + 1).padStart(2, "0")}.
+                      </span>
+                      {r.stepName}
                     </span>
-                    {r.stepName}
-                  </span>
-                  {Boolean(description) && (
-                    <span className="text-sm text-muted-foreground mt-0.5 block">{description}</span>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  {meta.prUrl ? (
-                    <a
-                      href={meta.prUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={cn(buttonVariants({ variant: "default", size: "sm" }))}
-                    >
-                      View PR
-                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" className="opacity-70">
-                        <path d="M3.5 1.5h7v7M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </a>
-                  ) : null}
-                  <PhaseLabel phase={phase} meta={meta} />
-                </div>
-              </div>
-
-              {/* Pending with PR: manual merge action for local dev / no-webhook environments */}
-              {hasPR && onComplete ? (
-                <div className="mt-3">
-                  <MergeAction onMerge={() => onComplete(r.stepName, r.candidate.id, "merged")} />
-                </div>
-              ) : null}
-
-              {/* Failed step: retry action */}
-              {phase === "failed" && onRetry ? (
-                <div className="mt-3">
-                  <RetryAction onRetry={() => onRetry(r.stepName, r.candidate.id)} />
-                </div>
-              ) : null}
-
-              {/* Pending with review instructions: instructions + actions */}
-              {hasReview ? (
-                <div className="mt-3 space-y-3">
-                  <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
-                    <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
-                      Instructions
-                    </div>
-                    <ul className="space-y-1">
-                      {meta.instructions?.split("\n").map((line, j) => (
-                        <li key={j} className="text-sm text-blue-200/80 font-mono">
-                          {line}
-                        </li>
-                      ))}
-                    </ul>
+                    {Boolean(description) && (
+                      <span className={cn(
+                        "text-muted-foreground mt-0.5 block",
+                        !isOpen && isDone ? "text-xs" : "text-sm",
+                      )}>
+                        {description}
+                      </span>
+                    )}
                   </div>
-                  {onComplete ? (
-                    <ReviewActions
-                      onComplete={(status) => onComplete(r.stepName, r.candidate.id, status)}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
 
-              {/* Extra metadata tags */}
-              {r.metadata
-                ? (() => {
-                    const extra = Object.entries(r.metadata).filter(
-                      ([k]) => k !== "prUrl" && k !== "instructions" && k !== "commitSha",
-                    );
-                    if (extra.length === 0) return null;
-                    return (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {extra.map(([k, v]) => (
-                          <span
-                            key={k}
-                            className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 bg-zinc-800/50 px-2 py-0.5 rounded"
-                          >
-                            <span className="text-zinc-600">{k}</span>
-                            <span className="text-zinc-400">{v}</span>
-                          </span>
-                        ))}
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <PhaseLabel phase={phase} meta={meta} />
+                  </div>
+                </div>
+              </AccordionTrigger>
+
+              {/* Expandable content */}
+              <AccordionContent>
+                <div className="pt-1">
+                  {/* PR link */}
+                  {meta.prUrl ? (
+                    <div className="mb-2">
+                      <a
+                        href={meta.prUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={cn(buttonVariants({ variant: "default", size: "sm" }))}
+                      >
+                        View PR
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" className="opacity-70">
+                          <path d="M3.5 1.5h7v7M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </a>
+                    </div>
+                  ) : null}
+
+                  {/* Pending with PR: manual merge action */}
+                  {hasPR && onComplete ? (
+                    <div className="mt-2">
+                      <MergeAction onMerge={() => onComplete(r.stepName, r.candidate.id, "merged")} />
+                    </div>
+                  ) : null}
+
+                  {/* Failed step: retry action */}
+                  {phase === "failed" && onRetry ? (
+                    <div className="mt-2">
+                      <RetryAction onRetry={() => onRetry(r.stepName, r.candidate.id)} />
+                    </div>
+                  ) : null}
+
+                  {/* Pending with review instructions */}
+                  {hasReview ? (
+                    <div className="mt-2 space-y-3">
+                      <div className="bg-blue-500/5 border border-blue-500/15 rounded-md px-3 py-2.5">
+                        <div className="text-xs font-medium text-blue-400/70 uppercase tracking-widest mb-1.5">
+                          Instructions
+                        </div>
+                        <ul className="space-y-1">
+                          {meta.instructions?.split("\n").map((line, j) => (
+                            <li key={j} className="text-sm text-blue-200/80 font-mono">
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    );
-                  })()
-                : null}
+                      {onComplete ? (
+                        <ReviewActions
+                          onComplete={(status) => onComplete(r.stepName, r.candidate.id, status)}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {/* Extra metadata tags */}
+                  {r.metadata
+                    ? (() => {
+                        const extra = Object.entries(r.metadata).filter(
+                          ([k]) => k !== "prUrl" && k !== "instructions" && k !== "commitSha",
+                        );
+                        if (extra.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {extra.map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 bg-zinc-800/50 px-2 py-0.5 rounded"
+                              >
+                                <span className="text-zinc-600">{k}</span>
+                                <span className="text-zinc-400">{v}</span>
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    : null}
+                </div>
+              </AccordionContent>
             </div>
-          </div>
+          </AccordionItem>
         );
       })}
-    </div>
+    </Accordion>
   );
 }
 
@@ -224,7 +307,6 @@ function TimelineDot({ phase, meta }: { phase: StepState["status"]; meta: Record
       );
     case "pending":
       if (meta.instructions) {
-        // Awaiting human review
         return (
           <svg className={cn(cls, "text-blue-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z" />
@@ -233,14 +315,12 @@ function TimelineDot({ phase, meta }: { phase: StepState["status"]; meta: Record
         );
       }
       if (meta.prUrl) {
-        // PR open, awaiting merge
         return (
           <svg className={cn(cls, "text-emerald-400")} viewBox="0 0 16 16" fill="currentColor">
             <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" />
           </svg>
         );
       }
-      // Generic pending
       return (
         <svg className={cn(cls, "text-zinc-400")} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <circle cx="8" cy="8" r="6.5" strokeDasharray="28" strokeDashoffset="8" />
