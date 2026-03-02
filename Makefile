@@ -71,15 +71,16 @@ migrator:
 	cd apps/migrators/app-chart-migrator && go run .
 
 reset:
-	@echo "Flushing Redis..."
-	@docker exec loom-redis-1 redis-cli FLUSHDB 2>/dev/null || docker exec loom_redis_1 redis-cli FLUSHDB 2>/dev/null || redis-cli FLUSHDB
-	@echo "✓ Redis cleared — migrations and pending callbacks removed"
+	@echo "Flushing Redis (migrator pending callbacks)..."
+	@docker exec loom-redis redis-cli FLUSHDB 2>/dev/null || echo "  (skipped — loom-redis not running)"
+	@echo "✓ Redis cleared"
 	@echo "Deleting Temporal SQLite database..."
 	@rm -f .temporal.db .temporal.db-shm .temporal.db-wal
 	@echo "✓ Temporal state cleared — restart 'make temporal' to get a fresh server"
-	@echo "Truncating event store..."
-	@docker exec loom-postgres psql -U loom -d loom -c "TRUNCATE step_events;" 2>/dev/null || echo "  (skipped — loom-postgres not running)"
-	@echo "✓ Event store cleared"
+	@echo "Truncating migration and event store..."
+	@docker exec loom-postgres psql -U loom -d loom -c "TRUNCATE candidates, migrations, step_events CASCADE;" 2>/dev/null \
+		|| echo "  (skipped — loom-postgres not running)"
+	@echo "✓ Migration and event store cleared"
 
 test:
 	go test ./...

@@ -7,25 +7,12 @@ services:
       - "8080:8080"
     environment:
       - TEMPORAL_HOSTPORT=temporal:7233
-      - REDIS_ADDR=redis:6379
       - POSTGRES_URL=postgres://temporal:temporal@temporal-db:5432/loom?sslmode=disable
     depends_on:
       temporal:
         condition: service_started
-      redis:
-        condition: service_started
       loom-db-init:
         condition: service_completed_successfully
-    networks:
-      - loom
-
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
     networks:
       - loom
 
@@ -85,7 +72,6 @@ services:
       - loom
 
 volumes:
-  redis-data:
   temporal-db-data:
 
 networks:

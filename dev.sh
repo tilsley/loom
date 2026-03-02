@@ -26,9 +26,11 @@ prefix() {
 
 cleanup() {
   printf "\n${C_BOLD}Shutting down…${C_RESET}\n"
-  for pid in "${PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
+  if [[ ${#PIDS[@]} -gt 0 ]]; then
+    for pid in "${PIDS[@]}"; do
+      kill "$pid" 2>/dev/null || true
+    done
+  fi
   wait 2>/dev/null || true
   if [ "$OTEL_COMPOSE" -eq 1 ]; then
     printf "${C_BOLD}Stopping LGTM stack…${C_RESET}\n"
@@ -42,7 +44,23 @@ trap cleanup INT TERM
 
 cd "$(dirname "$0")"
 
-# --- Postgres for event store ---
+# --- Redis for migrator pending-callback store ---
+REDIS_CONTAINER="loom-redis"
+REDIS_PORT=6379
+
+if ! docker inspect "$REDIS_CONTAINER" >/dev/null 2>&1; then
+  printf "${C_BOLD}Starting Redis (${REDIS_CONTAINER})…${C_RESET}\n"
+  docker run -d --name "$REDIS_CONTAINER" \
+    -p "${REDIS_PORT}:6379" \
+    redis:7-alpine redis-server --appendonly yes >/dev/null
+elif [ "$(docker inspect -f '{{.State.Running}}' "$REDIS_CONTAINER" 2>/dev/null)" != "true" ]; then
+  printf "${C_BOLD}Starting existing Redis container…${C_RESET}\n"
+  docker start "$REDIS_CONTAINER" >/dev/null
+fi
+
+export REDIS_ADDR="localhost:${REDIS_PORT}"
+
+# --- Postgres for migration and event store ---
 PG_CONTAINER="loom-postgres"
 PG_PORT=5433
 PG_USER=loom
@@ -79,7 +97,8 @@ printf "  ${C_SERVER}server${C_RESET}    → http://localhost:8080\n"
 printf "  ${C_WORKER}migrator${C_RESET}  → http://localhost:3001\n"
 printf "  ${C_MOCKGH}mock-gh${C_RESET}   → http://localhost:8081\n"
 printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n"
-printf "  ${C_DIM}postgres${C_RESET}  → localhost:${PG_PORT}  (${PG_USER}/${PG_PASS})\n"
+printf "  ${C_DIM}postgres${C_RESET}  → localhost:${PG_PORT}  (${PG_USER}/${PG_PASS})
+  ${C_DIM}redis${C_RESET}     → localhost:${REDIS_PORT}\n"
 
 # Optional OTEL: start Grafana LGTM when OTEL_ENABLED=true
 if [ "${OTEL_ENABLED:-}" = "true" ]; then

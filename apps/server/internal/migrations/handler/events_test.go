@@ -53,7 +53,7 @@ func TestAnnounce_DirectJSON(t *testing.T) {
 		Name:        "Migrate chart",
 		Description: "Upgrades Helm charts",
 		Steps:       []api.StepDefinition{{Name: "update-chart", MigratorApp: "app-chart-migrator"}},
-		MigratorUrl:   "http://app-chart-migrator:3001",
+		MigratorUrl: "http://app-chart-migrator:3001",
 	}
 
 	w := ts.do(http.MethodPost, "/registry/announce", ann)

@@ -216,9 +216,9 @@ func TestMigrationOrchestrator_ManualReviewStep_DispatchedToWorker(t *testing.T)
 		Candidates:  []api.Candidate{{Id: "billing-api"}},
 		Steps: []api.StepDefinition{
 			{
-				Name:      "review",
+				Name:        "review",
 				MigratorApp: "app-chart-migrator",
-				Config:    &map[string]string{"type": "manual-review", "instructions": "approve the PR"},
+				Config:      &map[string]string{"type": "manual-review", "instructions": "approve the PR"},
 			},
 		},
 	}
@@ -319,4 +319,3 @@ func TestMigrationOrchestrator_UpdateInputs_AppliedOnRetry(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, "completed", result.Status)
 }
-
