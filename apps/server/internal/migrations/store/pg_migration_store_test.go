@@ -2,29 +2,44 @@ package store_test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
-	"github.com/redis/go-redis/v9"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tilsley/loom/apps/server/internal/migrations/store"
+	"github.com/tilsley/loom/apps/server/internal/migrations/store/pgmigrations"
+	pgplatform "github.com/tilsley/loom/apps/server/internal/platform/postgres"
 	"github.com/tilsley/loom/pkg/api"
 )
 
-// newStore starts a miniredis server and returns a RedisMigrationStore backed by it.
-// The server is stopped automatically when the test ends.
-func newStore(t *testing.T) *store.RedisMigrationStore {
+// newPGStore creates a PGMigrationStore backed by a real PostgreSQL instance.
+// Skips if POSTGRES_URL is not set.
+func newPGStore(t *testing.T) *store.PGMigrationStore {
 	t.Helper()
-	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { rdb.Close() })
-	return store.NewRedisMigrationStore(rdb)
+	pgURL := os.Getenv("POSTGRES_URL")
+	if pgURL == "" {
+		t.Skip("POSTGRES_URL not set — skipping Postgres integration tests")
+	}
+	pool, err := pgplatform.New(context.Background(), pgURL, pgmigrations.FS)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanupPGStore(t, pool)
+		pool.Close()
+	})
+	return store.NewPGMigrationStore(pool)
 }
 
-var baseMigration = api.Migration{
+func cleanupPGStore(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `DELETE FROM candidates; DELETE FROM migrations;`)
+	require.NoError(t, err)
+}
+
+var pgBaseMigration = api.Migration{
 	Id:          "app-chart-migration",
 	Name:        "App Chart Migration",
 	Description: "Migrate all app charts",
@@ -35,9 +50,9 @@ var baseMigration = api.Migration{
 
 // ─── Save / Get roundtrip ────────────────────────────────────────────────────
 
-func TestSaveGet_NoCandidates(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SaveGet_NoCandidates(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = nil
 
 	require.NoError(t, s.Save(context.Background(), m))
@@ -46,12 +61,14 @@ func TestSaveGet_NoCandidates(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, m.Id, got.Id)
+	assert.Equal(t, m.Name, got.Name)
+	assert.Equal(t, m.MigratorUrl, got.MigratorUrl)
 	assert.Empty(t, got.Candidates)
 }
 
-func TestSaveGet_WithCandidates(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SaveGet_WithCandidates(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{
 		{Id: "billing-api", Kind: "application"},
 		{Id: "payments-api", Kind: "application"},
@@ -67,8 +84,8 @@ func TestSaveGet_WithCandidates(t *testing.T) {
 	assert.ElementsMatch(t, []string{"billing-api", "payments-api"}, ids)
 }
 
-func TestGet_NotFound_ReturnsNil(t *testing.T) {
-	s := newStore(t)
+func TestPG_Get_NotFound_ReturnsNil(t *testing.T) {
+	s := newPGStore(t)
 
 	got, err := s.Get(context.Background(), "nonexistent")
 
@@ -76,29 +93,24 @@ func TestGet_NotFound_ReturnsNil(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-// CandidatesField verifies the migration JSON stored in Redis has nil candidates
-// (so candidates are never duplicated between the migration blob and individual keys).
-func TestSave_MigrationBlobHasNilCandidates(t *testing.T) {
-	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { rdb.Close() })
-	s := store.NewRedisMigrationStore(rdb)
+func TestPG_Save_Idempotent(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
+	m.Candidates = nil
 
-	m := baseMigration
-	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application"}}
+	require.NoError(t, s.Save(context.Background(), m))
+	// Second save should not error (upsert).
 	require.NoError(t, s.Save(context.Background(), m))
 
-	// Read the raw migration blob directly from Redis.
-	raw, err := rdb.Get(context.Background(), "migration:app-chart-migration").Result()
+	got, err := s.Get(context.Background(), m.Id)
 	require.NoError(t, err)
-	assert.NotContains(t, raw, `"billing-api"`,
-		"candidate data must not be embedded in the migration JSON blob")
+	require.NotNil(t, got)
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-func TestList_Empty(t *testing.T) {
-	s := newStore(t)
+func TestPG_List_Empty(t *testing.T) {
+	s := newPGStore(t)
 
 	migrations, err := s.List(context.Background())
 
@@ -106,10 +118,10 @@ func TestList_Empty(t *testing.T) {
 	assert.Empty(t, migrations)
 }
 
-func TestList_ReturnsSavedMigrations(t *testing.T) {
-	s := newStore(t)
-	m1 := baseMigration
-	m2 := baseMigration
+func TestPG_List_ReturnsSavedMigrations(t *testing.T) {
+	s := newPGStore(t)
+	m1 := pgBaseMigration
+	m2 := pgBaseMigration
 	m2.Id = "another-migration"
 	require.NoError(t, s.Save(context.Background(), m1))
 	require.NoError(t, s.Save(context.Background(), m2))
@@ -122,9 +134,9 @@ func TestList_ReturnsSavedMigrations(t *testing.T) {
 	assert.ElementsMatch(t, []string{m1.Id, m2.Id}, ids)
 }
 
-func TestList_IncludesCandidates(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_List_IncludesCandidates(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application"}}
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -137,9 +149,9 @@ func TestList_IncludesCandidates(t *testing.T) {
 
 // ─── SetCandidateStatus ───────────────────────────────────────────────────────
 
-func TestSetCandidateStatus_UpdatesStatus(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SetCandidateStatus_UpdatesStatus(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application"}}
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -152,30 +164,9 @@ func TestSetCandidateStatus_UpdatesStatus(t *testing.T) {
 	assert.Equal(t, api.CandidateStatusRunning, got.Candidates[0].Status)
 }
 
-func TestSetCandidateStatus_DoesNotTouchMigrationKey(t *testing.T) {
-	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { rdb.Close() })
-	s := store.NewRedisMigrationStore(rdb)
-
-	m := baseMigration
-	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application"}}
-	require.NoError(t, s.Save(context.Background(), m))
-
-	// Snapshot the migration blob before the status update.
-	before, err := rdb.Get(context.Background(), "migration:app-chart-migration").Result()
-	require.NoError(t, err)
-
-	require.NoError(t, s.SetCandidateStatus(context.Background(), m.Id, "billing-api", api.CandidateStatusRunning))
-
-	after, err := rdb.Get(context.Background(), "migration:app-chart-migration").Result()
-	require.NoError(t, err)
-	assert.Equal(t, before, after, "SetCandidateStatus must not rewrite the migration key")
-}
-
-func TestSetCandidateStatus_CandidateNotFound(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SetCandidateStatus_CandidateNotFound(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application"}}
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -186,9 +177,9 @@ func TestSetCandidateStatus_CandidateNotFound(t *testing.T) {
 
 // ─── SaveCandidates ───────────────────────────────────────────────────────────
 
-func TestSaveCandidates_SetsNotStartedStatus(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SaveCandidates_SetsNotStartedStatus(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = nil
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -206,15 +197,14 @@ func TestSaveCandidates_SetsNotStartedStatus(t *testing.T) {
 	}
 }
 
-func TestSaveCandidates_PreservesRunningCandidate(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SaveCandidates_PreservesRunningCandidate(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{
 		{Id: "billing-api", Kind: "application", Status: api.CandidateStatusRunning},
 	}
 	require.NoError(t, s.Save(context.Background(), m))
 
-	// Re-submit the same candidate list (as a discoverer would on re-announce).
 	incoming := []api.Candidate{{Id: "billing-api", Kind: "application"}}
 	require.NoError(t, s.SaveCandidates(context.Background(), m.Id, incoming))
 
@@ -225,9 +215,9 @@ func TestSaveCandidates_PreservesRunningCandidate(t *testing.T) {
 		"running candidate status must be preserved")
 }
 
-func TestSaveCandidates_PreservesCompletedCandidate(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SaveCandidates_PreservesCompletedCandidate(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{
 		{Id: "billing-api", Kind: "application", Status: api.CandidateStatusCompleted},
 	}
@@ -242,15 +232,14 @@ func TestSaveCandidates_PreservesCompletedCandidate(t *testing.T) {
 	assert.Equal(t, api.CandidateStatusCompleted, candidates[0].Status)
 }
 
-func TestSaveCandidates_KeepsRunningCandidateRemovedFromIncoming(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_SaveCandidates_KeepsRunningCandidateRemovedFromIncoming(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{
 		{Id: "billing-api", Kind: "application", Status: api.CandidateStatusRunning},
 	}
 	require.NoError(t, s.Save(context.Background(), m))
 
-	// Incoming list no longer contains billing-api (e.g. discoverer filtered it).
 	incoming := []api.Candidate{{Id: "payments-api", Kind: "application"}}
 	require.NoError(t, s.SaveCandidates(context.Background(), m.Id, incoming))
 
@@ -263,19 +252,43 @@ func TestSaveCandidates_KeepsRunningCandidateRemovedFromIncoming(t *testing.T) {
 	assert.Contains(t, ids, "billing-api", "running candidate removed from incoming list must be retained")
 }
 
-func TestSaveCandidates_MigrationNotFound(t *testing.T) {
-	s := newStore(t)
+func TestPG_SaveCandidates_MigrationNotFound(t *testing.T) {
+	s := newPGStore(t)
 
 	err := s.SaveCandidates(context.Background(), "nonexistent", []api.Candidate{{Id: "billing-api"}})
 
 	assert.Error(t, err)
 }
 
+func TestPG_SaveCandidates_MergesMetadata(t *testing.T) {
+	s := newPGStore(t)
+	existingMeta := map[string]string{"team": "platform", "env": "prod"}
+	m := pgBaseMigration
+	m.Candidates = []api.Candidate{
+		{Id: "billing-api", Kind: "application", Metadata: &existingMeta},
+	}
+	require.NoError(t, s.Save(context.Background(), m))
+
+	// Re-discover with new metadata — existing values should win.
+	newMeta := map[string]string{"team": "new-team", "repoName": "billing-api"}
+	incoming := []api.Candidate{{Id: "billing-api", Kind: "application", Metadata: &newMeta}}
+	require.NoError(t, s.SaveCandidates(context.Background(), m.Id, incoming))
+
+	candidates, err := s.GetCandidates(context.Background(), m.Id)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.NotNil(t, candidates[0].Metadata)
+	// Existing "team" value wins.
+	assert.Equal(t, "platform", (*candidates[0].Metadata)["team"])
+	// New key is added.
+	assert.Equal(t, "billing-api", (*candidates[0].Metadata)["repoName"])
+}
+
 // ─── GetCandidates ────────────────────────────────────────────────────────────
 
-func TestGetCandidates_ReturnsEmpty_WhenNoneStored(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_GetCandidates_ReturnsEmpty_WhenNoneStored(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = nil
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -285,9 +298,9 @@ func TestGetCandidates_ReturnsEmpty_WhenNoneStored(t *testing.T) {
 	assert.Empty(t, candidates)
 }
 
-func TestGetCandidates_ReturnsAllCandidates(t *testing.T) {
-	s := newStore(t)
-	m := baseMigration
+func TestPG_GetCandidates_ReturnsAllCandidates(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
 	m.Candidates = []api.Candidate{
 		{Id: "billing-api", Kind: "application"},
 		{Id: "payments-api", Kind: "application"},
@@ -304,4 +317,53 @@ func TestGetCandidates_ReturnsAllCandidates(t *testing.T) {
 		ids[i] = c.Id
 	}
 	assert.ElementsMatch(t, []string{"billing-api", "payments-api", "auth-service"}, ids)
+}
+
+// ─── UpdateCandidateMetadata ──────────────────────────────────────────────────
+
+func TestPG_UpdateCandidateMetadata_CreatesIfNil(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
+	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application"}}
+	require.NoError(t, s.Save(context.Background(), m))
+
+	err := s.UpdateCandidateMetadata(context.Background(), m.Id, "billing-api",
+		map[string]string{"repoName": "billing-api"})
+	require.NoError(t, err)
+
+	candidates, err := s.GetCandidates(context.Background(), m.Id)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.NotNil(t, candidates[0].Metadata)
+	assert.Equal(t, "billing-api", (*candidates[0].Metadata)["repoName"])
+}
+
+func TestPG_UpdateCandidateMetadata_MergesIntoExisting(t *testing.T) {
+	s := newPGStore(t)
+	existing := map[string]string{"team": "platform"}
+	m := pgBaseMigration
+	m.Candidates = []api.Candidate{{Id: "billing-api", Kind: "application", Metadata: &existing}}
+	require.NoError(t, s.Save(context.Background(), m))
+
+	err := s.UpdateCandidateMetadata(context.Background(), m.Id, "billing-api",
+		map[string]string{"repoName": "billing-api"})
+	require.NoError(t, err)
+
+	candidates, err := s.GetCandidates(context.Background(), m.Id)
+	require.NoError(t, err)
+	require.NotNil(t, candidates[0].Metadata)
+	assert.Equal(t, "platform", (*candidates[0].Metadata)["team"])
+	assert.Equal(t, "billing-api", (*candidates[0].Metadata)["repoName"])
+}
+
+func TestPG_UpdateCandidateMetadata_NotFound(t *testing.T) {
+	s := newPGStore(t)
+	m := pgBaseMigration
+	m.Candidates = nil
+	require.NoError(t, s.Save(context.Background(), m))
+
+	err := s.UpdateCandidateMetadata(context.Background(), m.Id, "nonexistent",
+		map[string]string{"k": "v"})
+
+	assert.Error(t, err)
 }

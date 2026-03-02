@@ -90,7 +90,8 @@
       "Bash(echo code=$?:*)",
       "Bash(echo '{\"hook_event_name\":\"Stop\",\"stop_hook_active\":false,\"cwd\":\"/Users/nathantilsley/repos/tilsley/loom\",\"last_assistant_message\":\"done\"}' | bash .claude/hooks/go/stop-check.sh 2>&1)",
       "Bash(PGPASSWORD=temporal psql:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(done)"
     ]
   }
 }

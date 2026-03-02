@@ -74,7 +74,6 @@ export function Sidebar() {
   const { migrations } = useMigrationsContext();
 
   const navItems = [
-    { href: ROUTES.dashboard, label: "Dashboard", icon: DashboardIcon },
     { href: ROUTES.migrations, label: "Migrations", icon: MigrationsIcon },
     { href: ROUTES.metrics, label: "Metrics", icon: MetricsIcon },
   ];
@@ -94,7 +93,7 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 bottom-0 w-60 bg-background border-r border-border flex flex-col z-40">
       {/* Branding */}
       <div className="px-5 py-4">
-        <Link href={ROUTES.dashboard} className="flex items-center gap-3 group">
+        <Link href={ROUTES.migrations} className="flex items-center gap-3 group">
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-background">
               <path
@@ -119,8 +118,8 @@ export function Sidebar() {
         <ul className="space-y-0.5">
           {navItems.map((item) => {
             const isActive =
-              item.href === ROUTES.dashboard
-                ? pathname === ROUTES.dashboard
+              item.href === ROUTES.migrations
+                ? pathname === "/" || pathname.startsWith("/migrations")
                 : pathname.startsWith(item.href);
 
             return (
@@ -233,22 +232,6 @@ export function Sidebar() {
   );
 }
 
-function DashboardIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      className={active ? "text-foreground/80" : "text-muted-foreground"}
-    >
-      <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
 
 function MigrationsIcon({ active }: { active: boolean }) {
   return (

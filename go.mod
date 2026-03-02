@@ -3,7 +3,6 @@ module github.com/tilsley/loom
 go 1.25.7
 
 require (
-	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/gin-gonic/gin v1.11.0
@@ -81,7 +80,6 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
-	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.36.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.6.0 // indirect

@@ -6,17 +6,21 @@
 #
 # stop_hook_active guard prevents infinite loops.
 
-stdin_data=$(cat)
+# Write stdin to a temp file to avoid ARG_MAX limits with large payloads
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp"
 
 # Extract stop_hook_active — bail immediately if already in a stop loop
-stop_hook_active=$(echo "$stdin_data" | python3 -c "
+stop_hook_active=$(python3 -c "
 import sys, json
 try:
-    d = json.load(sys.stdin)
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
     print('true' if d.get('stop_hook_active') else 'false')
 except Exception:
     print('false')
-" 2>/dev/null)
+" "$tmp" 2>/dev/null)
 
 [[ "$stop_hook_active" == "true" ]] && exit 0
 
@@ -61,7 +65,7 @@ if command -v staticcheck &>/dev/null; then
 fi
 
 if [[ -n "$vet_output" || -n "$sc_output" ]]; then
-  python3 - "$vet_output" "$sc_output" <<'PYEOF'
+  python3 -c "
 import json, sys
 
 vet = sys.argv[1].strip()
@@ -69,15 +73,15 @@ sc  = sys.argv[2].strip()
 
 sections = []
 if vet:
-    sections.append("go vet errors:\n" + vet)
+    sections.append('go vet errors:\n' + vet)
 if sc:
-    sections.append("staticcheck errors:\n" + sc)
+    sections.append('staticcheck errors:\n' + sc)
 
-reason = "Go quality checks failed in touched packages — please fix before finishing.\n\n"
-reason += "\n\n".join(sections)
+reason = 'Go quality checks failed in touched packages \u2014 please fix before finishing.\n\n'
+reason += '\n\n'.join(sections)
 
-print(json.dumps({"decision": "block", "reason": reason}))
-PYEOF
+print(json.dumps({'decision': 'block', 'reason': reason}))
+" "$vet_output" "$sc_output"
 fi
 
 exit 0

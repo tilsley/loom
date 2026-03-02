@@ -10,14 +10,17 @@
 # Reads the content being written (Write tool) or the new_string (Edit tool)
 # and scans for forbidden imports before the file is saved.
 
-# Read stdin once into a variable so it can be passed to python3
-stdin_data=$(cat)
+# Write stdin to a temp file to avoid ARG_MAX limits with large payloads
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp"
 
-python3 - "$stdin_data" <<'PYEOF'
-import sys, json, re
+python3 - "$tmp" <<'PYEOF'
+import sys, json, re, os
 
 try:
-    d = json.loads(sys.argv[1])
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
 except Exception:
     sys.exit(0)
 

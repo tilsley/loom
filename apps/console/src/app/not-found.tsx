@@ -12,8 +12,8 @@ export default function NotFound() {
       <p className="text-sm text-muted-foreground mb-6 max-w-sm">
         The page you&apos;re looking for doesn&apos;t exist or has been moved.
       </p>
-      <Link href={ROUTES.dashboard} className={buttonVariants({ variant: "outline" })}>
-        Return to Dashboard
+      <Link href={ROUTES.migrations} className={buttonVariants({ variant: "outline" })}>
+        Return to Migrations
       </Link>
     </div>
   );

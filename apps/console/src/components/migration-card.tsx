@@ -37,13 +37,7 @@ export function MigrationCard({ migration }: { migration: Migration }) {
         <div className="flex items-center gap-3 mt-3">
           <Stat label={kindPlural} value={candidates.length} />
           <StatDivider />
-          <Stat label="steps" value={migration.steps.length} />
-          <StatDivider />
-          <Stat
-            label={runCount === 1 ? "run" : "runs"}
-            value={runCount}
-            accent={hasRuns}
-          />
+          <Stat label={runCount === 1 ? "run" : "runs"} value={runCount} accent={hasRuns} />
           {doneCount > 0 && (
             <>
               <StatDivider />

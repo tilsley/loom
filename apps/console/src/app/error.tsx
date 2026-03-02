@@ -31,7 +31,7 @@ export default function Error({
       </div>
       <h2 className="text-lg font-semibold text-foreground mb-1">Something went wrong</h2>
       <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-        An unexpected error occurred. You can try again or return to the dashboard.
+        An unexpected error occurred. You can try again or return to migrations.
       </p>
       {process.env.NODE_ENV === "development" && (
         <pre className="text-xs font-mono text-destructive/70 bg-destructive/5 border border-destructive/10 rounded-lg px-4 py-3 mb-6 max-w-lg overflow-auto text-left">
@@ -40,8 +40,8 @@ export default function Error({
       )}
       <div className="flex gap-3">
         <Button onClick={reset}>Try Again</Button>
-        <Link href={ROUTES.dashboard} className={buttonVariants({ variant: "outline" })}>
-          Return to Dashboard
+        <Link href={ROUTES.migrations} className={buttonVariants({ variant: "outline" })}>
+          Return to Migrations
         </Link>
       </div>
     </div>

@@ -80,18 +80,11 @@ export function CommandPalette() {
               className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground/70 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest"
             >
               <PaletteItem
-                icon={<DashboardIcon />}
-                hint="Home"
-                onSelect={() => navigate(ROUTES.dashboard)}
-              >
-                Dashboard
-              </PaletteItem>
-              <PaletteItem
                 icon={<MigrationsIcon />}
-                hint="List"
+                hint="Home"
                 onSelect={() => navigate(ROUTES.migrations)}
               >
-                All Migrations
+                Migrations
               </PaletteItem>
             </Command.Group>
 
@@ -159,16 +152,6 @@ function PaletteItem({
   );
 }
 
-function DashboardIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
 
 function MigrationsIcon() {
   return (

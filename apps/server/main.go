@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.temporal.io/sdk/client"
 	otelcontrib "go.temporal.io/sdk/contrib/opentelemetry"
@@ -71,37 +70,26 @@ func main() {
 
 	engine := temporalplatform.NewEngine(tc)
 
-	// --- Platform: Redis ---
+	// --- Platform: Postgres ---
 
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
+	pgURL := os.Getenv("POSTGRES_URL")
+	if pgURL == "" {
+		slog.Error("POSTGRES_URL is required")
+		os.Exit(1)
 	}
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
-		Password: os.Getenv("REDIS_PASSWORD"),
-	})
-	defer rdb.Close() //nolint:errcheck
-
-	// --- Platform: Postgres (optional — event store) ---
-
-	var eventStore migrations.EventStore
-	if pgURL := os.Getenv("POSTGRES_URL"); pgURL != "" {
-		pool, err := pgplatform.New(ctx, pgURL, pgmigrations.FS)
-		if err != nil {
-			slog.Error("postgres init failed", "error", err)
-			os.Exit(1)
-		}
-		defer pool.Close()
-		eventStore = store.NewPGEventStore(pool)
-		slog.Info("event store enabled (postgres)")
-	} else {
-		slog.Info("event store disabled (no POSTGRES_URL)")
+	pool, err := pgplatform.New(ctx, pgURL, pgmigrations.FS)
+	if err != nil {
+		slog.Error("postgres init failed", "error", err)
+		os.Exit(1)
 	}
+	defer pool.Close()
+
+	var eventStore migrations.EventStore = store.NewPGEventStore(pool)
+	slog.Info("event store enabled (postgres)")
 
 	// --- Adapters ---
 
-	migrationStore := store.NewRedisMigrationStore(rdb)
+	migrationStore := store.NewPGMigrationStore(pool)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	notifier := migrator.NewHTTPMigratorNotifier(httpClient)
 	dryRunner := migrator.NewHTTPDryRunAdapter(httpClient)
