@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useMigrationPolling, useMigrations } from "../hooks";
+import { useMigrationPolling } from "../hooks";
 
 // ---------------------------------------------------------------------------
 // Mock the api module so hooks never make real fetch calls
@@ -50,13 +50,13 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// useMigrations
+// useMigrationPolling — fetch/state behaviour
 // ---------------------------------------------------------------------------
 
-describe("useMigrations", () => {
+describe("useMigrationPolling — fetch behaviour", () => {
   it("starts with loading:true, empty migrations, and no error", () => {
     mockListMigrations.mockResolvedValue(MOCK_DATA);
-    const { result } = renderHook(() => useMigrations());
+    const { result } = renderHook(() => useMigrationPolling());
 
     expect(result.current.loading).toBe(true);
     expect(result.current.migrations).toEqual([]);
@@ -65,7 +65,7 @@ describe("useMigrations", () => {
 
   it("populates migrations and clears loading on success", async () => {
     mockListMigrations.mockResolvedValue(MOCK_DATA);
-    const { result } = renderHook(() => useMigrations());
+    const { result } = renderHook(() => useMigrationPolling());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -75,7 +75,7 @@ describe("useMigrations", () => {
 
   it("sets error and clears loading on failure", async () => {
     mockListMigrations.mockRejectedValue(new Error("network error"));
-    const { result } = renderHook(() => useMigrations());
+    const { result } = renderHook(() => useMigrationPolling());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -85,7 +85,7 @@ describe("useMigrations", () => {
 
   it("uses fallback message when rejection is not an Error instance", async () => {
     mockListMigrations.mockRejectedValue("plain string");
-    const { result } = renderHook(() => useMigrations());
+    const { result } = renderHook(() => useMigrationPolling());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -94,7 +94,7 @@ describe("useMigrations", () => {
 
   it("refetch() re-fetches and updates migrations", async () => {
     mockListMigrations.mockResolvedValueOnce({ migrations: [] });
-    const { result } = renderHook(() => useMigrations());
+    const { result } = renderHook(() => useMigrationPolling());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.migrations).toEqual([]);
@@ -107,7 +107,7 @@ describe("useMigrations", () => {
 
   it("refetch() clears a previous error on success", async () => {
     mockListMigrations.mockRejectedValueOnce(new Error("first failure"));
-    const { result } = renderHook(() => useMigrations());
+    const { result } = renderHook(() => useMigrationPolling());
 
     await waitFor(() => expect(result.current.error).toBe("first failure"));
 
@@ -120,19 +120,14 @@ describe("useMigrations", () => {
 });
 
 // ---------------------------------------------------------------------------
-// useMigrationPolling
-//
-// useMigrations and useMigrationPolling share identical refetch logic, so
-// state-change behaviour (loading, error, migrations) is covered above.
-// These tests focus exclusively on what is unique to useMigrationPolling:
-// the interval setup, the polling callback, and cleanup on unmount.
+// useMigrationPolling — interval behaviour
 //
 // Approach: spy on setInterval/clearInterval rather than vi.useFakeTimers()
 // because @testing-library/dom's waitFor also uses setInterval internally —
 // faking it deadlocks the test.
 // ---------------------------------------------------------------------------
 
-describe("useMigrationPolling", () => {
+describe("useMigrationPolling — interval behaviour", () => {
   it("sets up an interval with the specified duration", () => {
     const spy = vi.spyOn(globalThis, "setInterval");
     mockListMigrations.mockResolvedValue(MOCK_DATA);

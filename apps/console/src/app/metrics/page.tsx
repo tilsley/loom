@@ -10,7 +10,7 @@ import {
   type MetricsOverview,
   type StepMetrics,
   type TimelinePoint,
-  type StepEventFailure,
+  type StepEventRecord,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
 import { MetricsChart } from "@/components/metrics-chart";
@@ -21,28 +21,30 @@ export default function MetricsPage() {
   const [overview, setOverview] = useState<MetricsOverview | null>(null);
   const [steps, setSteps] = useState<StepMetrics[]>([]);
   const [timeline, setTimeline] = useState<TimelinePoint[]>([]);
-  const [failures, setFailures] = useState<StepEventFailure[]>([]);
+  const [failures, setFailures] = useState<StepEventRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [days, setDays] = useState(30);
 
   const load = useCallback(async () => {
-    try {
-      const [o, s, t, f] = await Promise.all([
-        getMetricsOverview(),
-        getStepMetrics(),
-        getMetricsTimeline(30),
-        getRecentFailures(20),
-      ]);
-      setOverview(o);
-      setSteps(s);
-      setTimeline(t);
-      setFailures(f);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load metrics");
-    } finally {
-      setLoading(false);
+    setLoading(true);
+    setError(null);
+    const [o, s, t, f] = await Promise.allSettled([
+      getMetricsOverview(),
+      getStepMetrics(),
+      getMetricsTimeline(days),
+      getRecentFailures(20),
+    ]);
+    if (o.status === "fulfilled") setOverview(o.value);
+    if (s.status === "fulfilled") setSteps(s.value);
+    if (t.status === "fulfilled") setTimeline(t.value);
+    if (f.status === "fulfilled") setFailures(f.value);
+    const failed = [o, s, t, f].filter((r) => r.status === "rejected");
+    if (failed.length === 4) {
+      const reason = (failed[0] as PromiseRejectedResult).reason;
+      setError(reason instanceof Error ? reason.message : "Failed to load metrics");
     }
-  }, []);
+    setLoading(false);
+  }, [days]);
 
   useEffect(() => {
     void load();
@@ -70,7 +72,7 @@ export default function MetricsPage() {
 
       {/* Overview cards */}
       {loading ? (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-[72px]" style={{ animationDelay: `${i * 100}ms` }} />
           ))}
@@ -90,7 +92,25 @@ export default function MetricsPage() {
 
       {/* Timeline chart */}
       <section className="rounded-lg border border-border bg-card p-4">
-        <h2 className="text-sm font-medium text-foreground mb-3">Activity (30 days)</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-foreground">Activity</h2>
+          <div className="flex items-center gap-1">
+            {[7, 14, 30, 90].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDays(d)}
+                className={`text-xs px-2 py-0.5 rounded-md transition-colors ${
+                  days === d
+                    ? "bg-muted text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground/80 hover:bg-muted/50"
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
         {loading ? <Skeleton className="h-[264px]" /> : <MetricsChart data={timeline} />}
       </section>
 
@@ -101,7 +121,7 @@ export default function MetricsPage() {
             <h2 className="text-sm font-medium text-foreground">Step Performance</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" aria-label="Step performance">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
                   <th className="text-left px-4 py-2 font-medium">Step</th>
@@ -146,7 +166,7 @@ export default function MetricsPage() {
             <h2 className="text-sm font-medium text-foreground">Recent Failures</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" aria-label="Recent failures">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
                   <th className="text-left px-4 py-2 font-medium">Migration</th>
@@ -154,7 +174,9 @@ export default function MetricsPage() {
                   <th className="text-left px-4 py-2 font-medium">Step</th>
                   <th className="text-left px-4 py-2 font-medium">Status</th>
                   <th className="text-left px-4 py-2 font-medium">Time</th>
-                  <th className="text-right px-4 py-2 font-medium" />
+                  <th className="text-right px-4 py-2 font-medium">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -173,7 +195,7 @@ export default function MetricsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(f.createdAt).toLocaleString()}
+                      {formatTime(f.createdAt)}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <Link
@@ -224,8 +246,21 @@ function StatCard({
 }
 
 function formatMs(ms: number): string {
+  if (!Number.isFinite(ms)) return "\u2014";
   if (ms === 0) return "0ms";
   if (ms < 1000) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }

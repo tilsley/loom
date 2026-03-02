@@ -224,10 +224,21 @@ func buildStepDefs(envs []string) []api.StepDefinition {
 func buildAnnouncement(workerURL, gitopsOwner, gitopsRepoName string, envs []string) api.MigrationAnnouncement {
 	desc := "Migrate from generic Helm chart with per-env helm.parameters to app-specific OCI wrapper charts"
 
+	envList := strings.Join(envs, ", ")
+	overview := []string{
+		"Disable base resource pruning on shared resources",
+		"Generate the app-specific Helm chart",
+		"Verify the chart has been published to ECR",
+		fmt.Sprintf("For each environment (%s): disable sync pruning, swap to OCI chart, review in ArgoCD, re-enable pruning", envList),
+		"Clean up old Helm values from the base application",
+		"Update the CI/CD deployment workflow",
+	}
+
 	return api.MigrationAnnouncement{
 		Id:             "app-chart-migration",
 		Name:           "App Chart Migration",
 		Description:    desc,
+		Overview:       &overview,
 		RequiredInputs: &[]api.InputDefinition{{Name: "repoName", Label: "Repository", Description: strPtr("Pre-filled from discovery — verify before continuing")}},
 		Candidates:     []api.Candidate{},
 		Steps:          buildStepDefs(envs),

@@ -59,6 +59,7 @@ export default function PreviewPage() {
         const c: Candidate = {
           id: found.id,
           kind: found.kind,
+          status: found.status,
           metadata: found.metadata,
           files: found.files,
           steps: found.steps,

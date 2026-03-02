@@ -14,8 +14,6 @@ import (
 	"github.com/tilsley/loom/pkg/api"
 )
 
-func ptr[T any](v T) *T { return &v }
-
 // newStore starts a miniredis server and returns a RedisMigrationStore backed by it.
 // The server is stopped automatically when the test ends.
 func newStore(t *testing.T) *store.RedisMigrationStore {
@@ -151,8 +149,7 @@ func TestSetCandidateStatus_UpdatesStatus(t *testing.T) {
 	got, err := s.Get(context.Background(), m.Id)
 	require.NoError(t, err)
 	require.Len(t, got.Candidates, 1)
-	require.NotNil(t, got.Candidates[0].Status)
-	assert.Equal(t, api.CandidateStatusRunning, *got.Candidates[0].Status)
+	assert.Equal(t, api.CandidateStatusRunning, got.Candidates[0].Status)
 }
 
 func TestSetCandidateStatus_DoesNotTouchMigrationKey(t *testing.T) {
@@ -205,8 +202,7 @@ func TestSaveCandidates_SetsNotStartedStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, candidates, 2)
 	for _, c := range candidates {
-		require.NotNil(t, c.Status, "candidate %q should have a status", c.Id)
-		assert.Equal(t, api.CandidateStatusNotStarted, *c.Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, c.Status, "candidate %q should be not_started", c.Id)
 	}
 }
 
@@ -214,7 +210,7 @@ func TestSaveCandidates_PreservesRunningCandidate(t *testing.T) {
 	s := newStore(t)
 	m := baseMigration
 	m.Candidates = []api.Candidate{
-		{Id: "billing-api", Kind: "application", Status: ptr(api.CandidateStatusRunning)},
+		{Id: "billing-api", Kind: "application", Status: api.CandidateStatusRunning},
 	}
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -225,8 +221,7 @@ func TestSaveCandidates_PreservesRunningCandidate(t *testing.T) {
 	candidates, err := s.GetCandidates(context.Background(), m.Id)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
-	require.NotNil(t, candidates[0].Status)
-	assert.Equal(t, api.CandidateStatusRunning, *candidates[0].Status,
+	assert.Equal(t, api.CandidateStatusRunning, candidates[0].Status,
 		"running candidate status must be preserved")
 }
 
@@ -234,7 +229,7 @@ func TestSaveCandidates_PreservesCompletedCandidate(t *testing.T) {
 	s := newStore(t)
 	m := baseMigration
 	m.Candidates = []api.Candidate{
-		{Id: "billing-api", Kind: "application", Status: ptr(api.CandidateStatusCompleted)},
+		{Id: "billing-api", Kind: "application", Status: api.CandidateStatusCompleted},
 	}
 	require.NoError(t, s.Save(context.Background(), m))
 
@@ -244,14 +239,14 @@ func TestSaveCandidates_PreservesCompletedCandidate(t *testing.T) {
 	candidates, err := s.GetCandidates(context.Background(), m.Id)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
-	assert.Equal(t, api.CandidateStatusCompleted, *candidates[0].Status)
+	assert.Equal(t, api.CandidateStatusCompleted, candidates[0].Status)
 }
 
 func TestSaveCandidates_KeepsRunningCandidateRemovedFromIncoming(t *testing.T) {
 	s := newStore(t)
 	m := baseMigration
 	m.Candidates = []api.Candidate{
-		{Id: "billing-api", Kind: "application", Status: ptr(api.CandidateStatusRunning)},
+		{Id: "billing-api", Kind: "application", Status: api.CandidateStatusRunning},
 	}
 	require.NoError(t, s.Save(context.Background(), m))
 

@@ -11,9 +11,7 @@ export function getApplicableSteps(
 }
 
 export function buildStepDescriptionMap(steps: StepDefinition[]): Map<string, string> {
-  return new Map(
-    steps.filter((s) => s.description).map((s) => [s.name, s.description ?? ""]),
-  );
+  return new Map(steps.filter((s) => s.description).map((s) => [s.name, s.description ?? ""]));
 }
 
 export function calculateStepProgress(
@@ -21,9 +19,7 @@ export function calculateStepProgress(
   totalSteps: number,
 ): { done: number; total: number; activeStepName: string | undefined } {
   const reported = stepsData.steps;
-  const done = reported.filter(
-    (s) => s.status === "succeeded" || s.status === "merged",
-  ).length;
+  const done = reported.filter((s) => s.status === "succeeded" || s.status === "merged").length;
   const active =
     reported.find((s) => s.status === "in_progress") ??
     reported.find((s) => s.status === "failed") ??

@@ -27,7 +27,7 @@ Never edit these generated files directly. If you see a type mismatch, re-run `m
 
 ## Step 3 — Implement the handler
 
-Add or update the handler in `apps/server/internal/migrations/api/`:
+Add or update the handler in `apps/server/internal/migrations/handler/`:
 - `candidates.go` — endpoints scoped to a candidate (`/migrations/:id/candidates/:candidateId/...`)
 - `migrations.go` — migration-scoped endpoints (`/migrations/:id/...`)
 - `events.go` — event/webhook endpoints
@@ -40,7 +40,7 @@ Use `pkg/api` types for all request/response structs — they come from the gene
 
 If the endpoint requires new domain behaviour:
 1. Add the method to the relevant interface in `internal/migrations/ports.go`
-2. Implement it in `apps/server/internal/migrations/adapters/redis_store.go`
+2. Implement it in `apps/server/internal/migrations/store/redis_store.go`
 3. Call it from `internal/migrations/service.go`
 
 The layered rule: handlers call the service, the service calls adapters — never skip layers.

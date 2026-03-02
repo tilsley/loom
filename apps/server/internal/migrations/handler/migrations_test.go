@@ -100,7 +100,7 @@ func TestSubmitCandidates_WithKind_PassesValidation(t *testing.T) {
 	require.NoError(t, ts.store.Save(context.Background(), api.Migration{Id: "mig-abc"}))
 
 	req := httptest.NewRequest(http.MethodPost, "/migrations/mig-abc/candidates",
-		strings.NewReader(`{"candidates":[{"id":"billing-api","kind":"application"}]}`))
+		strings.NewReader(`{"candidates":[{"id":"billing-api","kind":"application","status":"not_started"}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	ts.router.ServeHTTP(w, req)

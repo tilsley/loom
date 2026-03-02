@@ -65,6 +65,8 @@ export function MetricsChart({ data }: MetricsChartProps) {
             border: "1px solid var(--color-border)",
             borderRadius: "6px",
             fontSize: "12px",
+            padding: "8px 12px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
             color: "var(--color-foreground)",
           }}
         />

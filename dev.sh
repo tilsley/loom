@@ -42,6 +42,33 @@ trap cleanup INT TERM
 
 cd "$(dirname "$0")"
 
+# --- Postgres for event store ---
+PG_CONTAINER="loom-postgres"
+PG_PORT=5433
+PG_USER=loom
+PG_PASS=loom
+
+if ! docker inspect "$PG_CONTAINER" >/dev/null 2>&1; then
+  printf "${C_BOLD}Starting Postgres (${PG_CONTAINER})…${C_RESET}\n"
+  docker run -d --name "$PG_CONTAINER" \
+    -e POSTGRES_USER="$PG_USER" \
+    -e POSTGRES_PASSWORD="$PG_PASS" \
+    -e POSTGRES_DB=loom \
+    -p "${PG_PORT}:5432" \
+    postgres:16-alpine >/dev/null
+elif [ "$(docker inspect -f '{{.State.Running}}' "$PG_CONTAINER" 2>/dev/null)" != "true" ]; then
+  printf "${C_BOLD}Starting existing Postgres container…${C_RESET}\n"
+  docker start "$PG_CONTAINER" >/dev/null
+fi
+
+# Wait for Postgres to accept connections.
+for i in $(seq 1 30); do
+  docker exec "$PG_CONTAINER" pg_isready -U "$PG_USER" >/dev/null 2>&1 && break
+  sleep 0.3
+done
+
+export POSTGRES_URL="postgres://${PG_USER}:${PG_PASS}@localhost:${PG_PORT}/loom?sslmode=disable"
+
 # Regenerate types so the console is never stale.
 printf "${C_BOLD}Generating types…${C_RESET}\n"
 make generate-ts --no-print-directory
@@ -52,6 +79,7 @@ printf "  ${C_SERVER}server${C_RESET}    → http://localhost:8080\n"
 printf "  ${C_WORKER}migrator${C_RESET}  → http://localhost:3001\n"
 printf "  ${C_MOCKGH}mock-gh${C_RESET}   → http://localhost:8081\n"
 printf "  ${C_CONSOLE}console${C_RESET}   → http://localhost:3000\n"
+printf "  ${C_DIM}postgres${C_RESET}  → localhost:${PG_PORT}  (${PG_USER}/${PG_PASS})\n"
 
 # Optional OTEL: start Grafana LGTM when OTEL_ENABLED=true
 if [ "${OTEL_ENABLED:-}" = "true" ]; then

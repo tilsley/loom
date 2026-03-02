@@ -1,11 +1,11 @@
 "use client";
 
-import { useMigrations } from "@/lib/hooks";
+import { useMigrationsContext } from "@/contexts/migrations-context";
 import { MigrationCard } from "@/components/migration-card";
 import { Skeleton } from "@/components/ui";
 
 export default function MigrationsPage() {
-  const { migrations, loading, error } = useMigrations();
+  const { migrations, loading, error } = useMigrationsContext();
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -41,7 +41,13 @@ export default function MigrationsPage() {
         <div className="border border-dashed border-border rounded-lg py-12 px-8 text-center space-y-6">
           <div>
             <div className="w-10 h-10 rounded-lg bg-card flex items-center justify-center mx-auto mb-4">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="text-muted-foreground/70">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 18 18"
+                fill="none"
+                className="text-muted-foreground/70"
+              >
                 <path
                   d="M3 6h12M3 9h9M3 12h12"
                   stroke="currentColor"
@@ -50,9 +56,12 @@ export default function MigrationsPage() {
                 />
               </svg>
             </div>
-            <p className="text-sm text-muted-foreground font-medium">No migrations registered yet</p>
+            <p className="text-sm text-muted-foreground font-medium">
+              No migrations registered yet
+            </p>
             <p className="text-xs text-muted-foreground/70 mt-1 max-w-sm mx-auto">
-              Migrators announce themselves on startup by posting to the registry. Start a migrator to register its migrations.
+              Migrators announce themselves on startup by posting to the registry. Start a migrator
+              to register its migrations.
             </p>
           </div>
           <div className="max-w-md mx-auto text-left">
@@ -61,7 +70,9 @@ export default function MigrationsPage() {
             </p>
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60">
-                <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-widest">shell</span>
+                <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-widest">
+                  shell
+                </span>
               </div>
               <pre className="text-xs font-mono text-muted-foreground px-4 py-3 overflow-x-auto leading-relaxed whitespace-pre">{`curl -X POST http://localhost:8080/registry/announce \\
   -H 'Content-Type: application/json' \\

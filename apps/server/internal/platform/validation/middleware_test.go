@@ -60,8 +60,15 @@ func TestSubmitCandidates_MissingCandidates_Returns400(t *testing.T) {
 func TestSubmitCandidates_ValidPayload_Passes(t *testing.T) {
 	r := newRouter(t)
 	w := do(r, http.MethodPost, "/migrations/my-migration/candidates",
-		`{"candidates":[{"id":"billing-api","kind":"application"}]}`)
+		`{"candidates":[{"id":"billing-api","kind":"application","status":"not_started"}]}`)
 	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestSubmitCandidates_MissingStatus_Returns400(t *testing.T) {
+	r := newRouter(t)
+	w := do(r, http.MethodPost, "/migrations/my-migration/candidates",
+		`{"candidates":[{"id":"billing-api","kind":"application"}]}`)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestSubmitCandidates_EmptyCandidatesArray_Passes(t *testing.T) {

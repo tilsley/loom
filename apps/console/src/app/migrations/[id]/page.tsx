@@ -6,13 +6,7 @@ import { buildSearchParams } from "@/lib/url";
 import { pluralizeKind } from "@/lib/formatting";
 import { prefillInputs } from "@/lib/inputs";
 import Link from "next/link";
-import {
-  getMigration,
-  getCandidates,
-  cancelRun,
-  type Migration,
-  type Candidate,
-} from "@/lib/api";
+import { getMigration, getCandidates, cancelRun, type Migration, type Candidate } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
 import { ProgressBar } from "@/components/progress-bar";
 import { CandidateTable } from "@/components/candidate-table";
@@ -38,8 +32,11 @@ export default function MigrationDetail() {
   const [migration, setMigration] = useState<Migration | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [stepsOpen, setStepsOpen] = useState(false);
-  const [previewModal, setPreviewModal] = useState<{ candidate: Candidate; inputs: Record<string, string> } | null>(null);
+  const [overviewOpen, setOverviewOpen] = useState(false);
+  const [previewModal, setPreviewModal] = useState<{
+    candidate: Candidate;
+    inputs: Record<string, string>;
+  } | null>(null);
   const [cancelCandidate, setCancelCandidate] = useState<Candidate | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -75,10 +72,13 @@ export default function MigrationDetail() {
   useEffect(() => {
     void fetchMigration();
     void fetchCandidates();
-    const interval = setInterval(() => {
-      void fetchMigration();
-      void fetchCandidates();
-    }, hasRunning ? 2000 : 5000);
+    const interval = setInterval(
+      () => {
+        void fetchMigration();
+        void fetchCandidates();
+      },
+      hasRunning ? 2000 : 5000,
+    );
     return () => clearInterval(interval);
   }, [fetchMigration, fetchCandidates, hasRunning]);
 
@@ -149,49 +149,40 @@ export default function MigrationDetail() {
     );
   }
 
+  const overview = migration.overview ?? [];
+
   return (
     <div className="space-y-8 animate-fade-in-up">
-      {/* Steps modal */}
-      <Dialog open={stepsOpen} onOpenChange={setStepsOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Workflow definition</DialogTitle>
-            <DialogDescription>
-              {migration.steps.length} steps — applies to all {kindPlural}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 py-4 space-y-0">
-            {migration.steps.map((step, i) => (
-              <div key={step.name} className="flex gap-3">
-                <div className="flex flex-col items-center w-6 shrink-0">
-                  <div className="w-6 h-6 rounded-md bg-muted border border-border-hover/50 flex items-center justify-center text-xs font-mono font-medium text-muted-foreground">
-                    {i + 1}
-                  </div>
-                  {i < migration.steps.length - 1 && (
-                    <div className="w-px flex-1 bg-border my-0.5" />
-                  )}
-                </div>
-                <div className="flex-1 pb-3 min-w-0">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-medium text-sm text-foreground">{step.name}</span>
-                    <span className="text-xs font-mono text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded shrink-0">
-                      {step.migratorApp}
+      {/* Overview modal — only rendered when overview is present */}
+      {overview.length > 0 && (
+        <Dialog open={overviewOpen} onOpenChange={setOverviewOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>How it works</DialogTitle>
+              <DialogDescription>High-level overview of this migration</DialogDescription>
+            </DialogHeader>
+            <div className="px-5 py-4">
+              <ol className="space-y-3">
+                {overview.map((phase, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="w-5 h-5 rounded-md bg-muted border border-border-hover/50 flex items-center justify-center text-xs font-mono font-medium text-muted-foreground shrink-0 mt-0.5">
+                      {i + 1}
                     </span>
-                  </div>
-                  {Boolean(step.description) && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+                    <span className="text-sm text-foreground leading-relaxed">{phase}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Cancel confirmation modal */}
       <Dialog
         open={!!cancelCandidate}
-        onOpenChange={(open) => { if (!open && !cancelling) setCancelCandidate(null); }}
+        onOpenChange={(open) => {
+          if (!open && !cancelling) setCancelCandidate(null);
+        }}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -227,15 +218,31 @@ export default function MigrationDetail() {
       </Dialog>
 
       {/* Preview inputs modal */}
-      <Dialog open={!!previewModal} onOpenChange={(open) => { if (!open) setPreviewModal(null); }}>
+      <Dialog
+        open={!!previewModal}
+        onOpenChange={(open) => {
+          if (!open) setPreviewModal(null);
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-2">
               <DialogTitle>Required inputs</DialogTitle>
               <Tooltip content="These values are required to migrate this candidate. They are passed to each step at runtime.">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-muted-foreground/70 hover:text-muted-foreground cursor-default transition-colors">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  className="text-muted-foreground/70 hover:text-muted-foreground cursor-default transition-colors"
+                >
                   <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M8 7v5M8 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path
+                    d="M8 7v5M8 5h.01"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
                 </svg>
               </Tooltip>
             </div>
@@ -255,7 +262,9 @@ export default function MigrationDetail() {
                   value={previewModal?.inputs[inp.name] ?? ""}
                   onChange={(e) =>
                     setPreviewModal((prev) =>
-                      prev ? { ...prev, inputs: { ...prev.inputs, [inp.name]: e.target.value } } : null,
+                      prev
+                        ? { ...prev, inputs: { ...prev.inputs, [inp.name]: e.target.value } }
+                        : null,
                     )
                   }
                   placeholder={inp.label}
@@ -269,24 +278,32 @@ export default function MigrationDetail() {
             ))}
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPreviewModal(null)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setPreviewModal(null)}>
               Cancel
             </Button>
             <Button
-              disabled={!(migration.requiredInputs ?? []).every((inp) => previewModal?.inputs[inp.name]?.trim())}
+              disabled={
+                !(migration.requiredInputs ?? []).every((inp) =>
+                  previewModal?.inputs[inp.name]?.trim(),
+                )
+              }
               onClick={() => {
                 if (!previewModal) return;
                 const params = new URLSearchParams(previewModal.inputs);
-                router.push(`${ROUTES.preview(id, previewModal.candidate.id)}?${params.toString()}`);
+                router.push(
+                  `${ROUTES.preview(id, previewModal.candidate.id)}?${params.toString()}`,
+                );
                 setPreviewModal(null);
               }}
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1v7l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M8 1v7l4 2"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
                 <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
               </svg>
               Run preview
@@ -316,13 +333,17 @@ export default function MigrationDetail() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">{migration.name}</h2>
-            <button
-              onClick={() => setStepsOpen(true)}
-              className="text-xs text-muted-foreground hover:text-foreground/80 transition-colors underline underline-offset-2 decoration-border hover:decoration-border-hover shrink-0"
-            >
-              {migration.steps.length} steps
-            </button>
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">
+              {migration.name}
+            </h2>
+            {overview.length > 0 && (
+              <button
+                onClick={() => setOverviewOpen(true)}
+                className="text-xs text-muted-foreground hover:text-foreground/80 transition-colors underline underline-offset-2 decoration-border hover:decoration-border-hover shrink-0"
+              >
+                how it works
+              </button>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
             {migration.description}

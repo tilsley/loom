@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useMigrationPolling } from "@/lib/hooks";
+import { useMigrationsContext } from "@/contexts/migrations-context";
 import { ROUTES } from "@/lib/routes";
 import { DashboardStats } from "@/components/dashboard-stats";
 import { ActiveRuns } from "@/components/active-runs";
@@ -10,8 +10,15 @@ import { Input, Skeleton } from "@/components/ui";
 import type { Migration } from "@/lib/api";
 
 export default function Dashboard() {
-  const { migrations, loading } = useMigrationPolling(5000);
+  const { migrations, loading, refetch } = useMigrationsContext();
   const [query, setQuery] = useState("");
+
+  // Faster poll while on the dashboard — calls into the shared context so the
+  // sidebar also benefits. Drops back to the context's 30s rate on other pages.
+  useEffect(() => {
+    const id = setInterval(() => void refetch(), 5000);
+    return () => clearInterval(id);
+  }, [refetch]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -25,12 +32,12 @@ export default function Dashboard() {
     }[] = [];
 
     for (const m of migrations) {
-      for (const t of (m.candidates ?? [])) {
+      for (const t of m.candidates ?? []) {
         if (t.id.toLowerCase().includes(q)) {
           hits.push({
             migration: m,
             id: t.id,
-            status: t.status ?? "not_started",
+            status: t.status,
             hasRun: t.status === "running" || t.status === "completed",
           });
         }
@@ -130,7 +137,9 @@ export default function Dashboard() {
         )}
 
         {query.trim() && results.length === 0 && !loading && (
-          <p className="text-xs text-muted-foreground/70 pl-1">No targets match &quot;{query}&quot;</p>
+          <p className="text-xs text-muted-foreground/70 pl-1">
+            No targets match &quot;{query}&quot;
+          </p>
         )}
       </div>
     </div>

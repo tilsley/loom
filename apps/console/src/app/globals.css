@@ -27,6 +27,11 @@
   --color-destructive-foreground: #fef2f2;
   --color-running: #fbbf24;
   --color-completed: #34d399;
+  --color-not-started: #52525b;
+  /* Solid fill variants — used for bar segments and dot indicators */
+  --color-running-fill: #fbbf24;
+  --color-completed-fill: #34d399;
+  --color-not-started-fill: #52525b;
   --color-pending: #60a5fa;
   --color-merged: #c084fc;
   --color-diff-add: #6ee7b7;
@@ -70,6 +75,11 @@
   --color-destructive-foreground: #ffffff;
   --color-running: #b45309;
   --color-completed: #047857;
+  --color-not-started: #d4d4d8;
+  /* Solid fill variants — vivid for bar segments and dot indicators */
+  --color-running-fill: #f59e0b;
+  --color-completed-fill: #10b981;
+  --color-not-started-fill: #d4d4d8;
   --color-pending: #1d4ed8;
   --color-merged: #7e22ce;
   --color-diff-add: #047857;

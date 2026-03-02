@@ -10,30 +10,6 @@ interface UseMigrationsResult {
   refetch: () => Promise<void>;
 }
 
-export function useMigrations(): UseMigrationsResult {
-  const [migrations, setMigrations] = useState<Migration[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(async () => {
-    try {
-      const res = await listMigrations();
-      setMigrations(res.migrations);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  return { migrations, loading, error, refetch };
-}
-
 export function useMigrationPolling(intervalMs = 5000): UseMigrationsResult {
   const [migrations, setMigrations] = useState<Migration[]>([]);
   const [loading, setLoading] = useState(true);

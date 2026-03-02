@@ -22,8 +22,6 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-func ptr[T any](v T) *T { return &v }
-
 // ─── Stubs ────────────────────────────────────────────────────────────────────
 
 type stubEngine struct {
@@ -114,7 +112,7 @@ func (m *memStore) SetCandidateStatus(ctx context.Context, migID, candidateID st
 	}
 	for i, c := range mig.Candidates {
 		if c.Id == candidateID {
-			mig.Candidates[i].Status = &status
+			mig.Candidates[i].Status = status
 			m.migrations[migID] = mig
 			return nil
 		}
@@ -202,4 +200,3 @@ func (ts *testServer) do(method, path string, body any) *httptest.ResponseRecord
 	ts.router.ServeHTTP(w, req)
 	return w
 }
-

@@ -107,13 +107,9 @@ export function CandidateRow({
 
         {/* Status */}
         <TableCell>
-          {status && status !== "not_started" ? (
-            <Badge variant={status === "running" ? "running" : status === "completed" ? "completed" : "default"}>
-              {status}
-            </Badge>
-          ) : (
-            <span className="text-xs text-muted-foreground/50">—</span>
-          )}
+          <Badge variant={status === "running" ? "running" : status === "completed" ? "completed" : "default"}>
+            {(status ?? "not_started").replace("_", " ")}
+          </Badge>
         </TableCell>
 
         {/* Actions */}
@@ -179,10 +175,10 @@ export function CandidateRow({
 function CandidateStatusDot({ status }: { status?: string }) {
   const color =
     status === "running"
-      ? "bg-running"
+      ? "bg-running-fill"
       : status === "completed"
-        ? "bg-completed"
-        : "bg-muted-foreground/50";
+        ? "bg-completed-fill"
+        : "bg-not-started-fill";
 
   return (
     <span

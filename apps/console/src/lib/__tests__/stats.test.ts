@@ -7,10 +7,10 @@ import {
   getMigrationRunStats,
 } from "../stats";
 
-const c = (status?: Candidate["status"]): Candidate => ({
+const c = (status: Candidate["status"] = "not_started"): Candidate => ({
   id: "x",
   kind: "repo",
-  ...(status ? { status } : {}),
+  status,
 });
 
 const migration = (candidates: Candidate[]): Migration => ({
@@ -33,7 +33,7 @@ describe("getCandidateCounts", () => {
       c("completed"),
       c("running"),
       c("running"),
-      c(), // no status → not_started
+      c(), // defaults to not_started
       c("not_started"),
     ];
     expect(getCandidateCounts(candidates)).toEqual({ running: 2, completed: 1, not_started: 2 });

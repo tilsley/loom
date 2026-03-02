@@ -108,6 +108,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		// Upsert — update definition, preserve history and discovered candidates.
 		existing.Name = ann.Name
 		existing.Description = ann.Description
+		existing.Overview = ann.Overview
 		existing.RequiredInputs = ann.RequiredInputs
 		existing.Steps = ann.Steps
 		existing.MigratorUrl = ann.MigratorUrl
@@ -121,6 +122,7 @@ func (s *Service) Announce(ctx context.Context, ann api.MigrationAnnouncement) (
 		Id:             ann.Id,
 		Name:           ann.Name,
 		Description:    ann.Description,
+		Overview:       ann.Overview,
 		RequiredInputs: ann.RequiredInputs,
 		Candidates:     ann.Candidates,
 		Steps:          ann.Steps,
@@ -178,7 +180,7 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 	}
 
 	for i, c := range candidates {
-		if c.Status == nil || *c.Status != api.CandidateStatusRunning {
+		if c.Status != api.CandidateStatusRunning {
 			continue
 		}
 		runID := RunID(migrationID, c.Id)
@@ -187,8 +189,7 @@ func (s *Service) GetCandidates(ctx context.Context, migrationID string) ([]api.
 			if errors.As(err, &notFound) {
 				// Stale run — reset to not_started so the Preview button becomes active again.
 				_ = s.store.SetCandidateStatus(ctx, migrationID, c.Id, api.CandidateStatusNotStarted)
-				notStarted := api.CandidateStatusNotStarted
-				candidates[i].Status = &notStarted
+				candidates[i].Status = api.CandidateStatusNotStarted
 			}
 		}
 	}
@@ -211,7 +212,7 @@ func (s *Service) RetryStep(ctx context.Context, migrationID, candidateID, stepN
 	for _, c := range m.Candidates {
 		if c.Id == candidateID {
 			found = true
-			if c.Status == nil || *c.Status != api.CandidateStatusRunning {
+			if c.Status != api.CandidateStatusRunning {
 				return CandidateNotRunningError{ID: candidateID}
 			}
 			break
@@ -244,7 +245,7 @@ func (s *Service) Cancel(ctx context.Context, migrationID, candidateID string) e
 	for _, c := range m.Candidates {
 		if c.Id == candidateID {
 			found = true
-			if c.Status == nil || *c.Status != api.CandidateStatusRunning {
+			if c.Status != api.CandidateStatusRunning {
 				return CandidateNotRunningError{ID: candidateID}
 			}
 			break
@@ -337,7 +338,7 @@ func (s *Service) UpdateInputs(ctx context.Context, migrationID, candidateID str
 
 	// Signal the running workflow so updated inputs take effect on the next dispatch.
 	for _, c := range m.Candidates {
-		if c.Id == candidateID && c.Status != nil && *c.Status == api.CandidateStatusRunning {
+		if c.Id == candidateID && c.Status == api.CandidateStatusRunning {
 			runID := RunID(migrationID, candidateID)
 			if err := s.engine.RaiseEvent(ctx, runID, UpdateInputsEventName(candidateID), inputs); err != nil {
 				var notFound RunNotFoundError
@@ -400,11 +401,10 @@ func (s *Service) Start(ctx context.Context, migrationID, candidateID string, in
 	// is still running or successfully completed. If the run has failed,
 	// been cancelled, or terminated, allow re-execution even if Redis still
 	// shows the old status (handles stale state after crash/cancel).
-	if candidate.Status != nil &&
-		(*candidate.Status == api.CandidateStatusRunning || *candidate.Status == api.CandidateStatusCompleted) {
+	if candidate.Status == api.CandidateStatusRunning || candidate.Status == api.CandidateStatusCompleted {
 		ws, err := s.engine.GetStatus(ctx, runID)
 		if err == nil && (ws.RuntimeStatus == RuntimeStatusRunning || ws.RuntimeStatus == RuntimeStatusCompleted) {
-			return "", CandidateAlreadyRunError{ID: candidateID, Status: string(*candidate.Status)}
+			return "", CandidateAlreadyRunError{ID: candidateID, Status: string(candidate.Status)}
 		}
 		// Run gone, failed, cancelled, or terminated — allow re-execution.
 	}

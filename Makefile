@@ -77,6 +77,9 @@ reset:
 	@echo "Deleting Temporal SQLite database..."
 	@rm -f .temporal.db .temporal.db-shm .temporal.db-wal
 	@echo "✓ Temporal state cleared — restart 'make temporal' to get a fresh server"
+	@echo "Truncating event store..."
+	@docker exec loom-postgres psql -U loom -d loom -c "TRUNCATE step_events;" 2>/dev/null || echo "  (skipped — loom-postgres not running)"
+	@echo "✓ Event store cleared"
 
 test:
 	go test ./...

@@ -25,14 +25,12 @@ export function filterCandidates(
   for (const key of metaColumns) {
     const val = columnFilters[key]?.trim();
     if (!val) continue;
-    result = result.filter((c) =>
-      c.metadata?.[key]?.toLowerCase().includes(val.toLowerCase()),
-    );
+    result = result.filter((c) => c.metadata?.[key]?.toLowerCase().includes(val.toLowerCase()));
   }
 
   if (statusFilter !== "all") {
     result = result.filter((t) => {
-      if (statusFilter === "not_started") return !t.status || t.status === "not_started";
+      if (statusFilter === "not_started") return t.status === "not_started";
       return t.status === statusFilter;
     });
   }

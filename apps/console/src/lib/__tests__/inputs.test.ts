@@ -10,6 +10,7 @@ const input = (name: string): InputDefinition => ({ name, label: name });
 const candidate = (metadata?: Record<string, string>): Candidate => ({
   id: "c",
   kind: "repo",
+  status: "not_started",
   ...(metadata ? { metadata } : {}),
 });
 

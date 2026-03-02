@@ -10,9 +10,9 @@ export function ProgressBar({ candidates }: ProgressBarProps) {
   const counts = getCandidateCounts(candidates);
 
   const segments = [
-    { key: "completed", count: counts.completed, color: "bg-completed", label: "completed" },
-    { key: "running", count: counts.running, color: "bg-running", label: "running" },
-    { key: "not_started", count: counts.not_started, color: "bg-muted-foreground/30", label: "not started" },
+    { key: "completed", count: counts.completed, color: "bg-completed-fill", label: "completed" },
+    { key: "running", count: counts.running, color: "bg-running-fill", label: "running" },
+    { key: "not_started", count: counts.not_started, color: "bg-not-started-fill", label: "not started" },
   ] as const;
 
   return (

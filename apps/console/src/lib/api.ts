@@ -7,6 +7,41 @@ export type CandidateStatus = components["schemas"]["CandidateStatus"];
 export type CandidateStepsResponse = components["schemas"]["CandidateStepsResponse"];
 export type DryRunResult = components["schemas"]["DryRunResult"];
 export type FileDiff = components["schemas"]["FileDiff"];
+export interface MetricsOverview {
+  totalRuns: number;
+  completedRuns: number;
+  failedSteps: number;
+  prsRaised: number;
+  avgDurationMs: number;
+  failureRate: number;
+}
+
+export interface StepMetrics {
+  stepName: string;
+  count: number;
+  avgMs: number;
+  p95Ms: number;
+  failureRate: number;
+}
+
+export interface TimelinePoint {
+  date: string;
+  started: number;
+  completed: number;
+  failed: number;
+}
+
+export interface StepEventRecord {
+  id: number;
+  migrationId: string;
+  candidateId: string;
+  stepName: string;
+  eventType: string;
+  status: string;
+  durationMs: number | null;
+  metadata: Record<string, string> | null;
+  createdAt: string;
+}
 
 const BASE = "/api";
 
@@ -125,42 +160,6 @@ export async function dryRun(migrationId: string, candidate: Candidate): Promise
 
 // --- Metrics ---
 
-export interface MetricsOverview {
-  totalRuns: number;
-  completedRuns: number;
-  failedSteps: number;
-  prsRaised: number;
-  avgDurationMs: number;
-  failureRate: number;
-}
-
-export interface StepMetrics {
-  stepName: string;
-  count: number;
-  avgMs: number;
-  p95Ms: number;
-  failureRate: number;
-}
-
-export interface TimelinePoint {
-  date: string;
-  started: number;
-  completed: number;
-  failed: number;
-}
-
-export interface StepEventFailure {
-  id: number;
-  migrationId: string;
-  candidateId: string;
-  stepName: string;
-  eventType: string;
-  status: string;
-  durationMs: number | null;
-  metadata: Record<string, string> | null;
-  createdAt: string;
-}
-
 export async function getMetricsOverview(): Promise<MetricsOverview> {
   const res = await fetch(`${BASE}/metrics/overview`);
   if (!res.ok) throw new Error(await res.text());
@@ -179,7 +178,7 @@ export async function getMetricsTimeline(days = 30): Promise<TimelinePoint[]> {
   return res.json();
 }
 
-export async function getRecentFailures(limit = 20): Promise<StepEventFailure[]> {
+export async function getRecentFailures(limit = 20): Promise<StepEventRecord[]> {
   const res = await fetch(`${BASE}/metrics/failures?limit=${limit}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();

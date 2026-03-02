@@ -81,7 +81,16 @@
       "WebFetch(domain:community.temporal.io)",
       "WebFetch(domain:docs.temporal.io)",
       "WebFetch(domain:temporal.io)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "WebFetch(domain:staticcheck.dev)",
+      "WebFetch(domain:dev.to)",
+      "Bash(which staticcheck && staticcheck --version 2>&1)",
+      "Bash(staticcheck:*)",
+      "Bash(echo exit: $?:*)",
+      "Bash(echo code=$?:*)",
+      "Bash(echo '{\"hook_event_name\":\"Stop\",\"stop_hook_active\":false,\"cwd\":\"/Users/nathantilsley/repos/tilsley/loom\",\"last_assistant_message\":\"done\"}' | bash .claude/hooks/go/stop-check.sh 2>&1)",
+      "Bash(PGPASSWORD=temporal psql:*)",
+      "Bash(docker exec:*)"
     ]
   }
 }

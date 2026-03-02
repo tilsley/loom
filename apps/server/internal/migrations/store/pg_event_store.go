@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -105,8 +104,8 @@ func (s *PGEventStore) emitMetrics(ctx context.Context, event migrations.StepEve
 		}
 	}
 
-	// Count PRs based on metadata.
-	if event.Metadata != nil {
+	// Count PRs only on step completion to avoid double-counting.
+	if event.EventType == migrations.EventStepCompleted && event.Metadata != nil {
 		if _, ok := event.Metadata["prUrl"]; ok {
 			s.prsRaised.Add(ctx, 1)
 		}
@@ -160,7 +159,7 @@ func (s *PGEventStore) GetStepMetrics(ctx context.Context) ([]migrations.StepMet
 	}
 	defer rows.Close()
 
-	var result []migrations.StepMetrics
+	result := make([]migrations.StepMetrics, 0)
 	for rows.Next() {
 		var sm migrations.StepMetrics
 		if err := rows.Scan(&sm.StepName, &sm.Count, &sm.AvgMs, &sm.P95Ms, &sm.FailureRate); err != nil {
@@ -180,7 +179,7 @@ func (s *PGEventStore) GetTimeline(ctx context.Context, days int) ([]migrations.
 			COUNT(*) FILTER (WHERE event_type = 'run_completed'),
 			COUNT(*) FILTER (WHERE event_type = 'step_completed' AND status = 'failed')
 		FROM generate_series(
-			NOW() - ($1 || ' days')::interval,
+			NOW() - make_interval(days => $1),
 			NOW(),
 			'1 day'::interval
 		) AS d
@@ -193,7 +192,7 @@ func (s *PGEventStore) GetTimeline(ctx context.Context, days int) ([]migrations.
 	}
 	defer rows.Close()
 
-	var result []migrations.TimelinePoint
+	result := make([]migrations.TimelinePoint, 0)
 	for rows.Next() {
 		var tp migrations.TimelinePoint
 		if err := rows.Scan(&tp.Date, &tp.Started, &tp.Completed, &tp.Failed); err != nil {
@@ -218,7 +217,7 @@ func (s *PGEventStore) GetRecentFailures(ctx context.Context, limit int) ([]migr
 	}
 	defer rows.Close()
 
-	var result []migrations.StepEvent
+	result := make([]migrations.StepEvent, 0)
 	for rows.Next() {
 		var e migrations.StepEvent
 		var metadataJSON []byte
@@ -251,6 +250,3 @@ func nilIfEmpty(s string) *string {
 	}
 	return &s
 }
-
-// Ensure pgx is imported for row scanning.
-var _ = pgx.ErrNoRows

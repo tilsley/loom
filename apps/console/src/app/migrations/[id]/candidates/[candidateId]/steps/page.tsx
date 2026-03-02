@@ -16,7 +16,7 @@ import {
   type Migration,
 } from "@/lib/api";
 import { ROUTES } from "@/lib/routes";
-import { buildStepDescriptionMap, calculateStepProgress } from "@/lib/steps";
+import { buildStepDescriptionMap, calculateStepProgress, getApplicableSteps } from "@/lib/steps";
 import { prefillInputs } from "@/lib/inputs";
 import { StepTimeline } from "@/components/step-timeline";
 import {
@@ -72,16 +72,6 @@ export default function CandidateStepsPage() {
     }
   }, [id, candidateId, stopPolling]);
 
-  useEffect(() => {
-    void poll();
-    intervalRef.current = setInterval(() => void poll(), 2000);
-    return stopPolling;
-  }, [poll, stopPolling]);
-
-  useEffect(() => {
-    getMigration(id).then(setMigration).catch(() => {});
-  }, [id]);
-
   const fetchCandidate = useCallback(() => {
     getCandidates(id).then((candidates) => {
       const c = candidates.find((c) => c.id === candidateId);
@@ -90,8 +80,18 @@ export default function CandidateStepsPage() {
   }, [id, candidateId]);
 
   useEffect(() => {
+    void poll();
     fetchCandidate();
-  }, [fetchCandidate]);
+    intervalRef.current = setInterval(() => {
+      void poll();
+      fetchCandidate();
+    }, 2000);
+    return stopPolling;
+  }, [poll, fetchCandidate, stopPolling]);
+
+  useEffect(() => {
+    getMigration(id).then(setMigration).catch(() => {});
+  }, [id]);
 
   const requiredInputs = migration?.requiredInputs;
   const hasRequiredInputs = requiredInputs && requiredInputs.length > 0;
@@ -117,13 +117,16 @@ export default function CandidateStepsPage() {
   }, [id, candidateId, inputValues, fetchCandidate]);
 
   const stepDescriptions = useMemo(
-    () => (migration ? buildStepDescriptionMap(migration.steps) : new Map<string, string>()),
-    [migration],
+    () => buildStepDescriptionMap(getApplicableSteps(candidate, migration)),
+    [candidate, migration],
   );
 
   const progress = useMemo(
-    () => (stepsData && migration ? calculateStepProgress(stepsData, migration.steps.length) : null),
-    [stepsData, migration],
+    () =>
+      stepsData && migration
+        ? calculateStepProgress(stepsData, getApplicableSteps(candidate, migration).length)
+        : null,
+    [stepsData, migration, candidate],
   );
 
   // Temporal workflow ID used for event callbacks — derived from migration + candidate IDs
@@ -157,7 +160,7 @@ export default function CandidateStepsPage() {
       ) : (
         <>
           {/* Sticky header */}
-          <div className="sticky top-0 z-10 bg-background pb-6 -mb-6 space-y-5">
+          <div className="sticky top-6 z-10 bg-background pb-6 space-y-5">
             {/* Breadcrumb + actions */}
             <div className="flex items-center gap-2 flex-wrap">
               <Link

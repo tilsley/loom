@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CandidateStatus } from "@/lib/api";
 import { ProgressBar } from "../progress-bar";
 
-const c = (...ids: string[]) => ids.map((id) => ({ id, kind: "test" }));
+const c = (...ids: string[]) => ids.map((id) => ({ id, kind: "test", status: "not_started" as const }));
 const withStatus = (id: string, status: CandidateStatus) => ({ id, kind: "test", status });
 
 describe("ProgressBar", () => {
@@ -19,7 +19,7 @@ describe("ProgressBar", () => {
         candidates={[
           withStatus("a", "completed"),
           withStatus("b", "running"),
-          { id: "c", kind: "test" }, // no status → not started
+          { id: "c", kind: "test", status: "not_started" as const }, // not started
         ]}
       />,
     );
@@ -61,8 +61,8 @@ describe("ProgressBar", () => {
         candidates={[
           withStatus("a", "completed"),
           withStatus("b", "completed"),
-          { id: "c", kind: "test" },
-          { id: "d", kind: "test" },
+          { id: "c", kind: "test", status: "not_started" as const },
+          { id: "d", kind: "test", status: "not_started" as const },
         ]}
       />,
     );

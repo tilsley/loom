@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMigrations } from "@/lib/hooks";
+import { useMigrationsContext } from "@/contexts/migrations-context";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/routes";
 import { useTheme } from "@/contexts/theme-context";
 
 const MAX_VISIBLE = 15;
+const MAX_RUNNING = 8;
 
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
@@ -70,7 +71,7 @@ function MoonIcon() {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { migrations } = useMigrations();
+  const { migrations } = useMigrationsContext();
 
   const navItems = [
     { href: ROUTES.dashboard, label: "Dashboard", icon: DashboardIcon },
@@ -80,6 +81,14 @@ export function Sidebar() {
 
   const visibleMigrations = migrations.slice(0, MAX_VISIBLE);
   const hiddenCount = migrations.length - MAX_VISIBLE;
+
+  const runningCandidates = migrations.flatMap((m) =>
+    (m.candidates ?? [])
+      .filter((c) => c.status === "running")
+      .map((c) => ({ migrationId: m.id, migrationName: m.name, candidateId: c.id })),
+  );
+  const visibleRunning = runningCandidates.slice(0, MAX_RUNNING);
+  const hiddenRunningCount = runningCandidates.length - MAX_RUNNING;
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-60 bg-background border-r border-border flex flex-col z-40">
@@ -168,6 +177,53 @@ export function Sidebar() {
           })}
         </ul>
       </nav>
+
+      {/* Running candidates */}
+      {visibleRunning.length > 0 && (
+        <div className="px-3 py-2.5 border-t border-border">
+          <div className="flex items-center gap-2 px-2.5 mb-1.5">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-completed-fill opacity-60" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-completed-fill" />
+            </span>
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Running
+            </span>
+            <span className="ml-auto text-[10px] text-muted-foreground/50 tabular-nums">
+              {runningCandidates.length}
+            </span>
+          </div>
+          <ul className="space-y-0.5">
+            {visibleRunning.map(({ migrationId, migrationName, candidateId }) => {
+              const href = ROUTES.candidateSteps(migrationId, candidateId);
+              const isActive = pathname === href;
+              return (
+                <li key={`${migrationId}/${candidateId}`}>
+                  <Link
+                    href={href}
+                    className={cn(
+                      "block px-2.5 py-1.5 rounded-md transition-colors",
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground/80 hover:bg-muted/40",
+                    )}
+                  >
+                    <div className="text-xs font-medium truncate">{candidateId}</div>
+                    <div className="text-[10px] text-muted-foreground/50 truncate">
+                      {migrationName}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+            {hiddenRunningCount > 0 && (
+              <li className="px-2.5 py-1 text-[10px] text-muted-foreground/50">
+                +{hiddenRunningCount} more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-border">

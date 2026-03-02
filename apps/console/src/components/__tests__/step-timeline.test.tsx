@@ -15,7 +15,7 @@ beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 
-const candidate = { id: "cand-1", kind: "repo" };
+const candidate = { id: "cand-1", kind: "repo", status: "not_started" as const };
 
 function step(
   stepName: string,

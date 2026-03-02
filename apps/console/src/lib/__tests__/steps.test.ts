@@ -25,12 +25,14 @@ const migrationWith = (steps: StepDefinition[]): Migration => ({
 const candidateWith = (steps?: StepDefinition[]): Candidate => ({
   id: "c",
   kind: "repo",
+  status: "not_started",
   ...(steps ? { steps } : {}),
 });
 
 const testCandidate: Candidate = {
   id: "c",
   kind: "repo",
+  status: "not_started",
 };
 
 describe("getApplicableSteps", () => {

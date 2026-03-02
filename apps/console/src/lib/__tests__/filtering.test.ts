@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Candidate } from "@/lib/api";
 import { discoverMetadataColumns, filterCandidates } from "../filtering";
 
-const candidate = (id: string, status?: Candidate["status"], metadata?: Record<string, string>): Candidate => ({
+const candidate = (id: string, status: Candidate["status"] = "not_started", metadata?: Record<string, string>): Candidate => ({
   id,
   kind: "repo",
-  ...(status ? { status } : {}),
+  status,
   ...(metadata ? { metadata } : {}),
 });
 
@@ -53,9 +53,9 @@ describe("filterCandidates", () => {
     expect(result.map((c) => c.id)).toEqual(["auth-service"]);
   });
 
-  it("treats missing status as not_started when filtering by not_started", () => {
-    const noStatus = candidate("orphan");
-    const result = filterCandidates([...candidates, noStatus], {}, metaColumns, "not_started");
+  it("includes not_started candidates when filtering by not_started", () => {
+    const extra = candidate("orphan");
+    const result = filterCandidates([...candidates, extra], {}, metaColumns, "not_started");
     expect(result.map((c) => c.id)).toEqual(["billing-api", "orphan"]);
   });
 

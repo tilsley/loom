@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import { useMigrations } from "@/lib/hooks";
+import { useMigrationsContext } from "@/contexts/migrations-context";
 import { ROUTES } from "@/lib/routes";
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const { migrations } = useMigrations();
+  const { migrations } = useMigrationsContext();
   const openRef = useRef(false);
 
   useEffect(() => {
@@ -51,7 +51,13 @@ export function CommandPalette() {
           }}
         >
           <div className="flex items-center gap-2.5 px-4 border-b border-border">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-muted-foreground shrink-0">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              className="text-muted-foreground shrink-0"
+            >
               <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
               <path d="M9 9l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
@@ -167,7 +173,12 @@ function DashboardIcon() {
 function MigrationsIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M3 5h10M3 8h7M3 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path
+        d="M3 5h10M3 8h7M3 11h10"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -175,7 +186,12 @@ function MigrationsIcon() {
 function MigrationItemIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M8 2l6 4v4l-6 4L2 10V6l6-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path
+        d="M8 2l6 4v4l-6 4L2 10V6l6-4z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

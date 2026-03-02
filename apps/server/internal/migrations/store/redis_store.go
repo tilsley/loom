@@ -66,8 +66,13 @@ func (s *RedisMigrationStore) getCandidates(ctx context.Context, migrationID str
 
 // Save persists a migration and each candidate in its own key.
 // The migration JSON is stored with Candidates nil to avoid duplication.
+// Candidates without a status are normalized to not_started.
 func (s *RedisMigrationStore) Save(ctx context.Context, m api.Migration) error {
-	for _, c := range m.Candidates {
+	for i := range m.Candidates {
+		if m.Candidates[i].Status == "" {
+			m.Candidates[i].Status = api.CandidateStatusNotStarted
+		}
+		c := m.Candidates[i]
 		data, err := json.Marshal(c)
 		if err != nil {
 			return fmt.Errorf("marshal candidate %q: %w", c.Id, err)
@@ -153,7 +158,7 @@ func (s *RedisMigrationStore) SetCandidateStatus(
 	if err := json.Unmarshal([]byte(val), &c); err != nil {
 		return fmt.Errorf("unmarshal candidate %q: %w", candidateID, err)
 	}
-	c.Status = &status
+	c.Status = status
 	data, err := json.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("marshal candidate %q: %w", candidateID, err)
@@ -198,16 +203,27 @@ func (s *RedisMigrationStore) SaveCandidates(ctx context.Context, migrationID st
 		}
 	}
 
-	notStarted := api.CandidateStatusNotStarted
 	incomingIDs := make(map[string]bool, len(incoming))
 	for _, c := range incoming {
 		incomingIDs[c.Id] = true
-		if ex, ok := existing[c.Id]; ok && ex.Status != nil &&
-			(*ex.Status == api.CandidateStatusRunning || *ex.Status == api.CandidateStatusCompleted) {
-			// preserve running/completed candidate as-is
-			continue
+		if ex, ok := existing[c.Id]; ok {
+			if ex.Status == api.CandidateStatusRunning || ex.Status == api.CandidateStatusCompleted {
+				// preserve running/completed candidate as-is
+				continue
+			}
+			// Merge metadata: existing (operator-updated) values take precedence
+			// over incoming (re-discovered) values so PATCH updates survive re-discovery.
+			if ex.Metadata != nil {
+				if c.Metadata == nil {
+					c.Metadata = ex.Metadata
+				} else {
+					for k, v := range *ex.Metadata {
+						(*c.Metadata)[k] = v
+					}
+				}
+			}
 		}
-		c.Status = &notStarted
+		c.Status = api.CandidateStatusNotStarted
 		data, err := json.Marshal(c)
 		if err != nil {
 			return fmt.Errorf("marshal candidate %q: %w", c.Id, err)
@@ -222,8 +238,8 @@ func (s *RedisMigrationStore) SaveCandidates(ctx context.Context, migrationID st
 
 	// Keep running/completed candidates not in incoming list in the index.
 	for _, ex := range existing {
-		if !incomingIDs[ex.Id] && ex.Status != nil &&
-			(*ex.Status == api.CandidateStatusRunning || *ex.Status == api.CandidateStatusCompleted) {
+		if !incomingIDs[ex.Id] &&
+			(ex.Status == api.CandidateStatusRunning || ex.Status == api.CandidateStatusCompleted) {
 			s.rdb.SAdd(ctx, redisCandidateIndex+migrationID, ex.Id) //nolint:errcheck
 		}
 	}
@@ -270,4 +286,3 @@ func (s *RedisMigrationStore) GetCandidates(ctx context.Context, migrationID str
 	}
 	return candidates, nil
 }
-

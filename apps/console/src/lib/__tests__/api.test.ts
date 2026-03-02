@@ -179,7 +179,7 @@ describe("startRun", () => {
 // ---------------------------------------------------------------------------
 
 describe("dryRun", () => {
-  const candidate = { id: "cand-1", kind: "docker", repo: "org/repo", ref: "main" } as const;
+  const candidate = { id: "cand-1", kind: "docker", repo: "org/repo", ref: "main", status: "not_started" } as const;
 
   it("returns the result on success", async () => {
     const result = { steps: [] };

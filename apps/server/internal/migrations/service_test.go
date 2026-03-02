@@ -17,12 +17,10 @@ import (
 
 // Compile-time interface compliance checks.
 var (
-	_ migrations.MigrationStore = (*memStore)(nil)
+	_ migrations.MigrationStore  = (*memStore)(nil)
 	_ migrations.ExecutionEngine = (*stubEngine)(nil)
-	_ migrations.DryRunner      = (*stubDryRunner)(nil)
+	_ migrations.DryRunner       = (*stubDryRunner)(nil)
 )
-
-func ptr[T any](v T) *T { return &v }
 
 // ─── stubEngine ───────────────────────────────────────────────────────────────
 
@@ -64,10 +62,10 @@ func (e *stubEngine) CancelRun(ctx context.Context, id string) error {
 // ─── stubDryRunner ────────────────────────────────────────────────────────────
 
 type stubDryRunner struct {
-	result          *api.DryRunResult
-	err             error
-	lastReq         api.DryRunRequest
-	lastWorkerUrl   string
+	result        *api.DryRunResult
+	err           error
+	lastReq       api.DryRunRequest
+	lastWorkerUrl string
 }
 
 func (d *stubDryRunner) DryRun(_ context.Context, workerUrl string, req api.DryRunRequest) (*api.DryRunResult, error) {
@@ -137,8 +135,7 @@ func (s *memStore) SetCandidateStatus(_ context.Context, migrationID, candidateI
 	}
 	for i, c := range m.Candidates {
 		if c.Id == candidateID {
-			st := status
-			m.Candidates[i].Status = &st
+			m.Candidates[i].Status = status
 			s.data[migrationID] = m
 			return nil
 		}
@@ -154,10 +151,9 @@ func (s *memStore) SaveCandidates(_ context.Context, migrationID string, candida
 	if !ok {
 		return fmt.Errorf("migration %q not found", migrationID)
 	}
-	ns := api.CandidateStatusNotStarted
 	for i := range candidates {
-		if candidates[i].Status == nil {
-			candidates[i].Status = &ns
+		if candidates[i].Status == "" {
+			candidates[i].Status = api.CandidateStatusNotStarted
 		}
 	}
 	m.Candidates = candidates
@@ -356,13 +352,11 @@ func TestService_SubmitCandidates(t *testing.T) {
 func TestService_GetCandidates(t *testing.T) {
 	t.Run("returns candidates unchanged when none are running", func(t *testing.T) {
 		store := newMemStore()
-		ns := api.CandidateStatusNotStarted
-		completed := api.CandidateStatusCompleted
 		_ = store.Save(context.Background(), api.Migration{
 			Id: "m1",
 			Candidates: []api.Candidate{
-				{Id: "repo-a", Status: &ns},
-				{Id: "repo-b", Status: &completed},
+				{Id: "repo-a", Status: api.CandidateStatusNotStarted},
+				{Id: "repo-b", Status: api.CandidateStatusCompleted},
 			},
 		})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
@@ -370,16 +364,14 @@ func TestService_GetCandidates(t *testing.T) {
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
 		assert.Len(t, cs, 2)
-		require.NotNil(t, cs[0].Status)
-		assert.Equal(t, api.CandidateStatusNotStarted, *cs[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, cs[0].Status)
 	})
 
 	t.Run("running candidate with live run is unchanged", func(t *testing.T) {
 		store := newMemStore()
-		running := api.CandidateStatusRunning
 		_ = store.Save(context.Background(), api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}},
 		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.RunStatus, error) {
@@ -390,16 +382,14 @@ func TestService_GetCandidates(t *testing.T) {
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
-		require.NotNil(t, cs[0].Status)
-		assert.Equal(t, api.CandidateStatusRunning, *cs[0].Status)
+		assert.Equal(t, api.CandidateStatusRunning, cs[0].Status)
 	})
 
 	t.Run("stale running candidate is reset to not_started", func(t *testing.T) {
 		store := newMemStore()
-		running := api.CandidateStatusRunning
 		_ = store.Save(context.Background(), api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}},
 		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, id string) (*migrations.RunStatus, error) {
@@ -410,16 +400,14 @@ func TestService_GetCandidates(t *testing.T) {
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
-		require.NotNil(t, cs[0].Status)
-		assert.Equal(t, api.CandidateStatusNotStarted, *cs[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, cs[0].Status)
 	})
 
 	t.Run("non-not-found engine error leaves candidate unchanged", func(t *testing.T) {
 		store := newMemStore()
-		running := api.CandidateStatusRunning
 		_ = store.Save(context.Background(), api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}},
 		})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.RunStatus, error) {
@@ -430,8 +418,7 @@ func TestService_GetCandidates(t *testing.T) {
 
 		cs, err := svc.GetCandidates(context.Background(), "m1")
 		require.NoError(t, err)
-		require.NotNil(t, cs[0].Status)
-		assert.Equal(t, api.CandidateStatusRunning, *cs[0].Status, "should not reset on non-not-found error")
+		assert.Equal(t, api.CandidateStatusRunning, cs[0].Status, "should not reset on non-not-found error")
 	})
 
 	t.Run("propagates store error", func(t *testing.T) {
@@ -509,12 +496,11 @@ func TestService_GetCandidateSteps(t *testing.T) {
 
 func TestService_RetryStep(t *testing.T) {
 	ctx := context.Background()
-	running := api.CandidateStatusRunning
 
 	setup := func(store *memStore) {
 		_ = store.Save(ctx, api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}},
 		})
 	}
 
@@ -553,10 +539,9 @@ func TestService_RetryStep(t *testing.T) {
 
 	t.Run("candidate not running returns CandidateNotRunningError", func(t *testing.T) {
 		store := newMemStore()
-		notStarted := api.CandidateStatusNotStarted
 		_ = store.Save(ctx, api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &notStarted}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusNotStarted}},
 		})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
@@ -583,12 +568,11 @@ func TestService_RetryStep(t *testing.T) {
 
 func TestService_Cancel(t *testing.T) {
 	ctx := context.Background()
-	running := api.CandidateStatusRunning
 
 	setup := func(store *memStore) {
 		_ = store.Save(ctx, api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &running}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}},
 		})
 	}
 
@@ -608,8 +592,7 @@ func TestService_Cancel(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "m1__repo-a", cancelledID)
 		m, _ := store.Get(ctx, "m1")
-		require.NotNil(t, m.Candidates[0].Status)
-		assert.Equal(t, api.CandidateStatusNotStarted, *m.Candidates[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, m.Candidates[0].Status)
 	})
 
 	t.Run("run not found is tolerated; reset still proceeds", func(t *testing.T) {
@@ -625,8 +608,7 @@ func TestService_Cancel(t *testing.T) {
 		err := svc.Cancel(ctx, "m1", "repo-a")
 		require.NoError(t, err)
 		m, _ := store.Get(ctx, "m1")
-		require.NotNil(t, m.Candidates[0].Status)
-		assert.Equal(t, api.CandidateStatusNotStarted, *m.Candidates[0].Status)
+		assert.Equal(t, api.CandidateStatusNotStarted, m.Candidates[0].Status)
 	})
 
 	t.Run("other engine error is returned immediately", func(t *testing.T) {
@@ -671,10 +653,9 @@ func TestService_Cancel(t *testing.T) {
 
 	t.Run("candidate not running returns CandidateNotRunningError", func(t *testing.T) {
 		store := newMemStore()
-		notStarted := api.CandidateStatusNotStarted
 		_ = store.Save(ctx, api.Migration{
 			Id:         "m1",
-			Candidates: []api.Candidate{{Id: "repo-a", Status: &notStarted}},
+			Candidates: []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusNotStarted}},
 		})
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
@@ -767,8 +748,7 @@ func TestService_Start(t *testing.T) {
 
 		m, _ := store.Get(ctx, "m1")
 		require.Len(t, m.Candidates, 1)
-		require.NotNil(t, m.Candidates[0].Status)
-		assert.Equal(t, api.CandidateStatusRunning, *m.Candidates[0].Status)
+		assert.Equal(t, api.CandidateStatusRunning, m.Candidates[0].Status)
 	})
 
 	t.Run("merges inputs into candidate metadata before starting run", func(t *testing.T) {
@@ -810,8 +790,7 @@ func TestService_Start(t *testing.T) {
 
 	t.Run("blocks when candidate is already running and run still exists", func(t *testing.T) {
 		store := newMemStore()
-		running := api.CandidateStatusRunning
-		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: &running}})
+		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.RunStatus, error) {
 				return &migrations.RunStatus{RuntimeStatus: "RUNNING"}, nil
@@ -828,8 +807,7 @@ func TestService_Start(t *testing.T) {
 
 	t.Run("blocks when candidate is completed and run still exists", func(t *testing.T) {
 		store := newMemStore()
-		completed := api.CandidateStatusCompleted
-		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: &completed}})
+		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusCompleted}})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, _ string) (*migrations.RunStatus, error) {
 				return &migrations.RunStatus{RuntimeStatus: "COMPLETED"}, nil
@@ -845,8 +823,7 @@ func TestService_Start(t *testing.T) {
 
 	t.Run("allows re-execution when run is gone", func(t *testing.T) {
 		store := newMemStore()
-		running := api.CandidateStatusRunning
-		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: &running}})
+		saveMigration(store, []api.Candidate{{Id: "repo-a", Status: api.CandidateStatusRunning}})
 		engine := &stubEngine{
 			getStatusFn: func(_ context.Context, id string) (*migrations.RunStatus, error) {
 				return nil, migrations.RunNotFoundError{InstanceID: id}
@@ -906,7 +883,7 @@ func TestService_UpdateInputs(t *testing.T) {
 
 	reqInputs := &[]api.InputDefinition{{Name: "repoName"}}
 
-	saveMigration := func(store *memStore, status *api.CandidateStatus) {
+	saveMigration := func(store *memStore, status api.CandidateStatus) {
 		_ = store.Save(ctx, api.Migration{
 			Id:             "m1",
 			RequiredInputs: reqInputs,
@@ -916,7 +893,7 @@ func TestService_UpdateInputs(t *testing.T) {
 
 	t.Run("signals running workflow after store update", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, ptr(api.CandidateStatusRunning))
+		saveMigration(store, api.CandidateStatusRunning)
 		var raisedID, raisedEvent string
 		var raisedPayload any
 		engine := &stubEngine{
@@ -938,7 +915,7 @@ func TestService_UpdateInputs(t *testing.T) {
 
 	t.Run("does not signal when candidate is not running", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, ptr(api.CandidateStatusNotStarted))
+		saveMigration(store, api.CandidateStatusNotStarted)
 		signalCalled := false
 		engine := &stubEngine{
 			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
@@ -953,26 +930,9 @@ func TestService_UpdateInputs(t *testing.T) {
 		assert.False(t, signalCalled, "should not signal non-running candidate")
 	})
 
-	t.Run("does not signal when candidate has nil status", func(t *testing.T) {
-		store := newMemStore()
-		saveMigration(store, nil)
-		signalCalled := false
-		engine := &stubEngine{
-			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
-				signalCalled = true
-				return nil
-			},
-		}
-		svc := newSvc(store, engine, &stubDryRunner{})
-
-		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"repoName": "val"})
-		require.NoError(t, err)
-		assert.False(t, signalCalled, "should not signal candidate with nil status")
-	})
-
 	t.Run("tolerates RunNotFoundError from engine", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, ptr(api.CandidateStatusRunning))
+		saveMigration(store, api.CandidateStatusRunning)
 		engine := &stubEngine{
 			raiseEventFn: func(_ context.Context, id, _ string, _ any) error {
 				return migrations.RunNotFoundError{InstanceID: id}
@@ -986,7 +946,7 @@ func TestService_UpdateInputs(t *testing.T) {
 
 	t.Run("propagates other engine errors", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, ptr(api.CandidateStatusRunning))
+		saveMigration(store, api.CandidateStatusRunning)
 		engine := &stubEngine{
 			raiseEventFn: func(_ context.Context, _, _ string, _ any) error {
 				return errors.New("temporal unavailable")
@@ -1000,7 +960,7 @@ func TestService_UpdateInputs(t *testing.T) {
 
 	t.Run("rejects unknown input key", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, ptr(api.CandidateStatusNotStarted))
+		saveMigration(store, api.CandidateStatusNotStarted)
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
 		err := svc.UpdateInputs(ctx, "m1", "repo-a", map[string]string{"unknown": "val"})
@@ -1018,7 +978,7 @@ func TestService_UpdateInputs(t *testing.T) {
 
 	t.Run("propagates store UpdateCandidateMetadata error", func(t *testing.T) {
 		store := newMemStore()
-		saveMigration(store, ptr(api.CandidateStatusNotStarted))
+		saveMigration(store, api.CandidateStatusNotStarted)
 		store.errUpdateCandidateMetadata = errors.New("write failed")
 		svc := newSvc(store, &stubEngine{}, &stubDryRunner{})
 
@@ -1058,6 +1018,3 @@ func TestService_HandleEvent(t *testing.T) {
 		require.ErrorContains(t, err, "signal failed")
 	})
 }
-
-// Ensure ptr is used (suppress unused warning)
-var _ = ptr[string]
