@@ -41,35 +41,52 @@ src/
 ├── app/                        Next.js App Router pages
 │   ├── layout.tsx              Root layout
 │   ├── page.tsx                Dashboard /
+│   ├── metrics/page.tsx        Metrics dashboard
 │   └── migrations/
 │       ├── [id]/page.tsx       Migration detail (polling, candidate table)
-│       └── [id]/preview/[candidateId]/page.tsx   Dry-run preview + start
+│       ├── [id]/preview/[candidateId]/page.tsx   Dry-run preview + start
 │       └── [id]/candidates/[candidateId]/steps/page.tsx   Live step progress
 ├── components/
-│   ├── ui/                     Low-level UI primitives (Button, Input, Skeleton…)
+│   ├── ui/                     Low-level UI primitives (Button, Dialog, Table, Badge…)
 │   ├── candidate-row.tsx       Single candidate row with status + actions
-│   ├── candidate-table.tsx     Filterable, searchable, groupable candidate list
-│   └── …
+│   ├── candidate-table.tsx     Filterable, searchable candidate list
+│   ├── migration-card.tsx      Migration summary card for dashboard
+│   ├── step-timeline.tsx       Step progress timeline
+│   ├── preview-panel.tsx       Dry-run preview panel
+│   ├── progress-bar.tsx        Candidate completion progress bar
+│   ├── metrics-chart.tsx       Recharts wrappers for metrics page
+│   ├── status-filter.tsx       Status toggle filter
+│   ├── command-palette.tsx     Cmd+K command palette
+│   ├── sidebar.tsx             App sidebar navigation
+│   └── file-diff-view.tsx      File diff display for previews
 ├── lib/
 │   ├── api.gen.ts              GENERATED — do not edit (openapi-typescript)
 │   ├── api.ts                  Hand-written API wrappers around api.gen.ts
 │   ├── routes.ts               ROUTES constant — all Next.js hrefs defined here
-│   └── hooks.ts                Shared hooks
+│   ├── hooks.ts                Shared hooks (useMigrationPolling, etc.)
+│   ├── formatting.ts           Display formatting helpers
+│   ├── filtering.ts            Candidate filtering logic
+│   ├── inputs.ts               Required input prefill logic
+│   ├── steps.ts                Step status helpers
+│   ├── stats.ts                Candidate stats computation
+│   ├── url.ts                  URL/search-param helpers
+│   └── utils.ts                General utilities (cn, etc.)
 └── contexts/
-    └── theme-context.tsx
+    ├── theme-context.tsx
+    └── migrations-context.tsx
 ```
 
 ## Key conventions
 
 **All pages are client components** (`"use client"`). Route params are accessed via `useParams()` hook — never server component `params` props.
 
-**Modals use `createPortal`** to `document.body`. Follow the pattern in `migrations/[id]/page.tsx` (backdrop click closes, X button closes, inner click stops propagation).
+**Modals use Radix `<Dialog>`** from `@/components/ui`. Follow the pattern in `migrations/[id]/page.tsx` (overview modal, cancel confirmation, preview inputs). The command palette is the one exception — it uses `createPortal` directly.
 
 **Candidate actions:** `onPreview` / `onCancel` flow from the page → `CandidateTable` → `CandidateRow`. Add new action props at all three levels.
 
 **Button inside a Link** — always call both `e.preventDefault()` and `e.stopPropagation()` to prevent navigation.
 
-**Polling** — migration detail page polls every 5s via `setInterval` in `useEffect`. After a mutation (e.g. cancel), call `fetchCandidates()` immediately so the UI updates without waiting for the next poll.
+**Polling** — migration detail page polls dynamically: 2s when any candidate is `running`, 5s otherwise, via `setInterval` in `useEffect`. After a mutation (e.g. cancel), call `fetchCandidates()` immediately so the UI updates without waiting for the next poll.
 
 **API client (`src/lib/api.ts`)** — all fetch calls go here. Follow the existing pattern: throw `new Error(await res.text())` on non-ok responses; throw `ConflictError` on 409. Import types from `api.gen.ts` via `api.ts` re-exports.
 
@@ -77,11 +94,13 @@ src/
 
 ## UI components
 
-`src/components/ui/` contains shadcn-style primitives:
+`src/components/ui/` contains shadcn-style primitives, re-exported from `ui/index.ts`:
 
-- `Button` — variants: `default` (teal), `danger` (red), `outline` (zinc), `success` (emerald); sizes: `sm`, `default`, `lg`, `icon`
-- `Input`, `Skeleton`
+- `Button` — variants: `default` (subtle primary), `primary` (solid primary), `danger` (destructive), `outline` (muted), `success` (completed); sizes: `sm`, `default`, `lg`, `icon`
 - `buttonVariants` — CVA helper for applying button styles to non-button elements (e.g. `<Link>`)
+- `Dialog`, `DialogContent`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription` — Radix-based modal
+- `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`
+- `Accordion`, `Badge`, `Input`, `Skeleton`, `Sheet`, `Tooltip`, `ToggleGroup`, `ErrorBoundary`, `Toaster`
 
 ## TypeScript config
 

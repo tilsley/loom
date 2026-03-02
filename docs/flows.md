@@ -9,7 +9,7 @@ Sequence diagrams for the main operations in Loom.
 | `Con` | loom-console | Operator UI |
 | `H` | handler/ | Gin route handlers |
 | `S` | service.go | Use-case orchestration + business rules |
-| `St` | store/ (Redis) | State persistence via `MigrationStore` port |
+| `St` | store/ (PostgreSQL) | State persistence via `MigrationStore` port |
 | `E` | execution/ + Temporal | Durable workflow engine via `ExecutionEngine` port |
 | `M` | migrator/ | Outbound HTTP via `MigratorNotifier` / `DryRunner` ports |
 | `W` | app-chart-migrator | External migrator service |
@@ -27,14 +27,14 @@ sequenceDiagram
     participant W as app-chart-migrator
     participant H as handler/
     participant S as service.go
-    participant St as store/ (Redis)
+    participant St as store/ (PostgreSQL)
 
     W->>H: POST /registry/announce {MigrationAnnouncement}
     H->>S: Announce(announcement)
     S->>St: Save(migration + candidates)
     St-->>S: ok
     S-->>H: migration
-    H-->>W: 200 OK
+    H-->>W: 200 OK {"status": "SUCCESS"}
 ```
 
 ---
@@ -43,7 +43,7 @@ sequenceDiagram
 
 The operator starts a candidate. The server validates, sets the candidate to `running`, starts a durable Temporal workflow, then immediately returns `202 Accepted`. Everything after that is asynchronous.
 
-The workflow sequences each step in turn: it dispatches outbound to the migrator, then blocks waiting for a completion signal sent via the migrator's callback to `POST /event/:id`. Steps can go through intermediate states (`open`, `awaiting_review`) before reaching a terminal state (`succeeded`, `merged`, `failed`).
+The workflow sequences each step in turn: it dispatches outbound to the migrator, then blocks waiting for a completion signal sent via the migrator's callback to `POST /event/:id`. Steps can pass through the `pending` intermediate state before reaching a terminal state (`succeeded`, `merged`, `failed`).
 
 The `StepStatusEvent` carries a single `status` field (one of `succeeded`, `failed`, `pending`, `merged`). `pending` is the only intermediate status — it keeps the workflow waiting while the migrator updates visible state via `metadata` (e.g. `prUrl`, `instructions`). Arbitrary data stays in `metadata`.
 
@@ -52,7 +52,7 @@ sequenceDiagram
     participant Con as Console
     participant H as handler/
     participant S as service.go
-    participant St as store/ (Redis)
+    participant St as store/ (PostgreSQL)
     participant E as Temporal (execution/)
     participant M as migrator/
     participant W as app-chart-migrator
@@ -95,6 +95,8 @@ sequenceDiagram
     Note over E: workflow complete
 ```
 
+> **Note:** The workflow also fires `RecordEvent` (local activity) at each lifecycle point — `run_started`, `step_dispatched`, `step_completed`, `step_retried`, `run_completed`, `run_cancelled`. These are fire-and-forget writes to the `EventStore` and are omitted from the diagram for clarity.
+
 ---
 
 ## 3. Dry run
@@ -106,12 +108,12 @@ sequenceDiagram
     participant Con as Console
     participant H as handler/
     participant S as service.go
-    participant St as store/ (Redis)
+    participant St as store/ (PostgreSQL)
     participant M as migrator/
     participant W as app-chart-migrator
 
-    Con->>H: POST /migrations/:id/candidates/:cid/dry-run
-    H->>S: DryRun(migrationId, candidateId)
+    Con->>H: POST /migrations/:id/dry-run {candidateId, inputs}
+    H->>S: DryRun(migrationId, candidateId, inputs)
     S->>St: Get(migration), GetCandidates(migrationId)
     St-->>S: migration + candidate
     S->>M: DryRun(migratorUrl, DryRunRequest)
@@ -134,7 +136,7 @@ sequenceDiagram
     participant H as handler/
     participant S as service.go
     participant E as Temporal (execution/)
-    participant St as store/ (Redis)
+    participant St as store/ (PostgreSQL)
 
     Con->>H: POST /migrations/:id/candidates/:cid/cancel
     H->>S: Cancel(migrationId, candidateId)

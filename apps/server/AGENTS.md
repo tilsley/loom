@@ -5,52 +5,60 @@ Go HTTP + Temporal workflow orchestration server. Entry point: `main.go`.
 ## Running
 
 ```bash
-# Via Makefile (recommended — starts with Dapr sidecar):
+# Via Makefile (recommended):
 make run
 # Equivalent:
-dapr run --app-id loom --app-port 8080 --dapr-http-port 3500 -- go run .
+cd apps/server && go run .
 
 # Prerequisites:
 make temporal       # Temporal dev server (port 7233, UI :8088)
-docker compose up -d redis placement  # Redis + Dapr placement
+docker compose up -d  # Redis, PostgreSQL, Temporal (containerised)
 ```
 
 ## Testing
 
 ```bash
 go test ./...
-go test ./internal/migrations/...           # service + adapters
-go test ./internal/migrations/execution/... # workflow + activities
+go test ./apps/server/internal/migrations/...           # service + store + migrator
+go test ./apps/server/internal/migrations/execution/... # workflow + activities
 ```
 
-Tests use stub implementations of all port interfaces — no external services required. The stubs live alongside the tests (`service_test.go`, `http_test.go`, `workflow_test.go`).
+Tests use stub implementations of all port interfaces — no external services required. The stubs live alongside the tests (`service_test.go`, `testhelpers_test.go`, `workflow_test.go`).
 
 ## Layered architecture
 
 ```
-HTTP (adapters/http.go)
+handler/          inbound HTTP (Gin)
   ↓ calls
-Service (migrations/service.go)
+service.go        orchestration (use-case logic + guards)
   ↓ calls via port interfaces
-Execution (migrations/execution/) ← Temporal workflow + activities
-Infrastructure (adapters/dapr*.go, platform/) ← concrete implementations
+execution/        Temporal workflow + activities
+store/            PostgreSQL (migrations, candidates, events)
+migrator/         outbound HTTP (step dispatch + dry-run)
 ```
 
-**Rule:** the service layer (`service.go`) only imports domain types and port interfaces. It never imports Temporal, Dapr, or Gin packages directly.
+**Rule:** the service layer (`service.go`) only imports domain types and port interfaces. It never imports Temporal, PostgreSQL, or Gin packages directly.
 
 ## Key files
 
 | File | Purpose |
 |---|---|
-| `main.go` | Wires all layers: logger → OTEL → Temporal → Dapr → adapters → service → Gin |
-| `internal/migrations/domain.go` | Domain types and sentinel errors |
-| `internal/migrations/ports.go` | The 4 port interfaces: `WorkflowEngine`, `MigrationStore`, `WorkerNotifier`, `DryRunner` |
+| `main.go` | Wires all layers: logger → OTEL → Temporal → Postgres → service → Gin |
+| `internal/migrations/errors.go` | Sentinel error types (`MigrationNotFoundError`, `CandidateNotFoundError`, etc.) |
+| `internal/migrations/run.go` | Run identity helpers (`RunID`, `ParseRunID`), signal names, `RunStatus` type |
+| `internal/migrations/ports.go` | Port interfaces: `ExecutionEngine`, `MigrationStore`, `MigratorNotifier`, `DryRunner`, `EventStore` |
 | `internal/migrations/service.go` | All use-case logic — edit here for business logic changes |
-| `internal/migrations/adapters/http.go` | Gin handlers — translate HTTP ↔ service calls ↔ domain errors |
-| `internal/migrations/adapters/dapr_store.go` | Redis state store (implements `MigrationStore`) |
-| `internal/migrations/adapters/dapr_bus.go` | Redis pub/sub (implements `WorkerNotifier`) |
+| `internal/migrations/handler/routes.go` | Gin route registration |
+| `internal/migrations/handler/candidates.go` | Candidate lifecycle handlers (start, cancel, retry, inputs, steps) |
+| `internal/migrations/handler/migrations.go` | Migration CRUD + candidate submission handlers |
+| `internal/migrations/handler/events.go` | Announce + migrator callback handlers |
+| `internal/migrations/handler/metrics.go` | Metrics dashboard handlers |
+| `internal/migrations/store/pg_migration_store.go` | PostgreSQL migration + candidate store (implements `MigrationStore`) |
+| `internal/migrations/store/pg_event_store.go` | PostgreSQL event store (implements `EventStore`) |
+| `internal/migrations/migrator/http_notifier.go` | Outbound HTTP (implements `MigratorNotifier`) |
+| `internal/migrations/migrator/http_dryrun.go` | Outbound HTTP (implements `DryRunner`) |
 | `internal/migrations/execution/workflow.go` | Temporal `MigrationOrchestrator` workflow |
-| `internal/migrations/execution/activity.go` | `DispatchStep`, `UpdateTargetRunStatus` activities |
+| `internal/migrations/execution/activity.go` | `DispatchStep`, `UpdateCandidateStatus`, `RecordEvent` activities |
 | `internal/platform/telemetry/telemetry.go` | OTEL setup — opt-in via `OTEL_ENABLED=true` |
 | `internal/platform/validation/` | OpenAPI request validation middleware |
 
@@ -60,24 +68,18 @@ Infrastructure (adapters/dapr*.go, platform/) ← concrete implementations
 |---|---|---|
 | `PORT` | `8080` | HTTP port |
 | `TEMPORAL_HOSTPORT` | `localhost:7233` | |
-| `DAPR_GRPC_PORT` | `50001` | Set by Dapr sidecar automatically |
+| `POSTGRES_URL` | _(required)_ | PostgreSQL connection string for migration state and event store |
 | `OTEL_ENABLED` | `false` | Set `true` to emit traces/metrics |
 | `OTEL_SERVICE_NAME` | `loom-server` | |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Required if OTEL enabled |
-| `OTEL_EXPORTER_OTLP_INSECURE` | — | Set `true` for local LGTM stack |
-
-## Dapr components
-
-`dapr/components/pubsub.yaml` — Redis pub/sub, topic `migration-steps`
-`dapr/components/statestore.yaml` — Redis state store with actor mode
 
 ## Adding a new endpoint
 
 1. Add path + schema to `schemas/openapi.yaml`
 2. Run `make generate` (updates `pkg/api/types.gen.go` and console's `api.gen.ts`)
 3. Add service method to `service.go` (depend only on port interfaces)
-4. Add Gin handler to `adapters/http.go` and register in `RegisterRoutes`
-5. Add tests in `service_test.go` (stub ports) and `http_test.go`
+4. Add Gin handler to the appropriate `handler/*.go` file and register in `handler/routes.go`
+5. Add tests in `service_test.go` (stub ports) and `handler/*_test.go`
 
 ## Go linting
 

@@ -8,7 +8,7 @@
 ├─────────────────────────────────────────────┤
 │  execution/         Temporal workflow        │  step sequencing + signals
 ├─────────────────────────────────────────────┤
-│  store/             Redis                    │  migration + candidate state
+│  store/             PostgreSQL                │  migration + candidate + event state
 │  migrator/          outbound HTTP             │  step dispatch + dry-run
 └─────────────────────────────────────────────┘
 ```
@@ -30,6 +30,7 @@ Port interfaces:
 - `MigrationStore` — persist and retrieve migration + candidate state
 - `MigratorNotifier` — dispatch step requests to migrators
 - `DryRunner` — invoke a migrator synchronously for a dry-run preview
+- `EventStore` — record lifecycle events and query metrics (step events, timelines, failures)
 
 ### `execution/`
 The Temporal workflow and its activities. Sequences steps across candidates, waits for step-completion signals, handles retries, and runs compensation on cancellation. Framework-coupled by design — Temporal is a core dependency here, not a swappable adapter.
@@ -37,14 +38,15 @@ The Temporal workflow and its activities. Sequences steps across candidates, wai
 Activities use the same `MigratorNotifier` and `MigrationStore` port interfaces as the service layer.
 
 ### `store/`
-`RedisMigrationStore` — implements `MigrationStore` using go-redis. Keyed by migration ID; candidate state stored as part of the migration document.
+- `PGMigrationStore` — implements `MigrationStore` using PostgreSQL. Migrations and candidates stored in separate tables; candidates are independently queryable.
+- `PGEventStore` — implements `EventStore` using PostgreSQL. Records step lifecycle events and serves metrics queries.
 
 ### `migrator/`
 Outbound HTTP clients that implement the `MigratorNotifier` and `DryRunner` ports. POSTs directly to the migrator's base URL (registered at announce time via `migratorUrl`).
 
 ## Supporting files
 
-- `errors.go` — sentinel error types returned by the service layer (`MigrationNotFoundError`, `CandidateNotFoundError`, etc.)
+- `errors.go` — sentinel error types returned by the service layer (`MigrationNotFoundError`, `CandidateNotFoundError`, `CandidateAlreadyRunError`, `CandidateNotRunningError`, `RunNotFoundError`, `InvalidInputKeyError`)
 - `run.go` — run identity helpers (`RunID`, `ParseRunID`), signal name helpers, `RunStatus` type and `RuntimeStatus` constants
 
 ## Shared types (`pkg/api/`)
@@ -57,8 +59,22 @@ Generated from `schemas/openapi.yaml` via oapi-codegen. All layers share these t
 | `handler/` | `service.go` (via interface), `pkg/api`, domain errors |
 | `service.go` | `pkg/api`, port interfaces (`ports.go`), `errors.go`, `run.go` |
 | `execution/` | port interfaces, `pkg/api`, `run.go` |
-| `store/` | `pkg/api`, go-redis |
+| `store/` | `pkg/api`, pgx |
 | `migrator/` | `pkg/api` |
 | `platform/temporal/` | port interfaces (`RunStatus`, `RunNotFoundError`), Temporal SDK |
+| `platform/postgres/` | `pkg/api` |
+| `platform/telemetry/` | OTEL SDK |
+| `platform/logger/` | slog |
+| `platform/validation/` | `pkg/api`, OpenAPI spec |
 
-No package imports above itself. The service layer has no knowledge of Gin, Redis, or Temporal.
+No package imports above itself. The service layer has no knowledge of Gin, PostgreSQL, or Temporal.
+
+## Platform packages (`internal/platform/`)
+
+Infrastructure concerns shared across the server:
+
+- `temporal/` — implements `ExecutionEngine` port; Temporal client + worker setup
+- `postgres/` — PostgreSQL connection pool; implements `EventStore` port
+- `telemetry/` — OTEL tracer/meter provider; opt-in via `OTEL_ENABLED=true`
+- `logger/` — structured logging (slog)
+- `validation/` — OpenAPI request validation middleware for Gin

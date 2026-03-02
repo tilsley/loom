@@ -8,7 +8,7 @@ Monorepo for **Loom**, a Temporal-backed migration orchestration platform.
 |---|---|---|
 | Orchestration server | `apps/server` | Go |
 | Web console | `apps/console` | TypeScript / Next.js |
-| Helm chart worker | `apps/migrators/app-chart-migrator` | Go |
+| Helm chart migrator | `apps/migrators/app-chart-migrator` | Go |
 | Mock GitHub API | `apps/mock-github` | Go |
 | Shared Go types | `pkg/` | Go |
 | OpenAPI schema | `schemas/` | YAML |
@@ -20,24 +20,25 @@ Single `go.mod` at repo root — all Go apps share one module (`github.com/tilsl
 Read `DOMAIN.md` for canonical terminology before touching anything. Key terms:
 
 - **Migration** — a registered definition with an ordered list of Steps
-- **Step** — a single unit of work executed by a named worker app
-- **Candidate** — a target discovered by a worker that needs migrating (e.g. a repo slug)
-- **Candidate status** — `not_started` | `running` | `completed` (no `failed`; step failure resets to `not_started`)
-- **Workflow ID** — internal identifier derived as `{migrationId}__{candidateId}`; not surfaced in the API
+- **Step** — a single unit of work executed by a named migrator app
+- **Candidate** — a subject discovered by a migrator that needs migrating (e.g. an application slug)
+- **Candidate status** — `not_started` | `running` | `completed` (no `failed`; step failure keeps candidate `running`)
+- **Run** — one execution of a migration against a candidate
+- **Run ID** — internal identifier derived as `{migrationId}__{candidateId}`; not surfaced in the API
 
 ## Running the stack
 
 ```bash
-make setup       # one-time: installs deps, initialises Dapr, etc.
+make setup       # one-time: installs deps, generates types
 make dev         # starts everything (Temporal, server, migrator, mock-github, console)
 make dev-otel    # same + OTEL_ENABLED=true + Grafana LGTM on :3002
 ```
 
 Infrastructure only (no app code):
 ```bash
-docker compose up -d       # Temporal, PostgreSQL, Redis, Dapr placement
+docker compose up -d       # Temporal, PostgreSQL, Redis, Temporal UI
 make temporal              # Temporal dev server (SQLite, UI on :8088)
-make reset                 # flush Redis + delete Temporal DB
+make reset                 # flush Redis + delete Temporal DB + truncate event store
 ```
 
 ## Code generation
@@ -82,8 +83,8 @@ The server follows a strict layered import rule — see `apps/server/ARCHITECTUR
 
 ## Key conventions
 
-- **Port interfaces over concrete types** — all Temporal, Dapr, and GitHub interactions are hidden behind interfaces in the service layer.
+- **Port interfaces over concrete types** — all Temporal, HTTP, and external interactions are hidden behind interfaces in the service layer.
 - **Table-driven tests in Go** — use `memStore`, `stubEngine`, etc. stub implementations (see `service_test.go`).
 - **No auto-commit** — stage changes and describe them; let the human confirm before committing.
 - **After OpenAPI changes** — always run `make generate` before running or testing anything.
-- **Workflow ID is internal** — never expose the `migrationId__candidateId` pattern to users or in API responses.
+- **Run ID is internal** — never expose the `migrationId__candidateId` pattern to users or in API responses.

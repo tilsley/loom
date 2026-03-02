@@ -29,20 +29,20 @@ Split the system into two independently deployable parts connected by a lightwei
 - Workflow orchestration (sequencing steps, handling retries, cancel/resume)
 - The REST API consumed by the console
 
-The server has no knowledge of what any migration actually does. It knows that a migration has steps and that steps are executed by named worker apps — nothing more.
+The server has no knowledge of what any migration actually does. It knows that a migration has steps and that steps are executed by named migrator apps — nothing more.
 
-**2. Worker apps** (e.g. `apps/migrators/app-chart-migrator`) that own:
+**2. Migrator apps** (e.g. `apps/migrators/app-chart-migrator`) that own:
 - Discovery: scanning a source of truth (GitOps repo, Kafka cluster, etc.) and submitting the candidate list to the server
 - Execution: performing each step (cloning repos, creating PRs, rotating credentials, etc.)
 - Dry-run: simulating the migration and returning file diffs for preview
 
 **The registration pattern** binds them together:
 
-- Workers announce their migration definition to the server on startup via `POST /registry/announce`. The announcement includes the migration ID, name, description, ordered step list, required inputs, and the worker's base URL (`migratorUrl`).
-- Workers submit discovered candidates to the server via `POST /migrations/{id}/candidates`. The server stores candidates but treats metadata as an opaque key/value map — it never interprets it.
-- The server dispatches step execution to the worker via direct HTTP (`POST {migratorUrl}/dispatch-step`). Workers signal completion back via `POST /event/{id}`.
+- Migrators announce their migration definition to the server on startup via `POST /registry/announce`. The announcement includes the migration ID, name, description, ordered step list, required inputs, and the migrator's base URL (`migratorUrl`).
+- Migrators submit discovered candidates to the server via `POST /migrations/{id}/candidates`. The server stores candidates but treats metadata as an opaque key/value map — it never interprets it.
+- The server dispatches step execution to the migrator via direct HTTP (`POST {migratorUrl}/dispatch-step`). Migrators signal completion back via `POST /event/{id}`.
 
-This means: **adding a new migration type requires only a new worker app**. The server, console, and all operational tooling work without modification.
+This means: **adding a new migration type requires only a new migrator app**. The server, console, and all operational tooling work without modification.
 
 ---
 
@@ -50,17 +50,17 @@ This means: **adding a new migration type requires only a new worker app**. The 
 
 **Positive**
 
-- New migration types are self-contained. A team writes a worker, deploys it, and it appears in the console on next startup — no server or console changes required.
-- The management layer (state, sequencing, UI) is tested and hardened once. Workers only need to implement discovery, dry-run, and step execution.
-- Workers can be written in any language that can speak HTTP. The contract is defined by `schemas/openapi.yaml`.
+- New migration types are self-contained. A team writes a migrator, deploys it, and it appears in the console on next startup — no server or console changes required.
+- The management layer (state, sequencing, UI) is tested and hardened once. Migrators only need to implement discovery, dry-run, and step execution.
+- Migrators can be written in any language that can speak HTTP. The contract is defined by `schemas/openapi.yaml`.
 - Migrations are observable and operable through a single console regardless of type — no per-migration dashboards.
-- The server's Temporal-backed workflow engine handles retry, cancel, and progress tracking durably. Workers don't need to implement any of this.
+- The server's Temporal-backed workflow engine handles retry, cancel, and progress tracking durably. Migrators don't need to implement any of this.
 
 **Negative / trade-offs**
 
-- Workers must implement the announcement and discovery contract on startup. This is a small but non-trivial integration cost for each new migration type.
-- The server stores candidates embedded within the migration object in Redis. This is simple and fast but means candidates are not independently queryable — they always come through the migration. This is acceptable for the current scale (hundreds to low thousands of candidates per migration).
-- Because workers are separate deployments, a worker restart re-runs discovery. The server uses merge-not-replace semantics to protect in-progress and completed candidates, but the operator needs to be aware that discovery is re-entrant.
+- Migrators must implement the announcement and discovery contract on startup. This is a small but non-trivial integration cost for each new migration type.
+- ~~The server stores candidates embedded within the migration object in Redis.~~ **Update:** The server now uses PostgreSQL for all state. Migrations and candidates are stored in separate tables, making candidates independently queryable.
+- Because migrators are separate deployments, a migrator restart re-runs discovery. The server uses merge-not-replace semantics to protect in-progress and completed candidates, but the operator needs to be aware that discovery is re-entrant.
 - Temporal is a hard dependency of the server. It is not abstracted away — the execution layer is framework-coupled by design. Swapping orchestration engines would require replacing the execution layer.
 
 ---
